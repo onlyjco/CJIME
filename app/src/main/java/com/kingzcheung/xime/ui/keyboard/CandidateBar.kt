@@ -255,6 +255,7 @@ fun CandidateBar(
     commentsAreGlosses: Boolean = false,
     glidePreviewText: String = "",
     isGlidePreview: Boolean = false,
+    directEnglishInput: Boolean = false,
 ) {
     val glass = LocalKeyboardInputPreferences.current.frostedGlass
     val glassEnabled = glass.enabled
@@ -560,7 +561,7 @@ fun CandidateBar(
                 .onSizeChanged { toolbarRowWidth = with(rowDensity) { it.width.toDp() } }
                 // 工具栏和候选互换（开始打字、上屏回到空闲）时新内容快速淡入，和键盘换页同一套；
                 // 只淡这一行的图标和字，不淡栏底色，候选从第一帧起就能点。
-                .cySwapFadeIn(state is CandidateBarState.Idle),
+                .then(if (directEnglishInput) Modifier else Modifier.cySwapFadeIn(state is CandidateBarState.Idle)),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (showCompositionCancel && closesAssociation && associationCancelCross) {
@@ -654,7 +655,7 @@ fun CandidateBar(
                 }
             }
 
-            if (state is CandidateBarState.ChineseCandidates || (isGlidePreview && state is CandidateBarState.AssociationOnly) ||
+            if (state is CandidateBarState.ChineseCandidates ||
                 (splitGapX != null && state !is CandidateBarState.Idle) ||
                 (candidatePageExpanded && state is CandidateBarState.AssociationOnly && state.hasMore)) {
                 val previewAssociations = isGlidePreview && state is CandidateBarState.AssociationOnly
