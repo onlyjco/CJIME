@@ -851,6 +851,26 @@ val prepareChineseDictionaries by tasks.registering {
         check(doublePinyin.readText().split("  dependencies:\n").size == 2) { "Upstream double_pinyin_flypy dependencies changed" }
         doublePinyin.writeText(doublePinyin.readText().replace("  dependencies:\n", "  dependencies:\n    - $pauseId\n") +
             "\ncyime_omission_schema: $pauseId\n\ncyime_pause_correction:\n  margin: 3.0\n  max_keys: 24\n")
+        // 14-key full pinyin after a pause (2026-11-20, 九键14键纠错方案 A): 14 keys had no correction at all. The input
+        // is merged keys (QETUOADGJZCB, l and m alone), so this prism spells every syllable with merged keys only and
+        // adds it with one key left out, one key pressed twice and two keys typed in the wrong order, inside one
+        // syllable, as fuzzy spellings like the double pinyin pause prism (the reading as typed keeps the lead). Marked
+        // with ~ until all rules have run so that one edit cannot feed another (as cyime_digit_edit). It is read only
+        // after a pause and gated by the word model (cyime_pause_correction in assets/rime_chinese/pinyin_14jian.schema.yaml);
+        // letters: one key a letter, so the slip kind (and its switch) comes from the reading's letters against the keys.
+        val k14PauseId = "cyime_pause_14jian"
+        val k14Key = "[A-Zlm]"
+        File(root, "$k14PauseId.schema.yaml").writeText(buildString {
+            append("schema:\n  schema_id: $k14PauseId\n  name: 14键停顿纠错索引\n  version: '1'\n")
+            append("translator:\n  dictionary: rime_ice\n  prism: $k14PauseId\n  enable_user_dict: false\n")
+            append("speller:\n  alphabet: QETUOADGJZCBlm\n  delimiter: \" '\"\n  algebra:\n")
+            append("    - erase/^[A-Z]\$/\n")
+            append("    - xlit/qwertyuiopasdfghjkzxcvbn/QQEETTUUOOAADDGGJJZZCCBB/\n")
+            for (i in 0..5) append("    - fuzz/^($k14Key{$i})$k14Key($k14Key${if (i == 0) "+" else "*"})\$/~\$1\$2/\n")
+            for (i in 0..5) append("    - fuzz/^($k14Key{$i})($k14Key)($k14Key*)\$/~\$1\$2\$2\$3/\n")
+            for (i in 0..4) append("    - fuzz/^($k14Key{$i})($k14Key)($k14Key)($k14Key*)\$/~\$1\$3\$2\$4/\n")
+            append("    - xform/^~//\n")
+        })
         // Built-in letter arrangements (settings/BuiltinLetterLayouts.kt): same schema, own ID and name.
         for ((id, name) in listOf("pinyin_qwjrtk" to "QWJRTK（双拇指）", "pinyin_cyletix10" to "Cyletix10（实验）",
                 "pinyin_colemak" to "Colemak", "pinyin_typewise" to "Typewise")) {

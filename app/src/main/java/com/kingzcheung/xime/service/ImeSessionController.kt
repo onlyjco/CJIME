@@ -34,6 +34,13 @@ internal fun pauseLookupWanted(
         else omission || (neighbor && (swap || typo(com.kingzcheung.xime.settings.SpellingPatches.Typo.EXTRA)))
 }
 
+/**
+ * 停顿纠错查的输入：26 键只有小写字母；14 键只有合并键的大写代表字母（QETUOADGJZCB）和 l、m。
+ * 14 键里选过拼音后出现的单个精确字母（小写 a、s 等）纠错索引不认，这时不查。
+ */
+internal fun pauseInputLetters(input: String, merged14: Boolean): Boolean =
+    if (merged14) input.all { it in "QETUOADGJZCBlm" } else input.all { it in 'a'..'z' }
+
 /** 方案里也有、但由设置页开关决定的 Rime 开关：不从 user.yaml 恢复，见 [ImeSessionController.applyCandidateOptions]。 */
 private val SETTING_SWITCHES = setOf("traditionalization", "emoji")
 
@@ -61,14 +68,17 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
         val profile = ui.inputProfile
         // 双拼 26 键（11-16）停一下后也补：少打一个键、同一个键多按一下、两个键打反。
         val doublePinyin = profile.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN
+        // 14 键全拼（11-20）停一下后也补，三种同双拼；输入是合并键的大写代表字母（QETUOADGJZCB），l、m 单独。
+        val merged14 = profile.scheme == com.kingzcheung.xime.settings.InputScheme.PINYIN &&
+            profile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.MERGED
         if (ascii || !service.isChineseMode || !state.isComposing || state.hasPrevPage ||
             profile.language != InputLanguage.CHINESE ||
             (profile.scheme != com.kingzcheung.xime.settings.InputScheme.PINYIN && !doublePinyin) ||
-            profile.layout.kind != com.kingzcheung.xime.settings.LayoutKind.ALPHABETIC ||
+            (profile.layout.kind != com.kingzcheung.xime.settings.LayoutKind.ALPHABETIC && !merged14) ||
             profile.mode != com.kingzcheung.xime.settings.InputMode.KEYBOARD ||
-            state.inputText.length !in 4..80 || state.inputText.any { it !in 'a'..'z' }) return
-        // 停顿后只补漏键和打反两种读法（双拼还有多键）：都关了就不再算一遍（引擎也不查，这里省掉这次调用）。
-        if (!pauseLookupWanted(doublePinyin, SettingsPreferences.getPrefsPublic(service).getBoolean("neighbor_correction", true)) {
+            state.inputText.length !in 4..80 || !pauseInputLetters(state.inputText, merged14)) return
+        // 停顿后只补漏键和打反两种读法（双拼、14 键还有多键）：都关了就不再算一遍（引擎也不查，这里省掉这次调用）。
+        if (!pauseLookupWanted(doublePinyin || merged14, SettingsPreferences.getPrefsPublic(service).getBoolean("neighbor_correction", true)) {
                 com.kingzcheung.xime.settings.SpellingPatches.typo(service, it)
             }) return
         val length = state.inputText.length

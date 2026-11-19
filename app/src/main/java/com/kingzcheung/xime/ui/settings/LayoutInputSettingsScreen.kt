@@ -260,9 +260,11 @@ internal fun NeighborCorrectionSection() {
     var typos by remember { mutableStateOf(SpellingPatches.Typo.entries.associateWith { SpellingPatches.typo(context, it) }) }
     val needsNeighbor = if (settings.neighborCorrection) null else "要先打开「邻键纠错」"
     // 双拼 26 键停一下后也补顺序、多键（只有同一个键多按一下）、漏键三种（11-16）。
-    val fullOrDouble = if (support.fullPinyin || support.doublePinyin) null else "只用于 26 键全拼、双拼"
+    // 14 键全拼停一下后也补顺序、多键、漏键三种（11-20）。
+    val fullOrDouble = if (support.fullPinyin || support.doublePinyin || support.merged14) null else "只用于 26 键全拼、双拼、14 键"
     // 九键全拼停一下后也补邻键、顺序、漏键三种（多键没有）。
-    val anyKeyboard = if (support.fullPinyin || support.doublePinyin || support.nineKey) null else "只用于 26 键全拼、双拼、九键"
+    val anyKeyboard = if (support.fullPinyin || support.doublePinyin || support.nineKey || support.merged14) null
+        else "只用于 26 键全拼、双拼、九键、14 键"
     // 强度（11-16）：邻键纠错和九键各一条滑条，每一档下面写实测效果；最后几行是现在这种开关和强度组合测出来的效果。
     val on = typos.filterValues { it }.keys
     var lead by remember { mutableStateOf(TypoStrength.lead(context)) }
@@ -395,10 +397,11 @@ private fun typoCaption(typo: SpellingPatches.Typo): String = when (typo) {
     SpellingPatches.Typo.OMISSION -> "漏打一个字母也能出想打的词，如 chengong 出“成功”"
 }
 
-/** 已启用的中文方案里有没有 26 键全拼、26 键双拼、九键全拼：纠错只在这三种上起作用（九键只有邻键、顺序、漏键，停一下才出；双拼的顺序、多键、漏键也是停一下才出），都没有时对应的开关灰掉。 */
-internal data class TypoCorrectionSupport(val fullPinyin: Boolean, val doublePinyin: Boolean, val nineKey: Boolean = false) {
+/** 已启用的中文方案里有没有 26 键全拼、26 键双拼、九键全拼、14 键全拼：纠错只在这几种上起作用（九键只有邻键、顺序、漏键，停一下才出；双拼、14 键的顺序、多键、漏键也是停一下才出），都没有时对应的开关灰掉。 */
+internal data class TypoCorrectionSupport(val fullPinyin: Boolean, val doublePinyin: Boolean, val nineKey: Boolean = false,
+                                          val merged14: Boolean = false) {
     companion object {
-        val ALL = TypoCorrectionSupport(fullPinyin = true, doublePinyin = true, nineKey = true)
+        val ALL = TypoCorrectionSupport(fullPinyin = true, doublePinyin = true, nineKey = true, merged14 = true)
 
         fun of(context: android.content.Context): TypoCorrectionSupport =
             of(com.kingzcheung.xime.settings.SchemaManager.getEnabledSchemas(context) + SettingsPreferences.getCurrentSchema(context))
@@ -412,6 +415,9 @@ internal data class TypoCorrectionSupport(val fullPinyin: Boolean, val doublePin
                 doublePinyin = profiles.any { it.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN },
                 // 九键双拼不算：它不用九键全拼的数字纠错表。
                 nineKey = chinese.any { it.layout.kind == com.kingzcheung.xime.settings.LayoutKind.T9 &&
+                    it.scheme == com.kingzcheung.xime.settings.InputScheme.PINYIN },
+                // 14 键双拼不算：它没有停顿纠错索引。
+                merged14 = chinese.any { it.layout == com.kingzcheung.xime.settings.InputLayout.MERGED14 &&
                     it.scheme == com.kingzcheung.xime.settings.InputScheme.PINYIN })
         }
     }

@@ -225,8 +225,11 @@ class SpellingPatchesTest {
         // 只关顺序：停顿后的打反补查也关，漏键、多键不动。
         assertEquals(listOf("\"translator/cyime_transposition_correction\": false", "\"cyime_edit_schema\": \"\""),
             SpellingPatches.typoParts(iceSchema, all - SpellingPatches.Typo.TRANSPOSITION).flatMap { it.lines })
-        // 14 键等没有这些键的方案什么都不写。
+        // 没有这些键的方案什么都不写。
         assertTrue(SpellingPatches.typoParts(schema, emptySet()).all { it.lines.isEmpty() })
+        // 14 键（11-20）：停顿纠错一个索引管三种，开关由会话选项各管各的，关了漏键也不把索引写成空名。
+        val k14 = schema + "cyime_omission_schema: cyime_pause_14jian\ncyime_pause_correction:\n  margin: 3.0\n  letters: true\n"
+        assertTrue(SpellingPatches.typoParts(k14, emptySet()).all { it.lines.isEmpty() })
         // 写出来是合法补丁，Rime 读到的是 false 和空名。
         val custom = SpellingPatches.patch("", lines)!!
         val patch = (SchemaManager.yaml.parseToYamlNode(custom) as YamlMap).entries.entries.single { it.key.content == "patch" }.value as YamlMap

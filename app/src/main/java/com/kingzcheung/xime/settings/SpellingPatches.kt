@@ -308,16 +308,22 @@ object SpellingPatches {
     /**
      * 关掉的纠错写成补丁：只写方案里本来开着的键（雾凇和由它生成的字母排列、自建布局），14 键等没有这些键的方案不写，
      * 开着的不写（同以前，不触发重新部署）。停顿后的两个补查方案（漏键、打反）写成空名，引擎就不查。
+     * 14 键（11-20）的停顿纠错一个索引管漏键、多键、打反三种（方案里有 cyime_pause_correction），三个开关由键盘
+     * 按会话选项交给引擎各管各的，这里不写空名：否则关了漏键，多键、打反也一起没了。
      */
-    internal fun typoParts(schema: String, enabled: Set<Typo>): List<Part> = listOf(
-        Triple(TRANSPOSITION, Typo.TRANSPOSITION, "false"),
-        Triple(SWAP_SCHEMA, Typo.TRANSPOSITION, "\"\""),
-        Triple(EXTRA, Typo.EXTRA, "false"),
-        Triple(DOUBLED, Typo.OMISSION, "false"),
-        Triple(OMISSION_SCHEMA, Typo.OMISSION, "\"\""),
-    ).map { (key, typo, off) ->
-        val present = Regex("(?m)^\\s*" + Regex.escape(key.substringAfterLast('/')) + ":[ \\t]*\\S").containsMatchIn(schema)
-        Part(key, if (present && typo !in enabled) listOf("\"$key\": $off") else emptyList())
+    internal fun typoParts(schema: String, enabled: Set<Typo>): List<Part> {
+        val pauseKinds = Regex("(?m)^" + PAUSE_CORRECTION + ":").containsMatchIn(schema)
+        return listOf(
+            Triple(TRANSPOSITION, Typo.TRANSPOSITION, "false"),
+            Triple(SWAP_SCHEMA, Typo.TRANSPOSITION, "\"\""),
+            Triple(EXTRA, Typo.EXTRA, "false"),
+            Triple(DOUBLED, Typo.OMISSION, "false"),
+            Triple(OMISSION_SCHEMA, Typo.OMISSION, "\"\""),
+        ).map { (key, typo, off) ->
+            val present = Regex("(?m)^\\s*" + Regex.escape(key.substringAfterLast('/')) + ":[ \\t]*\\S").containsMatchIn(schema)
+            val sessionOption = key == OMISSION_SCHEMA && pauseKinds
+            Part(key, if (present && typo !in enabled && !sessionOption) listOf("\"$key\": $off") else emptyList())
+        }
     }
 
     /**
@@ -341,6 +347,7 @@ object SpellingPatches {
     private const val DOUBLED = "translator/cyime_doubled_letter_correction"
     private const val SWAP_SCHEMA = "cyime_edit_schema"
     private const val OMISSION_SCHEMA = "cyime_omission_schema"
+    private const val PAUSE_CORRECTION = "cyime_pause_correction"
 
     private const val FILTERS = "engine/filters"
     private const val DEPENDENCIES = "schema/dependencies"
