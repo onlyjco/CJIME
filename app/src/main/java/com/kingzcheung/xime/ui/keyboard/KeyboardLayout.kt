@@ -3,6 +3,7 @@ package com.kingzcheung.xime.ui.keyboard
 import com.kingzcheung.xime.ui.theme.KeyShapes
 import com.kingzcheung.xime.ui.theme.VisualStyles
 import com.kingzcheung.xime.ui.theme.visualMaterial
+import com.kingzcheung.xime.ui.theme.liquidGlassCap
 
 import android.annotation.SuppressLint
 import android.widget.Toast
@@ -1926,6 +1927,10 @@ internal fun ShiftCapsKeyButton(
     val keyClipShape = remember(keyCornerRadius, honeycombEdge) {
         honeycombEdge?.let(::HalfHexagonShape) ?: RoundedCornerShape(keyCornerRadius)
     }
+    // 液态玻璃：和字母键（keyGlow）同一条件，开着时 Shift 键帽也画玻璃亮边，不再只画视觉样式（11-19 用户「Shift 键还是没有液态玻璃」）。
+    // 以前 Shift 不经过 keyGlow，只改过底色，玻璃边从来没画上。蜂窝布局照旧不画。
+    val liquidCap = frostedGlass.enabled && honeycombEdge == null && !LocalHoneycombKeys.current &&
+        com.kingzcheung.xime.ui.theme.LiquidGlass.enabled(androidx.compose.ui.platform.LocalContext.current)
 
     fun darkenColor(color: Color, factor: Float = 0.15f): Color {
         return Color(
@@ -2016,9 +2021,10 @@ internal fun ShiftCapsKeyButton(
             .padding(scaledKeyVisualPadding())
             // 键缝动效：Shift 自己按下不画线，只登记位置，大写出现时从它扩开。
             .then(keyGapLightSource(GapLightKind.NONE, caseAnchor = true))
-            .then(if (honeycombEdge != null) Modifier.honeycombCap() else shadowModifier)
-            .clip(keyClipShape)
-            .background(colors.background).visualMaterial(VisualStyles.current, keyCornerRadius, com.kingzcheung.xime.ui.theme.MaterialLevel.RAISED),
+            .then(if (liquidCap) Modifier.liquidGlassCap(shadowModifier.clip(keyClipShape).background(colors.background), keyCornerRadius)
+                else (if (honeycombEdge != null) Modifier.honeycombCap() else shadowModifier)
+                    .clip(keyClipShape)
+                    .background(colors.background).visualMaterial(VisualStyles.current, keyCornerRadius, com.kingzcheung.xime.ui.theme.MaterialLevel.RAISED)),
         contentAlignment = Alignment.Center
     ) {
         // 空心箭头＝小写，实心＝下一个字母大写，实心加底横线＝大写锁定。
