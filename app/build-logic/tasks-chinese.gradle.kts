@@ -74,6 +74,8 @@ val prepareChineseDictionaries by tasks.registering {
     inputs.file(removedWords)
     val removedNames = file("data/cyime_removed_names.txt")
     inputs.file(removedNames)
+    val removedPoetry = file("data/cyime_removed_poetry.txt")
+    inputs.file(removedPoetry)
     val removedParticleHomophones = file("data/cyime_removed_particle_homophones.txt")
     inputs.file(removedParticleHomophones)
     val acronymFilter = file("data/cyime_acronym_filter.lua")
@@ -188,6 +190,10 @@ val prepareChineseDictionaries by tasks.registering {
         // common surname, appear whole in a public list of Chinese personal names, and are not famous (base.dict, the
         // chat and subtitle word model, or weight 150 and up keep them).
         removedNames.readLines().filter { it.isNotBlank() && !it.startsWith("#") }.mapTo(removed) { it.trim() }
+        // Classical poetry lines and rare four-character verses (2026-11-20: nine-key gezhileyi gave 何枝可依, not 搁置了一;
+        // the word model scores 何枝可依 as one word, so one rare word beat three common ones). They belong in the
+        // optional 古诗词名句 pack; how the list was chosen is in its header.
+        removedPoetry.readLines().filter { it.isNotBlank() && !it.startsWith("#") }.mapTo(removed) { it.trim() }
         // A common word plus a homophone of a sentence-final particle that chat writes far less often than the word plus
         // the particle (2026-11-15: shengxiaoma gave 生肖马, not 生效吗, on every keyboard). One whole word beat 生效 + 吗 in
         // the sentence; the list is built by tools/ime_lab/particle_homophone_words.py, which never lists a base.dict word.
