@@ -5996,7 +5996,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         }
         val connection = currentInputConnection ?: return TextCommitResult.NO_CONNECTION
         val committed = when {
-            caret != CommitCaret.NONE -> connection.commitTextWithCaret(delivered, caret)
+            caret != CommitCaret.NONE -> connection.commitTextWithCaret(delivered, caret, currentInputEditorInfo?.packageName)
             // 多行短语一行一行上屏（见 commitPhraseLines）。
             com.kingzcheung.xime.settings.PhraseLineBreaks.STORED in text && !isPaste -> connection.commitPhraseLines(delivered)
             else -> connection.commitText(if (isPaste) delivered else withTextLocale(delivered), 1)
