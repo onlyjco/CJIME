@@ -2,6 +2,7 @@ package com.kingzcheung.xime.ui.keyboard
 
 import com.kingzcheung.xime.ui.theme.KeyShapes
 import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.LinearEasing
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
@@ -12,6 +13,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowRight
+import androidx.compose.material.icons.filled.Mic
 import androidx.compose.material.icons.filled.SpaceBar
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
@@ -85,6 +87,9 @@ fun SpaceKeyButton(
     // 按住空格说话且开了「上滑取消」：键面写「上滑取消」；手指上滑过线后变成删除色、写「松手取消」。
     var voiceHolding by remember { mutableStateOf(false) }
     var voiceCancelArmed by remember { mutableStateOf(false) }
+    // 这次长按开了语音：空格从按住处铺开一层强调色、写「正在听…」、麦克风随音量起伏（用户 11-20：长按后看不出进没进语音）。
+    var voiceHoldStarted by remember { mutableStateOf(false) }
+    var voiceHoldX by remember { mutableFloatStateOf(0f) }
     val frostedGlass = settings.frostedGlass
     val shadow = remember(shadowEnabled, shadowElevation, shadowShapeRadius, KeyShapes.current, density, backgroundColor, frostedGlass.enabled) {
         if (shadowEnabled && !frostedGlass.enabled) Modifier.drawBehind {
@@ -99,10 +104,22 @@ fun SpaceKeyButton(
     )
     // 上滑取消的提示只在麦克风真开着时显示（语音总开关关着时长按不会开麦）。
     val showVoiceCancel = voiceHolding && isVoiceMode
+    // 进入语音的样子同样只在麦克风真开着时出现：总开关关着、输入框不许语音时不假装在听。
+    val showVoiceHold = voiceHoldStarted && isVoiceMode
+    val accentColor = com.kingzcheung.xime.ui.theme.LocalKeyboardPalette.current?.accent
+        ?: androidx.compose.material3.MaterialTheme.colorScheme.primary
     // 过线后用删除键上滑清空同一套删除色，任何主题、玻璃下都认得出。
     val cancelColors = if (showVoiceCancel && voiceCancelArmed) keyFlickFeedbackColors(keyFill, textColor,
-        com.kingzcheung.xime.ui.theme.LocalKeyboardPalette.current?.accent ?: androidx.compose.material3.MaterialTheme.colorScheme.primary,
-        KeyFlickFeedback.DELETE, 1f, frostedGlass.enabled) else null
+        accentColor, KeyFlickFeedback.DELETE, 1f, frostedGlass.enabled) else null
+    // 音量（0~1，没在听时 0）：只在绘制时读，音量变了只重画不重组。
+    val voiceLevel = LocalKeyGapLightVoice.current
+    val voiceSpread = remember { Animatable(0f) }
+    LaunchedEffect(showVoiceHold) {
+        if (showVoiceHold) {
+            voiceSpread.snapTo(0f)
+            voiceSpread.animateTo(1f, tween(VOICE_HOLD_SPREAD_MS, easing = FastOutSlowInEasing))
+        } else voiceSpread.animateTo(0f, tween(VOICE_HOLD_FADE_MS))
+    }
     // 换语言后空格先写语言名再淡成图标（用户 11-09，像 iOS）；只在平时不写语言名时出现。
     val displayName = schemaName.replace("拼音九键", "拼音")
     LaunchedEffect(displayName) { SpaceLanguageFlash.observe(displayName, android.os.SystemClock.uptimeMillis()) }
@@ -174,6 +191,7 @@ fun SpaceKeyButton(
                                 startedVoice = !voiceOn
                                 onVoiceToggle?.invoke()
                                 voiceHolding = startedVoice && settings.voiceSwipeCancel
+                                if (startedVoice) { voiceHoldX = lastX; voiceHoldStarted = true }
                             }
                         }
                     }
@@ -274,6 +292,7 @@ fun SpaceKeyButton(
                         }
                         voiceHolding = false
                         voiceCancelArmed = false
+                        voiceHoldStarted = false
                         pressed = false
                         cursorActive = false
                         onCursorMode?.invoke(false)
@@ -284,7 +303,18 @@ fun SpaceKeyButton(
             .padding(scaledKeyVisualPadding())
             .keyGlow(Modifier.then(shadow)
             .clip(RoundedCornerShape(LocalKeyCornerRadius.current))
-            .background(cancelColors?.background ?: keyFill),
+            .background(cancelColors?.background ?: keyFill)
+            .drawBehind {
+                // 开始说话：强调色从按住的地方铺满整个空格，之后随音量轻轻变深；上滑过线时让给删除色。
+                val spread = voiceSpread.value
+                if (spread > 0f && cancelColors == null) {
+                    val level = voiceLevel?.invoke() ?: 0f
+                    val x = voiceHoldX.coerceIn(0f, size.width)
+                    val reach = kotlin.math.hypot(maxOf(x, size.width - x), size.height)
+                    drawCircle(accentColor.copy(alpha = (0.20f + 0.16f * level) * spread),
+                        radius = reach * spread, center = Offset(x, size.height / 2f))
+                }
+            },
                 // 键缝动效：空格真的输入了一下，一块光从空格往上走到顶边；按住移光标时色块跟着手指。
                 gapLight = GapLightKind.RISE, gapLightTrigger = gapLightTrigger),
         contentAlignment = Alignment.Center
@@ -298,11 +328,24 @@ fun SpaceKeyButton(
         val flashSize = minOf(keyLabelSizeSp(displayName, 12f,
             maxWidth.value, maxHeight.value, density.fontScale, settings.keyTextScale),
             maxHeight.value / (density.fontScale * 1.4f)).coerceAtLeast(1f)
-        if (showVoiceCancel) {
+        if (showVoiceHold) {
             val hintSize = (maxHeight.value * 0.32f / density.fontScale).coerceIn(9f, 16f)
-            Text(if (voiceCancelArmed) "松手取消" else "上滑取消", color = cancelColors?.foreground ?: textColor,
-                fontSize = hintSize.sp, lineHeight = (hintSize * 1.2f).sp, maxLines = 1, softWrap = false,
-                fontFamily = AppFonts.keyFontFamily, modifier = Modifier.testTag("space-voice-cancel-hint"))
+            val color = cancelColors?.foreground ?: textColor
+            Row(Modifier.graphicsLayer { alpha = voiceSpread.value }.semantics { contentDescription = "空格，正在语音输入" },
+                verticalAlignment = Alignment.CenterVertically) {
+                VoiceHoldMic(if (cancelColors != null) color else accentColor, (hintSize * 1.3f).dp, voiceLevel)
+                if (this@BoxWithConstraints.maxWidth.value >= hintSize * density.fontScale * 4.6f + hintSize * 1.3f + 8f) {
+                    Spacer(Modifier.width(4.dp))
+                    Text(when {
+                        showVoiceCancel && voiceCancelArmed -> "松手取消"
+                        showVoiceCancel -> "上滑取消"
+                        else -> "正在听…"
+                    }, color = color,
+                        fontSize = hintSize.sp, lineHeight = (hintSize * 1.2f).sp, maxLines = 1, softWrap = false,
+                        fontFamily = AppFonts.keyFontFamily,
+                        modifier = Modifier.testTag(if (showVoiceCancel) "space-voice-cancel-hint" else "space-voice-hold-hint"))
+                }
+            }
         } else if (cursorActive) {
             SpaceCursorHint(textColor, maxWidth.value, maxHeight.value, density.fontScale, !settings.hideFunctionKeyHints)
         } else if (!settings.hideFunctionKeyHints && SpaceLanguageFlash.isLanguageName(displayName) && labelSize >= 8f) {
@@ -325,6 +368,20 @@ fun SpaceKeyButton(
                     modifier = Modifier.testTag("space-language-flash").graphicsLayer { alpha = flashAlpha.value })
             }
         }
+    }
+}
+
+private const val VOICE_HOLD_SPREAD_MS = 280
+private const val VOICE_HOLD_FADE_MS = 150
+
+/** 按住空格说话时键面上的麦克风：背后一圈随音量放大的光，看得出麦克风在收音。 */
+@Composable
+private fun VoiceHoldMic(color: Color, size: Dp, level: (() -> Float)?) {
+    Box(Modifier.size(size).testTag("space-voice-hold-mic").drawBehind {
+        val value = level?.invoke() ?: 0f
+        drawCircle(color.copy(alpha = 0.18f + 0.30f * value), radius = this.size.minDimension * (0.55f + 0.35f * value))
+    }, contentAlignment = Alignment.Center) {
+        Icon(Icons.Default.Mic, contentDescription = null, tint = color, modifier = Modifier.fillMaxSize(0.8f))
     }
 }
 
