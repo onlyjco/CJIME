@@ -663,13 +663,18 @@ object KeysConfigHelper {
     private var keyboardFontConfig: KeyboardFontConfig = KeyboardFontConfig()
     fun getKeyboardFontConfig(): KeyboardFontConfig = keyboardFontConfig
     
-    // 按键布局模式缓存（中文 qwerty / 英文 qwerty_en，以及各自定义 section 独立覆盖）
+    // 按键布局模式缓存（中文 qwerty / 英文 qwerty_en、section 级覆盖、全局 custom 覆盖及导入包方案专属覆盖）
     private var _buttonLayoutZh: ButtonLayout = ButtonLayout.STANDARD
     private var _buttonLayoutEn: ButtonLayout = ButtonLayout.STANDARD
     private var _sectionButtonLayouts: Map<String, ButtonLayout> = emptyMap()
+    private var _customSectionButtonLayouts: Map<String, ButtonLayout> = emptyMap()
+    private var _pkgSchemaButtonLayouts: Map<String, ButtonLayout> = emptyMap()
     fun getButtonLayout(isAsciiMode: Boolean, schemaId: String = _activeSchemaId): ButtonLayout {
         if (isAsciiMode) return _buttonLayoutEn
-        return mergedSectionForSchema(schemaId)?.let { _sectionButtonLayouts[it] } ?: _buttonLayoutZh
+        val section = mergedSectionForSchema(schemaId)
+        section?.let { _customSectionButtonLayouts[it] }?.let { return it }
+        _pkgSchemaButtonLayouts[schemaId]?.let { return it }
+        return section?.let { _sectionButtonLayouts[it] } ?: _buttonLayoutZh
     }
 
     // 键盘行布局默认值
@@ -1032,7 +1037,10 @@ object KeysConfigHelper {
             _mergedRows = mergedRowsMap
             _mergedGestureConfigs = mergedGesturesMap
             _sectionGeometry = parseSectionGeometries(context, mergedRowsMap.keys + listOf("qwerty", "qwerty_en"), pkgTexts)
-            _sectionButtonLayouts = parseSectionButtonLayouts(context, mergedRowsMap.keys, pkgTexts)
+            val parsedSectionLayouts = parseSectionButtonLayouts(context, mergedRowsMap.keys)
+            _sectionButtonLayouts = parsedSectionLayouts.first
+            _customSectionButtonLayouts = parsedSectionLayouts.second
+            _pkgSchemaButtonLayouts = parsePackageSchemaButtonLayouts(pkgTexts)
             // 九键/笔画手势（keyboard.t9.keys / keyboard.stroke.keys，custom 键级覆盖）
             _t9GestureConfigs = parseGesturesSection(context, "t9")
             _strokeGestureConfigs = parseGesturesSection(context, "stroke")
@@ -1486,20 +1494,42 @@ object KeysConfigHelper {
         )
     }
 
-    /** 各非内置 section 的独立按键对齐模式：全局 xime.custom.yaml > 内置 xime.yaml > 导入包配置。 */
+    /** 各非内置 section 的按键对齐模式：返回 (全局合并表, 用户 xime.custom.yaml 覆盖表)。 */
     private fun parseSectionButtonLayouts(
         context: Context,
         sections: Collection<String>,
-        pkgTexts: List<String> = emptyList(),
-    ): Map<String, ButtonLayout> {
+    ): Pair<Map<String, ButtonLayout>, Map<String, ButtonLayout>> {
         val defaultText = readAssetText(context, XIME_CONFIG_FILE)
         val customText = readCustomText(context)
-        return sections.distinct().filter { it !in SHARED_BUILTIN_SECTIONS }.mapNotNull { section ->
-            val pkg = pkgTexts.asReversed().firstNotNullOfOrNull { parseButtonLayoutYamlText(it, section) }
+        val effective = mutableMapOf<String, ButtonLayout>()
+        val customOverrides = mutableMapOf<String, ButtonLayout>()
+        for (section in sections.distinct()) {
+            if (section in SHARED_BUILTIN_SECTIONS) continue
             val builtIn = defaultText?.let { parseButtonLayoutYamlText(it, section) }
             val custom = customText?.let { parseButtonLayoutYamlText(it, section) }
-            (custom ?: builtIn ?: pkg)?.let { section to it }
-        }.toMap()
+            if (custom != null) customOverrides[section] = custom
+            (custom ?: builtIn)?.let { effective[section] = it }
+        }
+        return effective to customOverrides
+    }
+
+    /**
+     * 解析导入包隔离配置中各绑定方案的独立 button_layout：
+     * 优先读取包内对应 section 的 button_layout，若仅在包内 qwerty 节声明则作为该包方案的兜底，
+     * 仅对导入包自身绑定的方案生效，不影响内置 26/14/17/18 键布局。
+     */
+    internal fun parsePackageSchemaButtonLayouts(pkgTexts: List<String>): Map<String, ButtonLayout> {
+        val result = mutableMapOf<String, ButtonLayout>()
+        for (text in pkgTexts) {
+            val bindings = parseSchemaBindingsYamlText(text)
+            val pkgQwertyLayout = parseButtonLayoutYamlText(text, "qwerty")
+            for ((schemaId, section) in bindings) {
+                if (section in CODE_LAYOUT_SECTIONS) continue
+                val layout = parseButtonLayoutYamlText(text, section) ?: pkgQwertyLayout ?: continue
+                result[schemaId] = layout
+            }
+        }
+        return result
     }
 
     /** 从 xime.yaml + xime.custom.yaml + 包隔离配置合并解析指定 section 的键盘行布局（custom 优先）。 */
