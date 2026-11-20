@@ -751,6 +751,30 @@ object SettingsPreferences {
         }
     }
     private const val KEY_HAPTIC_MODE_BEFORE_MUTE = "haptic_mode_before_mute"
+    private const val KEY_SOUND_BEFORE_MUTE = "sound_before_mute"
+
+    /**
+     * 菜单「声音振动」一键开关：关的时候记下声音开没开，再打开时照原样恢复，只开过振动的不会连按键音一起打开
+     * （#486）。没有记录（从来没用这个键关过）时两样都打开，同以前。振动的原模式由 [setVibrationEnabled] 记。
+     */
+    fun setSoundAndVibrationEnabled(context: Context, enabled: Boolean) {
+        val prefs = getPrefs(context)
+        if (!enabled) {
+            prefs.edit().putBoolean(KEY_SOUND_BEFORE_MUTE, isSoundEnabled(context)).apply()
+            setSoundEnabled(context, false)
+            // 振动原来就关着时不留记录（setVibrationEnabled 直接返回），所以有记录就是原来开着。
+            setVibrationEnabled(context, false)
+            return
+        }
+        val soundRecorded = prefs.contains(KEY_SOUND_BEFORE_MUTE)
+        val soundBefore = prefs.getBoolean(KEY_SOUND_BEFORE_MUTE, true)
+        val vibrationBefore = prefs.contains(KEY_HAPTIC_MODE_BEFORE_MUTE)
+        prefs.edit().remove(KEY_SOUND_BEFORE_MUTE).apply()
+        // 没有记录，或者记录里两样都关着：同以前，两样都打开。
+        val both = !soundRecorded || (!soundBefore && !vibrationBefore)
+        setSoundEnabled(context, both || soundBefore)
+        if (both || vibrationBefore) setVibrationEnabled(context, true)
+    }
     
     
 

@@ -1187,9 +1187,7 @@ fun KeyboardView(
                                 ((nineGlideMenu || state.isAsciiMode || chineseGlideMenu) && inputPreferences.cursorGesture != CursorGestureMode.KEYBOARD)))
                             ({ item.button.flipGesture(quickContext, inputPreferences, chineseGlideMenu, nineGlideMenu) }) else return null
                     ToolbarButton.SOUND -> ({
-                        val on = !(quickToggles.sound || quickToggles.vibration)
-                        SettingsPreferences.setSoundEnabled(quickContext, on)
-                        SettingsPreferences.setVibrationEnabled(quickContext, on)
+                        SettingsPreferences.setSoundAndVibrationEnabled(quickContext, !(quickToggles.sound || quickToggles.vibration))
                     })
                     ToolbarButton.FLOATING -> ({
                         viewModel.closeOverlay()
