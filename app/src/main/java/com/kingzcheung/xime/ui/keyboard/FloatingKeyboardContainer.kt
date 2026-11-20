@@ -34,8 +34,6 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.snapshotFlow
-import kotlinx.coroutines.flow.distinctUntilChanged
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
@@ -125,13 +123,9 @@ internal fun FloatingKeyboardContainer(
     dragIndicatorColor: Color? = null,
     onDrag: (dx: Float, dy: Float) -> Unit,
     onDragEnd: () -> Unit,
-    /** 悬浮卡片拖动、调大小或上拉跟手状态变化，供宿主在拖动期暂缓整窗 requestLayout 与毛玻璃重建，松手后统一刷新。 */
-    onDragStateChange: (Boolean) -> Unit = {},
     onDock: () -> Unit = {},
     /** 调节模式中的唯一预览矩形；非空时直接决定真实卡片最终位置与尺寸。 */
     previewRectState: State<ResizeRect>? = null,
-    /** 外部手势（如调节覆盖层拖动/调大小）正在进行中，供宿主合并到拖动状态里暂缓重排。 */
-    externalDragging: Boolean = false,
     onCardPositioned: (left: Int, top: Int, right: Int, bottom: Int) -> Unit = { _: Int, _: Int, _: Int, _: Int -> },
     fixedWidthDp: Int = 0,
     fixedOffsetX: Int = 0,
@@ -331,14 +325,6 @@ internal fun FloatingKeyboardContainer(
         fun liveShiftPx(): Offset = if (dragging)
             Offset((dragX - dragStartX) * density.density, -(dragY - dragStartY) * density.density)
             else followShiftPx()
-        val currentOnDragStateChange by rememberUpdatedState(onDragStateChange)
-        val currentExternalDragging by rememberUpdatedState(externalDragging)
-        LaunchedEffect(dockGesture, undockFollow, geometryLocked) {
-            snapshotFlow { isDragging || cornerRect != null || currentExternalDragging || undockFollow?.finger != null }
-                .distinctUntilChanged()
-                .collect { currentOnDragStateChange(it) }
-        }
-        DisposableEffect(Unit) { onDispose { currentOnDragStateChange(false) } }
         if (undockFollow != null) {
             // 松手：和拖底部拖动条一样，把整段位移一次交给后台限位、保存，再亮一下四角。
             val finishFollow by rememberUpdatedState {
