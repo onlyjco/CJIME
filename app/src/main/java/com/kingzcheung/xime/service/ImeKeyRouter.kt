@@ -1095,6 +1095,11 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         }
         holder.clear()
         commitPreparedText(text, t9 = true)
+        // 记住这条线点的是这个词，下次划同一条线先出它（#214）；无痕模式和密码框不记。
+        if (!com.kingzcheung.xime.settings.IncognitoState.active && !service.isSecretEditor())
+            service.serviceScope.launch(Dispatchers.IO) {
+                runCatching { com.kingzcheung.xime.glide.GlideLexicon.rememberT9Choice(service, digits, text) }
+            }
     }
 
     /**
