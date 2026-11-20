@@ -571,6 +571,7 @@ fun KeyboardView(
         val bottomLiftCursorOn = inputPreferences.bottomLiftCursor && !resizeActive && !state.isFloatingMode
         val bottomLiftIconColor = keyTextColor.copy(alpha = 0.78f)
         val bottomLiftActionsEnabled = !resizeActive && !previewLetterLayout
+        val bottomLiftClearHandwriting = remember { arrayOfNulls<() -> Unit>(1) }
         val dispatchBottomLiftLanguageSwitch: (() -> Unit) -> Unit = { beforeSwitch ->
             val down = callbacks.onKeyPressDown
             if (down != null) down("ime_switch") else onHapticFeedback?.invoke()
@@ -578,7 +579,13 @@ fun KeyboardView(
             callbacks.onKeyPress("ime_switch", false)
         }
         val bottomLiftSwitchLanguage: () -> Unit = {
-            dispatchBottomLiftLanguageSwitch { callbacks.onCommitTypedBeforeModeChange?.invoke() }
+            dispatchBottomLiftLanguageSwitch {
+                if (underlyingPage is KeyboardPage.Main && underlyingPage.type == MainType.HANDWRITING) {
+                    bottomLiftClearHandwriting[0]?.invoke()
+                } else {
+                    callbacks.onCommitTypedBeforeModeChange?.invoke()
+                }
+            }
         }
         val bottomLiftOpenClipboard: () -> Unit = {
             onHapticFeedback?.invoke()
@@ -908,7 +915,7 @@ fun KeyboardView(
         }
         SideEffect {
             callbacks.onSentenceHorizontalDelete = if (sentenceEdit != null) ({
-                if (sentenceEdit != null) callbacks.onPreeditKeyInput?.invoke("clear_all")
+                if (sentenceEdit != null) callbacks.onPreeditKeyInput?.invoke("clear_composition")
             }) else null
             callbacks.onPreeditCursorMove = { key ->
                 when {
@@ -938,6 +945,12 @@ fun KeyboardView(
                     owner == null -> false
                     sentenceApplying -> true
                     key == "space" || key == "enter" -> { applySentenceEdit(false); true }
+                    // 局部修改已全部删空后，上滑删除退出局部修改并交给引擎清空全部编码。
+                    key == "clear_all" && sentenceCode.isEmpty() && sentenceConfirmed.isEmpty() -> {
+                        closeSentenceEdit()
+                        if (!callbacks.isDeleteDragging()) viewModel.setCandidatePageExpanded(false)
+                        false
+                    }
                     key == "clear_all" || key == "clear_composition" -> {
                         sentenceCode = ""
                         sentenceWord = ""
@@ -1176,8 +1189,10 @@ fun KeyboardView(
                 (ToolbarButton.CUSTOMIZABLE.map { it.id } + state.toolbarPluginButtons.map { it.id })
                     .distinct().filter { quickAction(it) != null })
         } }
-        // 面板高度包含工具栏/候选栏；按键区只分配剩余高度。
+        // 面板高度包含工具栏/候选栏；底部留白常驻在所有覆盖层之外，点开剪贴板或展开任务栏也不消失。
         // Service 以整张卡片顶部上报避让区域，不能只上报按键区。
+        Column(modifier = Modifier.fillMaxSize()) {
+        Box(modifier = Modifier.weight(1f).fillMaxWidth().clipToBounds()) {
         Column(
             modifier = Modifier
                 .fillMaxSize()
@@ -1194,6 +1209,7 @@ fun KeyboardView(
                 handwritingCandidates = emptyList()
                 handwritingClearSignal++
             }
+            SideEffect { bottomLiftClearHandwriting[0] = ::clearHandwriting }
             val handwritingContext = LocalContext.current
             fun selectHandwriting(index: Int) {
                 callbacks.onKeyPressDown?.invoke("standard")
@@ -1921,7 +1937,7 @@ fun KeyboardView(
                         backgroundColor = keyboardBgColor,
                         textColor = candidateTextColor,
                         keyBackgroundColor = neutralInputBgColor,
-                        bottomPaddingDp = renderedBottomPaddingDp,
+                        bottomPaddingDp = 0,
                         singleCharFilter = singleCharFilter,
                         railSymbols = if (sentenceEdit != null || canChooseSyllable && merged14) emptyList() else customRailSymbols?.takeIf { it.isNotEmpty() },
                         railPinyinOptions = if (sentenceEdit != null) sentenceOptions.map { it.pinyin } else railPinyinOptions,
@@ -2210,16 +2226,6 @@ fun KeyboardView(
                                 modifier = Modifier.weight(1f).then(cursorMod),
                                 t9Controller = t9Controller,
                             )
-                            BottomLiftSpacer(
-                                heightDp = renderedBottomPaddingDp,
-                                cursorEnabled = bottomLiftCursorOn,
-                                onCursorMove = callbacks.onCursorMove,
-                                isAsciiMode = state.isAsciiMode,
-                                iconColor = bottomLiftIconColor,
-                                actionsEnabled = bottomLiftActionsEnabled,
-                                onSwitchLanguage = bottomLiftSwitchLanguage,
-                                onOpenClipboard = bottomLiftOpenClipboard,
-                            )
                         }
                     }
 
@@ -2289,16 +2295,6 @@ fun KeyboardView(
                             specialKeyBackgroundColor = specialKeyBgColor,
                             specialKeyTextColor = specialKeyTextColor,
                             modifier = Modifier.weight(1f),
-                        )
-                        BottomLiftSpacer(
-                            heightDp = renderedBottomPaddingDp,
-                            cursorEnabled = bottomLiftCursorOn,
-                            onCursorMove = callbacks.onCursorMove,
-                            isAsciiMode = state.isAsciiMode,
-                            iconColor = bottomLiftIconColor,
-                            actionsEnabled = bottomLiftActionsEnabled,
-                            onSwitchLanguage = { dispatchBottomLiftLanguageSwitch(::clearHandwriting) },
-                            onOpenClipboard = bottomLiftOpenClipboard,
                         )
                     }
 
@@ -2412,16 +2408,6 @@ fun KeyboardView(
 
                 }
                 }
-                BottomLiftSpacer(
-                    heightDp = renderedBottomPaddingDp,
-                    cursorEnabled = bottomLiftCursorOn,
-                    onCursorMove = callbacks.onCursorMove,
-                    isAsciiMode = state.isAsciiMode,
-                    iconColor = bottomLiftIconColor,
-                    actionsEnabled = bottomLiftActionsEnabled,
-                    onSwitchLanguage = bottomLiftSwitchLanguage,
-                    onOpenClipboard = bottomLiftOpenClipboard,
-                )
             }
             } // Full candidate panel reveals over the complete keyboard body.
             KeyboardPanelReveal(
@@ -2608,7 +2594,7 @@ fun KeyboardView(
                         background = keyboardBgColor, textColor = keyTextColor, accent = accentColor,
                         onClose = { viewModel.closeOverlay(); com.kingzcheung.xime.ocr.DocumentOcrActivity.finishHost() },
                         onConfirmed = { callbacks.onReviewOcrText?.invoke(it) },
-                        modifier = Modifier.fillMaxSize().padding(bottom = renderedBottomPaddingDp.dp),
+                        modifier = Modifier.fillMaxSize(),
                     )
                     is OverlayRoute.SchemaList -> SchemaListView(
                         availableSchemas = state.schemas,
@@ -2627,7 +2613,7 @@ fun KeyboardView(
                             (callbacks.onSwitchSchemaForLayout ?: callbacks.onSwitchSchema)?.invoke(schemaId)
                             viewModel.closeOverlay()
                         },
-                        modifier = panelMaterial.fillMaxSize().padding(bottom = renderedBottomPaddingDp.dp)
+                        modifier = panelMaterial.fillMaxSize()
                     )
                     is OverlayRoute.Clipboard -> ClipboardView(
                         clipboardItems = state.clipboardItems,
@@ -2646,7 +2632,7 @@ fun KeyboardView(
                         onSplitWords = { text, _ -> viewModel.pushOverlay(OverlayRoute.SplitWords(text)) },
                         onBack = { viewModel.leaveClipboard() },
                         onClipboardTabChange = { viewModel.pushOverlay(OverlayRoute.Clipboard(it)) },
-                        bottomPaddingDp = renderedBottomPaddingDp,
+                        bottomPaddingDp = 0,
                         modifier = panelMaterial.fillMaxWidth().fillMaxHeight(),
                         onQuickSendAddClick = {
                             viewModel.closeOverlay()
@@ -2683,7 +2669,7 @@ fun KeyboardView(
                         keyBgColor = keyBgColor,
                         onUpdateQuickActions = callbacks.onUpdateQuickActions,
                         onDismiss = { viewModel.closeOverlay() },
-                        bottomPaddingDp = renderedBottomPaddingDp,
+                        bottomPaddingDp = 0,
                         modifier = panelMaterial.fillMaxWidth().fillMaxHeight().then(if (onPreviewArrangePositioned == null)
                             Modifier else Modifier.onGloballyPositioned {
                                 val r = it.boundsInWindow()
@@ -2708,7 +2694,7 @@ fun KeyboardView(
                             textColor = keyTextColor,
                             accentColor = accentColor,
                             keyBgColor = keyBgColor,
-                            bottomPaddingDp = renderedBottomPaddingDp,
+                            bottomPaddingDp = 0,
                             keyCornerRadius = kbKey.cornerRadius.dp,
                             shadowEnabled = kbShadow.enabled,
                             shadowElevation = kbShadow.elevation.dp,
@@ -2734,7 +2720,7 @@ fun KeyboardView(
                         backgroundColor = keyboardBgColor,
                         textColor = keyTextColor,
                         accentColor = accentColor,
-                        bottomPaddingDp = renderedBottomPaddingDp,
+                        bottomPaddingDp = 0,
                         modifier = panelMaterial.fillMaxWidth().fillMaxHeight(),
                         onHapticFeedback = onHapticFeedback,
                     )
@@ -2767,7 +2753,7 @@ fun KeyboardView(
                         textColor = keyTextColor,
                         accentColor = accentColor,
                         keyBgColor = keyBgColor,
-                        bottomPaddingDp = renderedBottomPaddingDp,
+                        bottomPaddingDp = 0,
                         modifier = panelMaterial.fillMaxWidth().fillMaxHeight(),
                         onHapticFeedback = onHapticFeedback,
                     )
@@ -2778,7 +2764,7 @@ fun KeyboardView(
                         onBack = { viewModel.popOverlay() },
                         onNavigateToQuickSend = { viewModel.pushOverlay(OverlayRoute.Clipboard(1)) },
                         onConfirmText = { text -> callbacks.onCommitText?.invoke(text) },
-                        bottomPaddingDp = renderedBottomPaddingDp,
+                        bottomPaddingDp = 0,
                         modifier = panelMaterial.fillMaxWidth().fillMaxHeight()
                     )
                     is OverlayRoute.ToolPanel -> InfoPanel(
@@ -2790,7 +2776,7 @@ fun KeyboardView(
                         textColor = keyTextColor,
                         accentColor = accentColor,
                         itemBgColor = keyBgColor,
-                        bottomPaddingDp = renderedBottomPaddingDp,
+                        bottomPaddingDp = 0,
                         onClose = { callbacks.onToolPanelClose?.invoke() },
                         onAction = { actionId -> callbacks.onToolPanelAction?.invoke(actionId) },
                         onItemClick = { item -> callbacks.onToolPanelItemClick?.invoke(item) },
@@ -2800,6 +2786,18 @@ fun KeyboardView(
                 else -> {}
             }
             }
+        }
+        }
+        BottomLiftSpacer(
+            heightDp = renderedBottomPaddingDp,
+            cursorEnabled = bottomLiftCursorOn,
+            onCursorMove = callbacks.onCursorMove,
+            isAsciiMode = state.isAsciiMode,
+            iconColor = bottomLiftIconColor,
+            actionsEnabled = bottomLiftActionsEnabled,
+            onSwitchLanguage = bottomLiftSwitchLanguage,
+            onOpenClipboard = bottomLiftOpenClipboard,
+        )
         }
         InlineQuickActionOverlay(inlineEditor, toolbarQuickActions + menuQuickActions, showInlineSaveHint,
             keyBgColor, keyTextColor, accentColor)
