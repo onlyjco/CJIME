@@ -569,6 +569,21 @@ fun KeyboardView(
             previewPaddingDp.intValue else state.keyboardBottomPaddingDp
         // 调节键盘时底部留白在被拖动改高度，不当移光标区。
         val bottomLiftCursorOn = inputPreferences.bottomLiftCursor && !resizeActive && !state.isFloatingMode
+        val bottomLiftIconColor = keyTextColor.copy(alpha = 0.78f)
+        val bottomLiftActionsEnabled = !resizeActive && !previewLetterLayout
+        val dispatchBottomLiftLanguageSwitch: (() -> Unit) -> Unit = { beforeSwitch ->
+            val down = callbacks.onKeyPressDown
+            if (down != null) down("ime_switch") else onHapticFeedback?.invoke()
+            beforeSwitch()
+            callbacks.onKeyPress("ime_switch", false)
+        }
+        val bottomLiftSwitchLanguage: () -> Unit = {
+            dispatchBottomLiftLanguageSwitch { callbacks.onCommitTypedBeforeModeChange?.invoke() }
+        }
+        val bottomLiftOpenClipboard: () -> Unit = {
+            onHapticFeedback?.invoke()
+            viewModel.showOverlay(OverlayRoute.Clipboard(0))
+        }
 
     FloatingKeyboardContainer(
         isFloatingMode = state.isFloatingMode,
@@ -2195,7 +2210,16 @@ fun KeyboardView(
                                 modifier = Modifier.weight(1f).then(cursorMod),
                                 t9Controller = t9Controller,
                             )
-                            BottomLiftSpacer(renderedBottomPaddingDp, bottomLiftCursorOn, callbacks.onCursorMove)
+                            BottomLiftSpacer(
+                                heightDp = renderedBottomPaddingDp,
+                                cursorEnabled = bottomLiftCursorOn,
+                                onCursorMove = callbacks.onCursorMove,
+                                isAsciiMode = state.isAsciiMode,
+                                iconColor = bottomLiftIconColor,
+                                actionsEnabled = bottomLiftActionsEnabled,
+                                onSwitchLanguage = bottomLiftSwitchLanguage,
+                                onOpenClipboard = bottomLiftOpenClipboard,
+                            )
                         }
                     }
 
@@ -2266,7 +2290,16 @@ fun KeyboardView(
                             specialKeyTextColor = specialKeyTextColor,
                             modifier = Modifier.weight(1f),
                         )
-                        BottomLiftSpacer(renderedBottomPaddingDp, bottomLiftCursorOn, callbacks.onCursorMove)
+                        BottomLiftSpacer(
+                            heightDp = renderedBottomPaddingDp,
+                            cursorEnabled = bottomLiftCursorOn,
+                            onCursorMove = callbacks.onCursorMove,
+                            isAsciiMode = state.isAsciiMode,
+                            iconColor = bottomLiftIconColor,
+                            actionsEnabled = bottomLiftActionsEnabled,
+                            onSwitchLanguage = { dispatchBottomLiftLanguageSwitch(::clearHandwriting) },
+                            onOpenClipboard = bottomLiftOpenClipboard,
+                        )
                     }
 
                     MainType.STROKE -> {
@@ -2379,7 +2412,16 @@ fun KeyboardView(
 
                 }
                 }
-                BottomLiftSpacer(renderedBottomPaddingDp, bottomLiftCursorOn, callbacks.onCursorMove)
+                BottomLiftSpacer(
+                    heightDp = renderedBottomPaddingDp,
+                    cursorEnabled = bottomLiftCursorOn,
+                    onCursorMove = callbacks.onCursorMove,
+                    isAsciiMode = state.isAsciiMode,
+                    iconColor = bottomLiftIconColor,
+                    actionsEnabled = bottomLiftActionsEnabled,
+                    onSwitchLanguage = bottomLiftSwitchLanguage,
+                    onOpenClipboard = bottomLiftOpenClipboard,
+                )
             }
             } // Full candidate panel reveals over the complete keyboard body.
             KeyboardPanelReveal(
