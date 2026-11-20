@@ -631,8 +631,8 @@ internal fun ClipboardBoardView(
                 val density = LocalDensity.current
                 // Expanding exposes more records, not taller cards. Use the normal keyboard's
                 // records area even at the expanded endpoint, so releasing cannot reflow the grid.
-                val chromeHeight = remember(expansion, maxWidth, maxHeight, density.fontScale) {
-                    expansion?.let { it.settledOrExpandedHeight - maxHeight.value } ?: 0f
+                val chromeHeight = remember(expansion, maxWidth, density.fontScale) {
+                    expansion?.let { kotlin.math.round(it.height) - maxHeight.value } ?: 0f
                 }
                 val stableRecordsHeight = expansion?.let { (it.collapsedHeight - chromeHeight).coerceAtLeast(0f) }
                     ?: maxHeight.value

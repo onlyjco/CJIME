@@ -4,19 +4,6 @@ import com.kingzcheung.xime.rime.RimeEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
-/** Use parcelable system spans and keep the same character boundaries for each selection. */
-private fun sentenceCodeHighlight(text: String, from: Int, to: Int): android.text.SpannableString =
-    android.text.SpannableString(text).apply {
-        setSpan(android.text.style.UnderlineSpan(), 0, text.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-        var index = 0
-        while (index < text.length) {
-            val next = index + Character.charCount(text.codePointAt(index))
-            val color = if (index < to && next > from) 0x663399ff else android.graphics.Color.TRANSPARENT
-            setSpan(android.text.style.BackgroundColorSpan(color), index, next, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
-            index = next
-        }
-    }
-
 /** An isolated candidate lookup; the live composition changes only on confirmation. */
 data class SentenceEditSession(
         val inputSessionId: Long,
@@ -147,7 +134,7 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
         if (!current(owner) || service.uiState.value.inputTarget.isInternal ||
             TerminalEditor.inputTextLocation(service) != com.kingzcheung.xime.settings.SettingsPreferences.INPUT_TEXT_INPUT_BOX) return
         val ic = service.currentInputConnection ?: return
-        if (previewOwner == null && code == owner.originalCode && dragConnection === ic && dragText != null) {
+        if (previewOwner == null && code == owner.originalCode && (dragConnection == null || dragConnection === ic)) {
             service.mainHandler.removeCallbacks(dragPreviewTask)
             pendingDragOwner = null
             dragPreviewScheduled = false
@@ -197,10 +184,9 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
         }
         val caret = if (code.isNotEmpty()) start + shownCode.length else before.trimEnd(' ', '\'').length.coerceAtMost(text.length)
         if (code.isEmpty() && text == previewWritten && caret == previewCaret) return
-        val styled = sentenceCodeHighlight(text, start, start + shownCode.length)
         ic.beginBatchEdit()
         try {
-            if (runCatching { ic.setComposingText(styled, 1) }.getOrDefault(false)) {
+            if (runCatching { ic.setComposingText(text, 1) }.getOrDefault(false)) {
                 previewWritten = text
                 service.markInputBoxComposing(text)
                 previewCaret = if (service.placeInlinePinyinCaret(text, caret)) caret else text.length
