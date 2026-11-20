@@ -183,6 +183,13 @@ android {
             // :plugin-core 等 library 模块只有 debug/release，offline 变体回落到 release。
             matchingFallbacks += listOf("release")
         }
+        // 可与正式版/个人版并存安装的测试变体：独立包名后缀 .test，独立展示名称「CyIME 测试」。
+        create("coexist") {
+            initWith(getByName("debug"))
+            applicationIdSuffix = ".test"
+            versionNameSuffix = "-test"
+            matchingFallbacks += listOf("debug")
+        }
     }
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
