@@ -433,8 +433,10 @@ fun KeyboardLayout(
     // 角标照常按两个角标提示开关显示，滑行不改它（用户 10-31：不能改他的习惯）。
     val glidePrefs = LocalKeyboardInputPreferences.current
     val glideProfile = uiState.inputProfile
-    val chineseGlide = !isAsciiMode && glidePrefs.chineseGlideTyping &&
-        com.kingzcheung.xime.glide.chineseGlideSupported(glideProfile, uiState.currentSchemaId)
+    // 导入的自定义编码方案在「滑行输入」里给它选了全拼或某套双拼时也滑行（#303）。
+    val chineseGlideEncoding = if (isAsciiMode || !glidePrefs.chineseGlideTyping) null else
+        com.kingzcheung.xime.glide.chineseGlideEncoding(glideProfile, uiState.currentSchemaId, glidePrefs.externalGlideEncodings)
+    val chineseGlide = chineseGlideEncoding != null
     val glideEnabled = (isAsciiMode && glidePrefs.glideTyping && callbacks.onGlideWord != null || chineseGlide && callbacks.onGlideCode != null) &&
         glidePrefs.cursorGesture != CursorGestureMode.KEYBOARD && !(isVoiceMode && !isVoiceSticky)
     val glideTrail = remember { GlideTrail() }
@@ -454,8 +456,7 @@ fun KeyboardLayout(
         glidePreview.points = points
         if (glidePreview.job?.isActive == true) { glidePreview.moved = true; return@progress }
         val chinese = chineseGlide
-        val doublePinyin = if (chinese && glideProfile.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN)
-            com.kingzcheung.xime.settings.DoublePinyinSchemes.find(uiState.currentSchemaId) else null
+        val doublePinyin = if (chinese) chineseGlideEncoding?.doublePinyin else null
         val english = glidePreview.english
         val left = glidePreview.left
         val shift = viewModel.shiftMode.value
@@ -511,8 +512,7 @@ fun KeyboardLayout(
         }
         val shift = viewModel.shiftMode.value
         // 中文：双拼按当前方案换码，全拼为空。
-        val doublePinyin = if (chineseGlide && glideProfile.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN)
-            com.kingzcheung.xime.settings.DoublePinyinSchemes.find(uiState.currentSchemaId) else null
+        val doublePinyin = chineseGlideEncoding?.doublePinyin
         val chinese = chineseGlide
         // 中文按前文选编码（组合为空时光标前已上屏的字，和九键组句同一个来源）；在主线程读，识别在后台。
         // 这一笔开过实时预览就用预览开头那份：这时光标前已经有预览写进去的组合文字。

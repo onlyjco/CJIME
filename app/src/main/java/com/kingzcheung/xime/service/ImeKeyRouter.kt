@@ -107,7 +107,13 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
 
     private fun chineseCodeSyllables(code: String, result: com.kingzcheung.xime.rime.RimeProcessResult?,
         allowIncomplete: Boolean = false): List<String>? {
-        val isDouble = service.uiState.value.inputProfile.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN
+        val ui = service.uiState.value
+        // 导入方案按用户给它选的编码算（#303）：选了双拼就按两码一字切。
+        val isDouble = ui.inputProfile.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN ||
+            ui.inputProfile.scheme == com.kingzcheung.xime.settings.InputScheme.EXTERNAL &&
+            com.kingzcheung.xime.glide.ExternalGlideEncodings.parse(SettingsPreferences.getPrefsPublic(service)
+                .getString(com.kingzcheung.xime.glide.ExternalGlideEncodings.KEY, null))[ui.currentSchemaId]
+                .let { it != null && it != com.kingzcheung.xime.glide.ExternalGlideEncodings.PINYIN }
         return runCatching {
             com.kingzcheung.xime.glide.chineseCodeSyllables(code, isDouble,
                 listOf(result?.candidates?.firstOrNull()?.comment.orEmpty(), result?.preeditText.orEmpty()),

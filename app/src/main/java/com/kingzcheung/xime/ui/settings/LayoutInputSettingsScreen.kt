@@ -206,6 +206,7 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                         },
                         lockMessage = glideLock?.takeIf { !settings.chineseGlideTyping }?.message,
                         costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.CHINESE_GLIDE)
+                    ExternalGlideSchemeItems(settings) { settings = it; it.save(context) }
                     HorizontalDivider()
                     SettingsToggleItem(Icons.TwoTone.Gesture, "九键滑行",
                         "在九键上一笔划过几个键输入词语",

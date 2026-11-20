@@ -1160,7 +1160,8 @@ fun KeyboardView(
         var incognitoConfirm by remember(state.inputSessionId) { mutableStateOf(false) }
         // 中文全拼、双拼 26 键：菜单里的「滑行输入」开关的是「中文滑行输入」（其他中文键盘不滑行，不出现）。
         val chineseGlideMenu = !state.isAsciiMode &&
-            com.kingzcheung.xime.glide.chineseGlideSupported(state.inputProfile, state.currentSchemaId)
+            com.kingzcheung.xime.glide.chineseGlideSupported(state.inputProfile, state.currentSchemaId,
+                inputPreferences.externalGlideEncodings)
         // 九键：菜单里的「滑行输入」开关「九键滑行」（用户 11-09：开了以后键盘上找不到地方关）。
         val nineGlideMenu = state.inputProfile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.T9
         val traditionalSwitchApplies = !state.isAsciiMode && !state.isHandwritingMode &&
