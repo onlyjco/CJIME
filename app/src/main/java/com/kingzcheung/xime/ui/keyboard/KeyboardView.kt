@@ -164,6 +164,7 @@ fun KeyboardView(
     onCardPositioned: (left: Int, top: Int, right: Int, bottom: Int) -> Unit = { _: Int, _: Int, _: Int, _: Int -> },
     /** 悬浮卡片外四角角标把手的热区（窗口坐标），宿主并进触摸区；角标没亮时为空表。 */
     onCornerHandlesPositioned: (List<android.graphics.Rect>) -> Unit = {},
+    onFloatingDragStateChange: (Boolean) -> Unit = {},
     candidateState: State<CandidateState> = remember { mutableStateOf(CandidateState()) },
     predictionTransition: kotlinx.coroutines.flow.StateFlow<Boolean>? = null,
     glideCandidatePreview: State<String> = remember { mutableStateOf("") },
@@ -555,6 +556,9 @@ fun KeyboardView(
         val initialPreviewRect = remember(sessionKey) { seedPreviewRect }
         val initialPadding = remember(sessionKey) { state.keyboardBottomPaddingDp }
         val resizePreviewRect = remember(sessionKey) { mutableStateOf(initialPreviewRect) }
+        val liveResizePreviewRect = remember(sessionKey) { mutableStateOf(initialPreviewRect) }
+        val resizeDraggingState = remember(sessionKey) { mutableStateOf(false) }
+        val useOriginalFloating = inputPreferences.frostedGlass.enabled
         val previewPaddingDp = remember(sessionKey) { mutableIntStateOf(initialPadding) }
         // 调节界面里转动的角度：只在本次调节里改，确认才写回，取消即丢。
         val resizeRotation = remember(sessionKey) { mutableFloatStateOf(if (state.isFloatingMode) state.floatingRotation else 0f) }
@@ -588,6 +592,7 @@ fun KeyboardView(
         dragIndicatorColor = floatingDragIndicatorColor,
         onDrag = { dx, dy -> callbacks.onFloatingKeyboardDrag?.invoke(dx, dy) },
         onDragEnd = { callbacks.onFloatingKeyboardDragEnd?.invoke() },
+        onDragStateChange = onFloatingDragStateChange,
         onDock = { callbacks.onFloatingModeChange?.invoke(false) },
         // 固定键盘顶边的把手：往上拉变悬浮，和工具栏「悬浮」同一个切换。平板都有；手机上卡片比屏幕窄时也有
         // （横屏收窄居中、两边露出应用，看着就像悬浮，用户往上拽就该真的变悬浮，GitHub #155 等好几人当成悬浮）。
@@ -601,6 +606,9 @@ fun KeyboardView(
         rotationDegrees = state.floatingRotation,
         previewRotationState = if (resizeActive && state.isFloatingMode) resizeRotation else null,
         previewRectState = if (resizeActive) resizePreviewRect else null,
+        livePreviewRectState = if (!useOriginalFloating && resizeActive && state.isFloatingMode) liveResizePreviewRect else null,
+        externalDragging = !useOriginalFloating && resizeActive && state.isFloatingMode && resizeDraggingState.value,
+        useOriginalFloating = useOriginalFloating,
         onCardPositioned = onCardPositioned,
         // 普通悬浮：亮着的四角角标拖动即调大小，点一下打开调节界面。剪贴板搜索临时撑高卡片时不调。
         onCornerResize = callbacks.onFloatingKeyboardResize?.takeIf {
@@ -2788,6 +2796,7 @@ fun KeyboardView(
             SplitKeyboardGeometry.gutterDp(state.isFloatingMode), splitPitchDp)
         KeyboardResizeControlsHost(
             previewRect = resizePreviewRect,
+            liveRectState = if (!useOriginalFloating && state.isFloatingMode) liveResizePreviewRect else null,
             initialRect = initialPreviewRect,
             previewPaddingDp = previewPaddingDp,
             fixedHeightRange = fixedRange,
@@ -2809,6 +2818,8 @@ fun KeyboardView(
             },
             rotation = if (state.isFloatingMode) resizeRotation else null,
             nonSplitRect = nonSplitPreviewRect,
+            onDragActiveChange = { resizeDraggingState.value = it },
+            useOriginalFloating = useOriginalFloating,
             controls = controls,
         )
     }
@@ -2819,6 +2830,7 @@ fun KeyboardView(
 @Composable
 private fun KeyboardResizeControlsHost(
     previewRect: androidx.compose.runtime.MutableState<ResizeRect>,
+    liveRectState: androidx.compose.runtime.MutableState<ResizeRect>?,
     initialRect: ResizeRect,
     previewPaddingDp: androidx.compose.runtime.MutableIntState,
     fixedHeightRange: IntRange,
@@ -2835,29 +2847,45 @@ private fun KeyboardResizeControlsHost(
     onSplitGapCommit: () -> Unit,
     rotation: androidx.compose.runtime.MutableFloatState?,
     nonSplitRect: ResizeRect?,
+    onDragActiveChange: (Boolean) -> Unit,
+    useOriginalFloating: Boolean,
     controls: @Composable () -> Unit,
 ) {
-    // The controls and measured keyboard share one live rectangle.
-    val session = KeyboardResizePreviewState(
-        rect = previewRect.value,
-        initialRect = initialRect,
-        onRectChange = { previewRect.value = it },
-        bounds = bounds,
-        fixedHeightRange = fixedHeightRange,
-        fixedBottomInsetDp = fixedBottomInsetDp,
-        bottomPaddingDp = previewPaddingDp.intValue,
-        floatingBottomClearanceDp = bottomKeyClearance.value,
-        initialBottomPaddingDp = initialBottomPaddingDp,
-        onBottomPaddingChange = { previewPaddingDp.intValue = it },
-        aspectLimits = aspectLimits,
-        squareSnap = squareSnap,
-        splitGapFraction = splitGapFraction,
-        splitPitchDp = splitPitchDp,
-        onSplitGapChange = onSplitGapChange,
-        onSplitGapCommit = onSplitGapCommit,
-        rotation = rotation,
-        nonSplitRect = nonSplitRect,
-    )
+    val currentBottomPadding = previewPaddingDp.intValue
+    val currentBottomClearance = bottomKeyClearance.value
+    val session = remember(
+        previewRect, liveRectState, initialRect, bounds, fixedHeightRange, fixedBottomInsetDp,
+        currentBottomPadding, currentBottomClearance, initialBottomPaddingDp,
+        aspectLimits, squareSnap, splitGapFraction, splitPitchDp,
+        onSplitGapChange, onSplitGapCommit, rotation, nonSplitRect, onDragActiveChange, useOriginalFloating,
+    ) {
+        KeyboardResizePreviewState(
+            rectState = previewRect,
+            liveRectState = liveRectState,
+            initialRect = initialRect,
+            onRectChange = {
+                previewRect.value = it
+                liveRectState?.value = it
+            },
+            bounds = bounds,
+            fixedHeightRange = fixedHeightRange,
+            fixedBottomInsetDp = fixedBottomInsetDp,
+            bottomPaddingDp = currentBottomPadding,
+            floatingBottomClearanceDp = currentBottomClearance,
+            initialBottomPaddingDp = initialBottomPaddingDp,
+            onBottomPaddingChange = { previewPaddingDp.intValue = it },
+            onDragActiveChange = onDragActiveChange,
+            useOriginalFloating = useOriginalFloating,
+            aspectLimits = aspectLimits,
+            squareSnap = squareSnap,
+            splitGapFraction = splitGapFraction,
+            splitPitchDp = splitPitchDp,
+            onSplitGapChange = onSplitGapChange,
+            onSplitGapCommit = onSplitGapCommit,
+            rotation = rotation,
+            nonSplitRect = nonSplitRect,
+        )
+    }
     CompositionLocalProvider(
         LocalDensity provides density,
         LocalKeyboardResizePreviewState provides session,
