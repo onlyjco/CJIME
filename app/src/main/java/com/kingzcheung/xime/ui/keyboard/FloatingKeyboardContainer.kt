@@ -242,50 +242,41 @@ internal fun FloatingKeyboardContainer(
                 val touchesLeft = shift <= -travel + 0.5f
                 val touchesRight = shift >= travel - 0.5f
                 val undockPull = remember { UndockPullState() }
-                if (clipboardExpansion == null) {
-                    Box(Modifier.align(Alignment.TopCenter)
-                        .absoluteOffset(x = shift.dp)
-                        .width(width).fillMaxSize().clip(cardShape(touchesLeft, touchesRight)).testTag("fixed-keyboard-card")
+                val outerClip = if (clipboardExpansion != null && roundedBottom) {
+                    if (!sidesFilled) FixedKeyboardBottomRoundedShape
+                    else filledSidesCardShape(touchesLeft, touchesRight, roundedTop = false, roundedBottom = true)
+                } else RectangleShape
+                // 保持与未展开剪贴板完全一致的组合树深度，避免 clipboardExpansion 从 null 切换时重建 KeyboardView 导致工具栏闪烁。
+                Box(Modifier.align(Alignment.TopCenter)
+                    .absoluteOffset(x = shift.dp)
+                    .width(width).fillMaxSize()
+                    .clip(outerClip)
+                    .onGloballyPositioned { coords ->
+                        if (clipboardExpansion != null) {
+                            val pos = coords.positionInWindow()
+                            val drop = clipboardDropPx().roundToInt()
+                            val bottom = (pos.y + coords.size.height).roundToInt()
+                            onCardPositioned(pos.x.roundToInt(), (pos.y + drop).roundToInt().coerceAtMost(bottom),
+                                (pos.x + coords.size.width).roundToInt(), bottom)
+                        }
+                    }) {
+                    Box(Modifier.fillMaxSize()
+                        .offset { IntOffset(0, clipboardDropPx().roundToInt()) }
+                        .clip(cardShape(touchesLeft, touchesRight)).testTag("fixed-keyboard-card")
                         .then(if (onUndock != null) Modifier.undockPull(undockPull, onUndock) else Modifier)
                         .onGloballyPositioned { coords ->
                             undockPull.card = coords
-                            val pos = coords.positionInWindow()
-                            onCardPositioned(pos.x.roundToInt(), pos.y.roundToInt(),
-                                (pos.x + coords.size.width).roundToInt(), (pos.y + coords.size.height).roundToInt())
+                            if (clipboardExpansion == null) {
+                                val pos = coords.positionInWindow()
+                                onCardPositioned(pos.x.roundToInt(), pos.y.roundToInt(),
+                                    (pos.x + coords.size.width).roundToInt(), (pos.y + coords.size.height).roundToInt())
+                            }
                         }) {
                         CompositionLocalProvider(LocalKeyboardCardTopCorner provides cardTopCorner(touchesLeft, touchesRight)) {
                             LanguageMenuPanel { keyboardContent() }
                         }
                         if (onUndock != null) UndockHandle(Modifier.align(Alignment.TopCenter), undockPull,
                             dragIndicatorColor, highlightColor)
-                    }
-                } else {
-                    val outerClip = if (roundedBottom) {
-                        if (!sidesFilled) FixedKeyboardBottomRoundedShape
-                        else filledSidesCardShape(touchesLeft, touchesRight, roundedTop = false, roundedBottom = true)
-                    } else RectangleShape
-                    Box(Modifier.align(Alignment.TopCenter)
-                        .absoluteOffset(x = shift.dp)
-                        .width(width).fillMaxSize()
-                        .clip(outerClip)
-                        .onGloballyPositioned { coords ->
-                            val pos = coords.positionInWindow()
-                            val drop = clipboardDropPx().roundToInt()
-                            val bottom = (pos.y + coords.size.height).roundToInt()
-                            onCardPositioned(pos.x.roundToInt(), (pos.y + drop).roundToInt().coerceAtMost(bottom),
-                                (pos.x + coords.size.width).roundToInt(), bottom)
-                        }) {
-                        Box(Modifier.fillMaxSize()
-                            .offset { IntOffset(0, clipboardDropPx().roundToInt()) }
-                            .clip(cardShape(touchesLeft, touchesRight)).testTag("fixed-keyboard-card")
-                            .then(if (onUndock != null) Modifier.undockPull(undockPull, onUndock) else Modifier)
-                            .onGloballyPositioned { coords -> undockPull.card = coords }) {
-                            CompositionLocalProvider(LocalKeyboardCardTopCorner provides cardTopCorner(touchesLeft, touchesRight)) {
-                                LanguageMenuPanel { keyboardContent() }
-                            }
-                            if (onUndock != null) UndockHandle(Modifier.align(Alignment.TopCenter), undockPull,
-                                dragIndicatorColor, highlightColor)
-                        }
                     }
                 }
             }
