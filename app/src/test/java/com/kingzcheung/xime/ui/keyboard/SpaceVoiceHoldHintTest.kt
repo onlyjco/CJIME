@@ -79,4 +79,24 @@ class SpaceVoiceHoldHintTest {
         rule.onNodeWithTag("space-voice-hold-mic").assertExists()
         rule.onNodeWithTag("space").performTouchInput { up() }
     }
+
+    @Test fun `sliding up warns gradually and only says release-to-cancel past the line`() {
+        setKey(micStarts = true, swipeCancel = true)
+        rule.mainClock.autoAdvance = false
+        rule.onNodeWithTag("space").performTouchInput { down(center) }
+        rule.mainClock.advanceTimeBy(600L)
+        // 往上走了半个键高：删除色只是透出来，字还是「上滑取消」。
+        rule.onNodeWithTag("space").performTouchInput { moveTo(androidx.compose.ui.geometry.Offset(centerX, -height * 0.5f)) }
+        rule.mainClock.advanceTimeBy(100L)
+        rule.onNodeWithTag("space-voice-cancel-hint").assertTextEquals("上滑取消")
+        // 过了取消线：「松手取消」。
+        rule.onNodeWithTag("space").performTouchInput { moveTo(androidx.compose.ui.geometry.Offset(centerX, -height * 1.5f)) }
+        rule.mainClock.advanceTimeBy(200L)
+        rule.onNodeWithTag("space-voice-cancel-hint").assertTextEquals("松手取消")
+        // 滑回来：恢复，松手照常上屏。
+        rule.onNodeWithTag("space").performTouchInput { moveTo(center) }
+        rule.mainClock.advanceTimeBy(200L)
+        rule.onNodeWithTag("space-voice-cancel-hint").assertTextEquals("上滑取消")
+        rule.onNodeWithTag("space").performTouchInput { up() }
+    }
 }
