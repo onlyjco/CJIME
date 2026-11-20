@@ -1542,7 +1542,14 @@ object KeysConfigHelper {
             for (schemaId in (bindings.keys + entry.schemaIds).distinct()) {
                 val section = bindings[schemaId]
                 if (section in CODE_LAYOUT_SECTIONS) continue
-                val layout = section?.let { parseButtonLayoutYamlText(entry.text, it) } ?: pkgQwertyLayout ?: continue
+                val sectionLayout = section?.let { parseButtonLayoutYamlText(entry.text, it) }
+                // 旧版主线只认 keyboard.qwerty.button_layout，许多导入包会在 qwerty 写 compact、
+                // 在自定义分节里残留模板 standard；只要任一处声明 compact 即对该包方案启用紧凑布局。
+                val layout = when {
+                    sectionLayout == ButtonLayout.COMPACT -> ButtonLayout.COMPACT
+                    pkgQwertyLayout == ButtonLayout.COMPACT -> ButtonLayout.COMPACT
+                    else -> sectionLayout ?: pkgQwertyLayout ?: continue
+                }
                 result[schemaId] = layout
             }
         }

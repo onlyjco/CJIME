@@ -21,7 +21,6 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
-import androidx.compose.ui.layout.onSizeChanged
 import com.kingzcheung.xime.ui.common.CompactActionMenu
 import com.kingzcheung.xime.ui.common.CompactActionMenuEntry
 import androidx.compose.ui.graphics.Color
@@ -550,11 +549,7 @@ internal fun ClipboardBoardView(
             }
         }
 
-        val rootDensity = LocalDensity.current
-        var boardHeightDp by remember { mutableFloatStateOf(0f) }
-        Column(Modifier.fillMaxSize().onSizeChanged { size ->
-            boardHeightDp = size.height / rootDensity.density
-        }) {
+        Column(Modifier.fillMaxSize()) {
             if (showControls) Row(Modifier.fillMaxWidth().clipboardPanelExpandGesture()
                 .testTag("clipboard-controls").padding(horizontal = 6.dp, vertical = 2.dp),
                 verticalAlignment = Alignment.CenterVertically) {
@@ -634,30 +629,13 @@ internal fun ClipboardBoardView(
                 }) {
                 val expansion = LocalClipboardPanelExpansion.current
                 val density = LocalDensity.current
-                val outerChromeDp = LocalClipboardCandidateChromeDp.current
-                // Expanding exposes more records, not taller cards. Derive the collapsed records area
-                // from the outer candidate bar and this board's own measured header so a pre-relayout
-                // or expanded-on-open frame cannot flip chromeHeight negative and stretch cards.
-                val settledChromeHeight = remember(expansion, maxWidth, density.fontScale) {
-                    mutableFloatStateOf(-1f)
+                // Expanding exposes more records, not taller cards. Use the normal keyboard's
+                // records area even at the expanded endpoint, so releasing cannot reflow the grid.
+                val chromeHeight = remember(expansion, maxWidth, density.fontScale) {
+                    expansion?.let { kotlin.math.round(it.height) - maxHeight.value } ?: 0f
                 }
-                val internalChromeDp = if (boardHeightDp > 0f) (boardHeightDp - maxHeight.value).coerceAtLeast(0f) else null
-                val stableRecordsHeight = when {
-                    expansion == null -> maxHeight.value
-                    outerChromeDp != null && internalChromeDp != null ->
-                        (expansion.collapsedHeight - outerChromeDp - internalChromeDp).coerceAtLeast(0f)
-                    else -> {
-                        if (!expansion.isInMotion &&
-                            kotlin.math.round(expansion.height).toInt() == expansion.contentHeight) {
-                            settledChromeHeight.floatValue = (expansion.contentHeight - maxHeight.value).coerceAtLeast(0f)
-                        }
-                        if (settledChromeHeight.floatValue >= 0f) {
-                            (expansion.collapsedHeight - settledChromeHeight.floatValue).coerceAtLeast(0f)
-                        } else {
-                            minOf(maxHeight.value, (expansion.collapsedHeight - (outerChromeDp ?: 0f)).coerceAtLeast(0f))
-                        }
-                    }
-                }
+                val stableRecordsHeight = expansion?.let { (it.collapsedHeight - chromeHeight).coerceAtLeast(0f) }
+                    ?: maxHeight.value
                 val pinnedHeight = clipboardPinnedPreviewHeight(stableRecordsHeight).dp
                 // The list layout's picture row: every picture the same small square, the row scrolls sideways.
                 val stripHeight = pinnedHeight.coerceAtLeast(ClipboardImageMinHeight.dp)
@@ -1166,9 +1144,6 @@ private fun PinsFoldPill(label: String, expanded: Boolean, content: Color, modif
             Modifier.size(18.dp), tint = tint)
     }
 }
-
-/** Outer candidate bar height (dp) outside [ClipboardBoardView] when hosted in [KeyboardView]. */
-internal val LocalClipboardCandidateChromeDp = staticCompositionLocalOf<Float?> { null }
 
 /** One fixed height for a pinned record: a single line of text, or a thin strip of a picture. */
 internal val ClipboardPinnedRowHeight = 40.dp

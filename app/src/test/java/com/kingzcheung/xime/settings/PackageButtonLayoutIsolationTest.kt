@@ -178,4 +178,25 @@ class PackageButtonLayoutIsolationTest {
         assertEquals(ButtonLayout.STANDARD, KeysConfigHelper.getButtonLayout(false, "wubi_custom26"))
         assertEquals(ButtonLayout.STANDARD, KeysConfigHelper.getButtonLayout(false, "lxsq_single"))
     }
+
+    @Test fun packageQwertyCompactIsNotShadowedByBoilerplateSectionStandard() {
+        val pkgYaml = """
+            keyboard:
+              qwerty:
+                button_layout: compact
+              qwerty_lxsq17:
+                schemas: [lxsq17, wanxiang]
+                button_layout: standard
+                layout:
+                  rows:
+                    - [h, s, z, b, x, m]
+                    - [l, d, y, w, j, n]
+                    - [c, q, g, f, t]
+        """.trimIndent()
+
+        val layouts = KeysConfigHelper.parsePackageSchemaButtonLayouts(listOf(pkgYaml))
+        assertEquals(ButtonLayout.COMPACT, layouts["lxsq17"])
+        assertEquals(ButtonLayout.COMPACT, layouts["wanxiang"])
+        assertEquals(null, layouts["rime_ice"])
+    }
 }
