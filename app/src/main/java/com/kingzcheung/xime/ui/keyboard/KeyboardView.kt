@@ -556,7 +556,6 @@ fun KeyboardView(
         val initialPreviewRect = remember(sessionKey) { seedPreviewRect }
         val initialPadding = remember(sessionKey) { state.keyboardBottomPaddingDp }
         val resizePreviewRect = remember(sessionKey) { mutableStateOf(initialPreviewRect) }
-        val liveResizePreviewRect = remember(sessionKey) { mutableStateOf(initialPreviewRect) }
         val resizeDraggingState = remember(sessionKey) { mutableStateOf(false) }
         val useOriginalFloating = inputPreferences.frostedGlass.enabled
         val previewPaddingDp = remember(sessionKey) { mutableIntStateOf(initialPadding) }
@@ -606,7 +605,7 @@ fun KeyboardView(
         rotationDegrees = state.floatingRotation,
         previewRotationState = if (resizeActive && state.isFloatingMode) resizeRotation else null,
         previewRectState = if (resizeActive) resizePreviewRect else null,
-        livePreviewRectState = if (!useOriginalFloating && resizeActive && state.isFloatingMode) liveResizePreviewRect else null,
+        livePreviewRectState = null,
         externalDragging = !useOriginalFloating && resizeActive && state.isFloatingMode && resizeDraggingState.value,
         useOriginalFloating = useOriginalFloating,
         onCardPositioned = onCardPositioned,
@@ -2796,7 +2795,7 @@ fun KeyboardView(
             SplitKeyboardGeometry.gutterDp(state.isFloatingMode), splitPitchDp)
         KeyboardResizeControlsHost(
             previewRect = resizePreviewRect,
-            liveRectState = if (!useOriginalFloating && state.isFloatingMode) liveResizePreviewRect else null,
+            liveRectState = null,
             initialRect = initialPreviewRect,
             previewPaddingDp = previewPaddingDp,
             fixedHeightRange = fixedRange,

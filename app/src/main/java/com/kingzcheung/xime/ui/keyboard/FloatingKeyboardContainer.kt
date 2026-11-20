@@ -311,13 +311,12 @@ internal fun FloatingKeyboardContainer(
         // 转着的卡片不参与贴底恢复固定：底部本来就允许略出屏，贴底不代表想变回固定。
         val destination = dockTarget?.takeIf { it.widthDp > 0 && it.contentHeightDp > 0 && rotatedRect == null }
             ?.rectInHost(maxWidth.value * density.density, maxHeight.value * density.density, density.density)
-        // 原版方案（开启玻璃时）：拖角直接改实际布局尺寸；关闭玻璃时用 GPU 图层实时缩放/位移，松手后再重测一次成清晰布局。
+        // 折中优化与原版一样按实际尺寸实时重排按键；关闭玻璃时额外由宿主暂缓整窗 requestLayout/玻璃与触摸热区 IPC。
         var realCornerRect by remember(geometryLocked) { mutableStateOf<ResizeRect?>(null) }
-        val liveCornerRectState = remember(geometryLocked) { mutableStateOf<ResizeRect?>(null) }
         var cornerResizing by remember(geometryLocked) { mutableStateOf(false) }
-        val cardRect = previewRect ?: (if (useOriginalFloating) realCornerRect else null) ?: baseRect
+        val cardRect = previewRect ?: realCornerRect ?: baseRect
         fun visualCardRect(): ResizeRect = if (useOriginalFloating) cardRect
-            else liveCornerRectState.value ?: livePreviewRectState?.value ?: cardRect
+            else livePreviewRectState?.value ?: cardRect
         val cardTotalHeight = with(density) { cardRect.height.toDp() }
         val capInset = remember { mutableFloatStateOf(0f) }
         val dragAreaHeight = floatingDragAreaHeightDp(bottomContentPaddingDp,
@@ -524,7 +523,7 @@ internal fun FloatingKeyboardContainer(
                             with(density) { cardRect.height.toDp() } + PositionHighlightGap * 2)
                     } else {
                         Modifier.layout { measurable, _ ->
-                            val visual = liveCornerRectState.value ?: cardRect
+                            val visual = visualCardRect()
                             val gap = PositionHighlightGap.toPx()
                             val w = (visual.width + gap * 2f).roundToInt().coerceAtLeast(1)
                             val h = (visual.height + gap * 2f).roundToInt().coerceAtLeast(1)
@@ -673,12 +672,8 @@ internal fun FloatingKeyboardContainer(
                                     val (next, shown) = floatingCornerResizeStep(start, raw, handle, dx, dy, limits,
                                         currentAspect, currentHeightOnly, density.density)
                                     raw = next
-                                    if (useOriginalFloating) {
-                                        realCornerRect = shown
-                                    } else {
-                                        liveCornerRectState.value = shown
-                                        if (!cornerResizing) cornerResizing = true
-                                    }
+                                    realCornerRect = shown
+                                    if (!cornerResizing) cornerResizing = true
                                     resized = true
                                 }
                                 try {
@@ -695,11 +690,10 @@ internal fun FloatingKeyboardContainer(
                                         tapped = currentEvent.changes.firstOrNull { it.id == down.id }?.pressed == false
                                     }
                                 } finally {
-                                    val result = if (useOriginalFloating) realCornerRect else liveCornerRectState.value
+                                    val result = realCornerRect
                                     if (!lockedNow && resized && result != null) currentOnCornerResize?.invoke(
                                         result.toGeometry(hostWidthPx, hostHeightPx, limits.dragBarPx, density.density))
                                     realCornerRect = null
-                                    liveCornerRectState.value = null
                                     cornerResizing = false
                                     highlight.held = false
                                     if (tapped) currentOnCornerTap?.invoke() else highlight.trigger()
