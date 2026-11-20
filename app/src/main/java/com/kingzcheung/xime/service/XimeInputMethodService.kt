@@ -362,10 +362,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             fixedKeyboardMinimumInsetPx(insets, win, normal, position, reading) else normal
         fixedMinimumInsetPxState.value = minimum
         // 「底部位置」只管固定键盘：悬浮键盘的最低位置按系统按钮和手势区算。
-        val glassOn = com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences.read(this, isDarkTheme()).frostedGlass.enabled
         floatingMinimumInsetPxState.value = if (win != null && insets != null && reading != null)
             floatingMinimumInsetPx(win, insets, normal, reading)
-        else if (!glassOn) fallbackFloatingMinimumInsetPx(this, minimum) else minimum
+        else fallbackFloatingMinimumInsetPx(this, minimum)
         fixedBottomInsetPxState.value = if (win != null && insets != null)
             fixedKeyboardBottomInsetPx(insets, win, normal, minimum) else normal
         if (reading != null) SettingsPreferences.setKeyboardBottomDiagnostic(this, bottomNavDiagnostic(this, reading, position,
@@ -3164,14 +3163,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 gravity = android.view.Gravity.BOTTOM
             }
             val state = uiState.value
-            val glassOn = com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences.read(this, isDarkTheme()).frostedGlass.enabled
             if (state.isFloatingMode || state.showKeyboardResize || state.isCompact) {
                 view.updateLayoutParams<android.widget.FrameLayout.LayoutParams> {
-                    height = if (glassOn) {
-                        val physicalScreenDp = (resources.displayMetrics.heightPixels / resources.displayMetrics.density).roundToInt()
-                        val statusBarDp = tryGetStatusBarHeightDp(this@XimeInputMethodService, window.window)
-                        ((physicalScreenDp - statusBarDp).coerceAtLeast(1) * resources.displayMetrics.density).roundToInt()
-                    } else android.view.ViewGroup.LayoutParams.MATCH_PARENT
+                    height = android.view.ViewGroup.LayoutParams.MATCH_PARENT
                 }
             } else {
                 // 首显前预设容器高度：容器初始 MATCH_PARENT（贴底 → 顶部 y=0）会让窗口
@@ -3422,23 +3416,12 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             val config = resources.configuration
             val screenHeight = config.screenHeightDp
             val activeBottom = keyboardBottomSpaceDp(state)
-            val glassOn = com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences.read(this, isDarkTheme()).frostedGlass.enabled
-            if (!glassOn && (state.isFloatingMode || state.showKeyboardResize || state.isCompact)) {
+            if (state.isFloatingMode || state.showKeyboardResize || state.isCompact) {
                 keyboardContainer.updateMatchParentHeight()
             } else {
-                // 悬浮模式（开玻璃走原版时）保持物理可见全高；
-                val physicalScreenDp = (resources.displayMetrics.heightPixels / resources.displayMetrics.density).roundToInt()
-                val statusBarDp = tryGetStatusBarHeightDp(this, window.window)
-                val floatingHostHeight = (physicalScreenDp - statusBarDp).coerceAtLeast(1)
-                val height = when {
-                    state.isFloatingMode || state.showKeyboardResize || state.isCompact -> floatingHostHeight
-                    else -> {
-                        val content = resolveKeyboardSize(config.screenWidthDp, screenHeight,
-                            state.keyboardBottomPaddingDp + activeBottom, state).height
-                        content + state.keyboardBottomPaddingDp + activeBottom
-                    }
-                }
-                keyboardContainer.updateHeight(height)
+                val content = resolveKeyboardSize(config.screenWidthDp, screenHeight,
+                    state.keyboardBottomPaddingDp + activeBottom, state).height
+                keyboardContainer.updateHeight(content + state.keyboardBottomPaddingDp + activeBottom)
             }
             keyboardContainer.requestLayout()
         }
@@ -4444,8 +4427,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                     win.setDimAmount(0f)
                     win.setNavigationBarColor(android.graphics.Color.TRANSPARENT)
                 } else if (state.isFloatingMode) {
-                    val frostedEnabled = com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences.read(this, isDark).frostedGlass.enabled
-                    if (!frostedEnabled) androidx.core.view.WindowCompat.setDecorFitsSystemWindows(win, false)
+                    androidx.core.view.WindowCompat.setDecorFitsSystemWindows(win, false)
                     win.setBackgroundDrawable(android.graphics.drawable.ColorDrawable(android.graphics.Color.TRANSPARENT))
                     win.setDimAmount(0f)
                     win.setNavigationBarColor(android.graphics.Color.TRANSPARENT)
@@ -4461,17 +4443,15 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                         win.isNavigationBarContrastEnforced = SettingsPreferences.roundedKeyboardBottom(this)
                     }
                     if (AndroidPlatform.navBarColorIgnored) {
-                        // Android 15 起（targetSdk 35）这个颜色系统不再画，导航区照旧由 Compose 画；只是把键盘底色报出去，
-                        // 小米「输入法全面屏优化」（含 LSP 模块开的）用它给键盘下面那条系统栏上色，不报就是系统默认色（#144）。
-                        // 图片/渐变背景没有单一颜色可报，玻璃效果（半透明）及底部圆角都需要保持透明导航栏。
-                        val bgType = theme.keyboardBackground?.type
+                        // Android 15 起（targetSdk 35）这个颜色系统不再画，导航区照旧由 Compose 画；只是把底色报出去，
+                        // 小米「输入法全面屏优化」用它给键盘下面那条系统抬高栏上色。
+                        // 渐变皮肤取底边衔接色，大漠流金取底部偏深沙影色；玻璃与底部圆角及其他图片保持透明。
                         val glass = com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences.read(this, isDark).frostedGlass
                         val rounded = SettingsPreferences.roundedKeyboardBottom(this)
-                        val iosGradient = state.themeId == com.kingzcheung.xime.ui.theme.TransparentGlassTheme.ID
-                        val transparentNav = glass.enabled || rounded || bgType == "image" || (bgType == "gradient" && !iosGradient)
-                        win.setNavigationBarColor(if (transparentNav) android.graphics.Color.TRANSPARENT
-                            else (if (iosGradient) com.kingzcheung.xime.ui.theme.resolveKeyboardPalette(state.themeId, isDark).surface else bgColor)
-                                .copy(alpha = 1f).toArgb())
+                        val navSurface = if (glass.enabled || rounded) null
+                            else com.kingzcheung.xime.ui.theme.resolveNavigationBarSurfaceColor(
+                                state.themeId, theme.keyboardBackground, isDark, bgColor)
+                        win.setNavigationBarColor(navSurface?.copy(alpha = 1f)?.toArgb() ?: android.graphics.Color.TRANSPARENT)
                     } else {
                         win.setNavigationBarColor(android.graphics.Color.TRANSPARENT)
                     }

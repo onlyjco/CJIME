@@ -216,12 +216,11 @@ internal fun KeyboardResizeOverlay(
     ) {
         val viewRect = viewRectOf(maxWidth.value * density.density, maxHeight.value * density.density)
         val previewState = LocalKeyboardResizePreviewState.current
-        val useOriginalFloating = previewState.useOriginalFloating
         val liveDragRectState = remember(floatingMode, maxWidth, maxHeight) { mutableStateOf<ResizeRect?>(null) }
         var activelyDragging by remember { mutableStateOf(false) }
         val currentOnDragActiveChange by rememberUpdatedState(previewState.onDragActiveChange)
-        LaunchedEffect(activelyDragging, useOriginalFloating) {
-            currentOnDragActiveChange(!useOriginalFloating && activelyDragging)
+        LaunchedEffect(activelyDragging) {
+            currentOnDragActiveChange(activelyDragging)
         }
         DisposableEffect(Unit) { onDispose { currentOnDragActiveChange(false) } }
         // 调节界面里拖边、拖角、拖着移动时按屏幕最高刷新率跟手（用户 11-19）。
@@ -293,8 +292,8 @@ internal fun KeyboardResizeOverlay(
         // 把两条边中间一段（系统每边最多认 200dp）从系统手势里排除；分体时外侧边不可拖，不排除。
         val edgeExclusionHitPx = RESIZE_EDGE_HIT_DP * density.density
         val edgeExclusionHalfPx = minOf(frame.height, RESIZE_EDGE_GESTURE_EXCLUSION_DP * density.density) / 2f
-        LaunchedEffect(hostView, frame, overlayOrigin, splitActive, editingOpacity, activelyDragging, useOriginalFloating) {
-            if (!AndroidPlatform.gestureExclusion || (!useOriginalFloating && activelyDragging)) return@LaunchedEffect
+        LaunchedEffect(hostView, frame, overlayOrigin, splitActive, editingOpacity, activelyDragging) {
+            if (!AndroidPlatform.gestureExclusion || activelyDragging) return@LaunchedEffect
             val viewInWindow = IntArray(2).also { hostView.getLocationInWindow(it) }
             val dx = overlayOrigin.x - viewInWindow[0]
             val dy = overlayOrigin.y - viewInWindow[1]
@@ -371,7 +370,7 @@ internal fun KeyboardResizeOverlay(
         TrackDockHold(dockGesture)
         val dockReady = floatingMode && dockGesture.armed && morphTarget != null && dockGesture.progress >= 1f
         LaunchedEffect(dockGesture.epoch, dockReady) {
-            if (dockReady && !useOriginalFloating) currentSnapFeedback()
+            if (dockReady) currentSnapFeedback()
         }
         val morphProgress = if (floatingMode) dockGesture.progress else undockProgress
         /** [cardMovedY] 是这一下卡片实际往下挪的距离：手指比卡片多走的（卡片已经顶在底边）才算往下顶。 */
@@ -764,7 +763,7 @@ internal fun KeyboardResizeOverlay(
                                 snapFeedback(if (workingRect != reachable) "square" else null)
                                 liveDragRectState.value = workingRect
                                 val liveSink = currentPreviewState.liveRectState
-                                if (!useOriginalFloating && liveSink != null) {
+                                if (liveSink != null) {
                                     liveSink.value = rotateRectCenter(workingRect, gesturePivot, rotationState?.floatValue ?: 0f)
                                     pendingFloatingCommit = workingRect
                                     floatingCommitTick++
@@ -878,13 +877,13 @@ internal fun KeyboardResizeOverlay(
                 },
         )
 
-        val showMorphOutline = if (floatingMode && !useOriginalFloating) dockReady else morphProgress > 0f
+        val showMorphOutline = if (floatingMode) dockReady else morphProgress > 0f
         morphTarget?.takeIf { showMorphOutline }?.let { target ->
-            val p = if (floatingMode && !useOriginalFloating) 1f else morphProgress
+            val p = if (floatingMode) 1f else morphProgress
             fun between(start: Float, end: Float) = start + (end - start) * p
             val live = currentFrame()
             KeyboardModeMorphOutline(Modifier.zIndex(2f),
-                if (floatingMode && !useOriginalFloating) target else ResizeRect(between(live.left, target.left), between(live.top, target.top),
+                if (floatingMode) target else ResizeRect(between(live.left, target.left), between(live.top, target.top),
                     between(live.right, target.right), between(live.bottom, target.bottom)),
                 p, if (floatingMode) keyboardPanelShape(false, roundedBottom, roundedTop) else FloatingKeyboardCardShape,
                 p >= 1f, "keyboard-resize-mode-switch-preview")
@@ -1212,7 +1211,7 @@ internal fun KeyboardResizeOverlay(
                 val moved = base.translated(dxPx, if (floatingMode) dyPx else 0f).coerceInside(moveBounds)
                 liveDragRectState.value = moved
                 val liveSink = currentPreviewState.liveRectState
-                if (!useOriginalFloating && floatingMode && liveSink != null) {
+                if (floatingMode && liveSink != null) {
                     liveSink.value = rotateRectCenter(moved, gesturePivot, rotationState?.floatValue ?: 0f)
                     pendingFloatingCommit = moved
                     floatingCommitTick++
@@ -1565,7 +1564,6 @@ internal data class KeyboardResizePreviewState(
     val initialRect: ResizeRect? = null,
     val onRectChange: (ResizeRect) -> Unit = {},
     val onDragActiveChange: (Boolean) -> Unit = {},
-    val useOriginalFloating: Boolean = false,
     val bounds: ResizeRect? = null,
     val fixedHeightRange: IntRange? = null,
     val fixedBottomInsetDp: Int = 0,
