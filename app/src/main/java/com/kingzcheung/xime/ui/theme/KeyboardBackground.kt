@@ -117,7 +117,8 @@ internal fun resolveNavigationBarSurfaceColor(
 private fun iosGradientBottomNavColor(config: BackgroundConfig, isDark: Boolean): Color? {
     val stops = gradientColors(config, isDark) ?: return null
     if (stops.size < 2) return null
-    return androidx.compose.ui.graphics.lerp(stops.last(), stops[stops.size / 2], if (isDark) 0.40f else 0.15f)
+    return if (isDark) androidx.compose.ui.graphics.lerp(stops.last(), stops[stops.size / 2], 0.20f)
+    else stops.last()
 }
 
 /**
