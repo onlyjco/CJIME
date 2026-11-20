@@ -36,6 +36,27 @@ class VoiceKeyboardContainer(
         isTrackingVoiceButtons = true
     }
 
+    private var edgeExclusion: KeyboardEdgeExclusion? = null
+
+    /** 按键区左右两边挡住系统边缘手势，null 是不挡，见 [keyboardEdgeExclusionBands]。 */
+    fun setEdgeExclusion(spec: KeyboardEdgeExclusion?) {
+        if (spec == edgeExclusion) return
+        edgeExclusion = spec
+        applyEdgeExclusion()
+    }
+
+    override fun onLayout(changed: Boolean, left: Int, top: Int, right: Int, bottom: Int) {
+        super.onLayout(changed, left, top, right, bottom)
+        if (changed) applyEdgeExclusion()
+    }
+
+    private fun applyEdgeExclusion() {
+        if (!com.kingzcheung.xime.platform.AndroidPlatform.gestureExclusion) return
+        // 只设这个容器自己的排除区；键盘调节层设在里面的 Compose 视图上，两者互不覆盖（系统把各视图的合起来）。
+        systemGestureExclusionRects = keyboardEdgeExclusionBands(width, height, edgeExclusion, resources.displayMetrics.density)
+            .map { android.graphics.Rect(it.left, it.top, it.right, it.bottom) }
+    }
+
     fun updateHeight(heightDp: Int) {
         val heightPx = (heightDp * resources.displayMetrics.density).toInt()
         val params = layoutParams ?: return

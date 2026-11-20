@@ -31,7 +31,7 @@ import com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences
 import com.kingzcheung.xime.settings.SettingsPreferences
 
 /** Groups of [InputExperienceSettings]; the 布局与显示 sub-pages each show some of them. */
-internal enum class InputExperiencePart { SYMBOLS, DELETE, FLICK_DISC, CURSOR, TIMING, HANDWRITING, KEY_TEXT }
+internal enum class InputExperiencePart { SYMBOLS, DELETE, FLICK_DISC, CURSOR, EDGE, TIMING, HANDWRITING, KEY_TEXT }
 
 /** 「时长与距离」里的几项（设置搜索点中其中一项时自动展开，见 [InputExperienceSettings] 的 collapsedSummary）。 */
 internal val TIMING_SEARCH_KEYS = setOf("长按空格多久开始", "从中间滑到边缘走几行", "光标每移动一字所需距离",
@@ -288,6 +288,23 @@ internal fun InputExperienceSettings(
                     modifier = Modifier.testTag("flick-direction-disc"), onCheckedChange = {
                         settings = settings.copy(flickDirectionDisc = it); settings.save(context)
                     })
+            }
+            }
+            if (InputExperiencePart.EDGE in parts) {
+            divider()
+            // 11-20 荣耀用户：系统边缘手势吞掉贴边按键。默认关，打开后键盘两边不再能侧滑返回。
+            Row(Modifier.settingsSearchAnchor("按键区挡住屏幕边缘手势", bleed = 16.dp, bleedVertical = 6.dp).fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("按键区挡住屏幕边缘手势", style = MaterialTheme.typography.titleSmall)
+                    Text(if (com.kingzcheung.xime.platform.AndroidPlatform.gestureExclusion)
+                        "贴边的键不被侧滑返回、侧边栏吞掉；打开后在键盘两边不能侧滑返回"
+                        else "需要 Android 10 及以上",
+                        style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(checked = settings.edgeGestureExclusion, enabled = com.kingzcheung.xime.platform.AndroidPlatform.gestureExclusion,
+                    colors = settingsSwitchColors(), modifier = Modifier.testTag("edge-gesture-exclusion-switch"),
+                    onCheckedChange = { settings = settings.copy(edgeGestureExclusion = it); settings.save(context) })
             }
             }
             if (InputExperiencePart.CURSOR in parts) {

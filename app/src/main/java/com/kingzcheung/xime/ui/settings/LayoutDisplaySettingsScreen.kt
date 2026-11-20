@@ -694,6 +694,7 @@ private fun LayoutDisplayPage(
             }
             if (page == "gestures") item { InputExperienceSettings(setOf(InputExperiencePart.DELETE), "删除键") }
             if (page == "gestures") item { InputExperienceSettings(setOf(InputExperiencePart.CURSOR), "光标与空格") }
+            if (page == "gestures") item { InputExperienceSettings(setOf(InputExperiencePart.EDGE), "屏幕边缘") }
             // 大多数人不会去调的时长、距离滑条收在一起，默认收起（用户 10-31）；设置搜索点中会自动展开。
             if (page == "gestures") item {
                 InputExperienceSettings(setOf(InputExperiencePart.TIMING), "时长与距离",

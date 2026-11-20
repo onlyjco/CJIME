@@ -2331,6 +2331,15 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 val handwritingNormalX = if (state.isFloatingMode) state.floatingOffsetX else protectedSize.offsetX
                 val handwritingOffsetX = handwritingSize(handwritingNormalX, 0)
                 val contentBottomPaddingDp = if (handwritingExpanded || state.isFloatingMode) 0 else state.keyboardBottomPaddingDp
+                // 按键区左右两边挡住系统边缘手势（「按键与手势」里的开关，默认关，11-20）：只管固定键盘平常的样子，
+                // 悬浮、调节尺寸、手写全屏、收起时不挡。按键区底边以下的留白和系统导航那一条不算。
+                val edgeExclusion = if (keyboardPrefs.edgeGestureExclusion && !state.isFloatingMode && !state.showKeyboardResize &&
+                    !handwritingExpanded && !state.isCompact && !state.voiceCollapsed) {
+                    val density = resources.displayMetrics.density
+                    KeyboardEdgeExclusion(((activeBottomDp + contentBottomPaddingDp) * density).roundToInt(),
+                        (keyboardHeight * density).roundToInt())
+                } else null
+                SideEffect { keyboardContainer.setEdgeExclusion(edgeExclusion) }
                 val floatingDragBarHeight = if (state.isFloatingMode && !handwritingExpanded) resources.configuration.floatingFooterHeightDp else 0
                 // Keep a floating panel's bottom in place while it grows, and reserve its drag bar.
                 val clipboardBottomSpace = if (state.isFloatingMode) {

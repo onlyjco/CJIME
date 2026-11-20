@@ -217,6 +217,18 @@ class KeyboardInputPreferencesTest {
         assertTrue(KeyboardInputPreferences.BOTTOM_LIFT_CURSOR_KEY in KeyboardInputPreferences.watchedKeys)
     }
 
+    @Test fun `edge gesture exclusion is off by default and persists on its own`() {
+        val before = KeyboardInputPreferences.read(context)
+        assertEquals(false, before.edgeGestureExclusion)
+        for (enabled in listOf(true, false)) {
+            before.copy(edgeGestureExclusion = enabled).save(context)
+            val after = KeyboardInputPreferences.read(context)
+            assertEquals(enabled, after.edgeGestureExclusion)
+            assertEquals(before, after.copy(edgeGestureExclusion = false))
+        }
+        assertTrue(KeyboardInputPreferences.EDGE_GESTURE_EXCLUSION_KEY in KeyboardInputPreferences.watchedKeys)
+    }
+
     @Test fun `delete repeat speed defaults to the old feel and persists every step`() {
         val before = KeyboardInputPreferences.read(context)
         assertEquals(com.kingzcheung.xime.keyboard.DeleteRepeatSpeed.STANDARD, before.deleteRepeatSpeed)
