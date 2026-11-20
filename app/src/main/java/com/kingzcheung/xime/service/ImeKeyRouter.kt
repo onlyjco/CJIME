@@ -1452,7 +1452,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                     val afterGlide = current.glidedWord.isNotEmpty() && current.pendingEnglishText.endsWith(current.glidedWord) &&
                         service.currentInputConnection?.getTextBeforeCursor(current.glidedWord.length, 0)
                             ?.toString() == current.glidedWord
-                    val autoCaps = hardwareEvent == null && !isShifted && capitalizeEnglishHere()
+                    val autoCaps = hardwareEvent == null && !isShifted && !ExplicitLowercase.consume(key) && capitalizeEnglishHere()
                     if (current.pendingEnglishText.isEmpty() || afterGlide) directEnglishAutoCapped = autoCaps
                     val next = commitEnglishLetter(current, key, isShifted || autoCaps,
                         service::supportsEnglishCandidateReplace, afterGlide = afterGlide) {

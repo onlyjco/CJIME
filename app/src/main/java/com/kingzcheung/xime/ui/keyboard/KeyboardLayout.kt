@@ -2323,7 +2323,11 @@ internal fun commitLongPressChoice(label: String, onCommitText: ((String) -> Uni
     // 韩语长按出的 ㄲ 同样交给组字。大写的照旧直接上屏。
     val letter = label.length == 1 && (label[0] in 'a'..'z' ||
         !label[0].isUpperCase() && label[0] in accentLetters)
-    if (letter) onKeyPress(label) else (onCommitText ?: onKeyPress)(label)
+    if (letter) {
+        // 特意选了小写：句首也不自动大写（#465）。
+        com.kingzcheung.xime.service.ExplicitLowercase.mark(label)
+        onKeyPress(label)
+    } else (onCommitText ?: onKeyPress)(label)
 }
 
 /**
