@@ -250,7 +250,7 @@ internal fun KeyboardResizeOverlay(
         var floatingCommitTick by remember { mutableIntStateOf(0) }
         LaunchedEffect(floatingMode, floatingCommitTick) {
             val pending = pendingFloatingCommit ?: return@LaunchedEffect
-            kotlinx.coroutines.delay(90L)
+            kotlinx.coroutines.delay(100L)
             if (pendingFloatingCommit === pending) {
                 pendingFloatingCommit = null
                 currentOnPreviewRectChange(pending)
@@ -1215,6 +1215,7 @@ internal fun KeyboardResizeOverlay(
                 if (!useOriginalFloating && floatingMode && liveSink != null) {
                     liveSink.value = rotateRectCenter(moved, gesturePivot, rotationState?.floatValue ?: 0f)
                     pendingFloatingCommit = moved
+                    floatingCommitTick++
                 } else {
                     currentOnPreviewRectChange(moved)
                 }

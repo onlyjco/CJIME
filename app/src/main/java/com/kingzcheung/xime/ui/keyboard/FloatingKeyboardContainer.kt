@@ -31,6 +31,7 @@ import androidx.compose.runtime.State
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
@@ -311,12 +312,21 @@ internal fun FloatingKeyboardContainer(
         // 转着的卡片不参与贴底恢复固定：底部本来就允许略出屏，贴底不代表想变回固定。
         val destination = dockTarget?.takeIf { it.widthDp > 0 && it.contentHeightDp > 0 && rotatedRect == null }
             ?.rectInHost(maxWidth.value * density.density, maxHeight.value * density.density, density.density)
-        // 折中优化与原版一样按实际尺寸实时重排按键；关闭玻璃时额外由宿主暂缓整窗 requestLayout/玻璃与触摸热区 IPC。
+        // 原版方案（开启玻璃时）：拖角直接改实际布局尺寸；关闭玻璃时用 GPU 图层实时缩放，短时间停留（100ms）后重排清晰布局，松手再落盘。
         var realCornerRect by remember(geometryLocked) { mutableStateOf<ResizeRect?>(null) }
+        var settledCornerRect by remember(geometryLocked) { mutableStateOf<ResizeRect?>(null) }
+        val liveCornerRectState = remember(geometryLocked) { mutableStateOf<ResizeRect?>(null) }
         var cornerResizing by remember(geometryLocked) { mutableStateOf(false) }
-        val cardRect = previewRect ?: realCornerRect ?: baseRect
+        var cornerPauseTick by remember(geometryLocked) { mutableIntStateOf(0) }
+        LaunchedEffect(cornerResizing, cornerPauseTick, useOriginalFloating) {
+            if (!useOriginalFloating && cornerResizing && cornerPauseTick > 0) {
+                kotlinx.coroutines.delay(100L)
+                liveCornerRectState.value?.let { settledCornerRect = it }
+            }
+        }
+        val cardRect = previewRect ?: (if (useOriginalFloating) realCornerRect else settledCornerRect) ?: baseRect
         fun visualCardRect(): ResizeRect = if (useOriginalFloating) cardRect
-            else livePreviewRectState?.value ?: cardRect
+            else liveCornerRectState.value ?: livePreviewRectState?.value ?: cardRect
         val cardTotalHeight = with(density) { cardRect.height.toDp() }
         val capInset = remember { mutableFloatStateOf(0f) }
         val dragAreaHeight = floatingDragAreaHeightDp(bottomContentPaddingDp,
@@ -672,8 +682,13 @@ internal fun FloatingKeyboardContainer(
                                     val (next, shown) = floatingCornerResizeStep(start, raw, handle, dx, dy, limits,
                                         currentAspect, currentHeightOnly, density.density)
                                     raw = next
-                                    realCornerRect = shown
-                                    if (!cornerResizing) cornerResizing = true
+                                    if (useOriginalFloating) {
+                                        realCornerRect = shown
+                                    } else {
+                                        liveCornerRectState.value = shown
+                                        if (!cornerResizing) cornerResizing = true
+                                        cornerPauseTick++
+                                    }
                                     resized = true
                                 }
                                 try {
@@ -690,11 +705,14 @@ internal fun FloatingKeyboardContainer(
                                         tapped = currentEvent.changes.firstOrNull { it.id == down.id }?.pressed == false
                                     }
                                 } finally {
-                                    val result = realCornerRect
+                                    val result = if (useOriginalFloating) realCornerRect else liveCornerRectState.value
                                     if (!lockedNow && resized && result != null) currentOnCornerResize?.invoke(
                                         result.toGeometry(hostWidthPx, hostHeightPx, limits.dragBarPx, density.density))
                                     realCornerRect = null
+                                    settledCornerRect = null
+                                    liveCornerRectState.value = null
                                     cornerResizing = false
+                                    cornerPauseTick = 0
                                     highlight.held = false
                                     if (tapped) currentOnCornerTap?.invoke() else highlight.trigger()
                                 }

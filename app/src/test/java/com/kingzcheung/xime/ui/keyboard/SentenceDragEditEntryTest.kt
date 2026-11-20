@@ -9,7 +9,7 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
-/** 拖选改局部给 26 键全拼和双拼；其它方案照旧用长按首选里的拆词重选，两种入口不同时出现。 */
+/** 拖选改局部仅给 26 键全拼和双拼（白名单不变）。 */
 class SentenceDragEditEntryTest {
     private fun profile(scheme: InputScheme, layout: InputLayout) =
         InputProfile(InputLanguage.CHINESE, scheme, layout, EngineProfile.Rime("test"))

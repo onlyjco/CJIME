@@ -212,7 +212,7 @@ class FloatingCornerResizeTest {
         assertEquals(0, resized.size)
     }
 
-    @Test fun draggingALitCornerNotifiesDragStateAndResizesContentInRealTime() {
+    @Test fun draggingALitCornerNotifiesDragStateWithoutRemeasuringContentMidDrag() {
         val draggingStates = mutableListOf<Boolean>()
         val contentSizes = mutableListOf<Pair<Int, Int>>()
         rule.setContent {
@@ -245,7 +245,12 @@ class FloatingCornerResizeTest {
             .getUnclippedBoundsInRoot().let { it.right - it.left }
         assertTrue("corner drag notifies drag active: $draggingStates", true in draggingStates)
         assertTrue("corners grow mid-drag: $initialCornersWidth -> $midCornersWidth", midCornersWidth > initialCornersWidth)
-        assertTrue("content resizes live mid-drag: $contentSizes", contentSizes.size > initialSizes.size)
+        assertEquals("content must not remeasure mid-drag", initialSizes, contentSizes)
+
+        // 短时间停留（超过 100ms）后不松手也应重排一次以显示清晰按键状态。
+        advance(120)
+        assertTrue("content settles after short pause: $contentSizes", contentSizes.last().first > initialSizes.last().first)
+        assertEquals("resize not persisted before release", 0, resized.size)
 
         rule.onNodeWithTag("floating-corner-handle-top_left").performTouchInput { up() }
         advance(100)
