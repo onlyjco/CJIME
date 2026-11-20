@@ -945,6 +945,9 @@ fun KeyboardLayout(
                                 shadowShapeRadius = shadowShapeRadius,
                                 composingSplit = shiftComposingSplit,
                                 composingSplitLabel = if (shiftSplit) "分词" else SYLLABLE_SEPARATOR,
+                                splitRedundant = if (shiftSplit && candidateState != null) {
+                                    { candidateState.value.inputText.endsWith(SYLLABLE_SEPARATOR) }
+                                } else null,
                             )
                             }
                             }
@@ -1885,6 +1888,8 @@ internal fun ShiftCapsKeyButton(
     composingSplit: (() -> Boolean)? = null,
     /** 中文打拼音时写「分词」；英文等打单词时写 '（打的就是撇号）。 */
     composingSplitLabel: String = "分词",
+    /** 返回 true 时点「分词」不再送 '（拼音末尾已经是分词符，#464）。 */
+    splitRedundant: (() -> Boolean)? = null,
 ) {
     var isPressed by remember { mutableStateOf(false) }
     val density = LocalDensity.current
@@ -1893,6 +1898,7 @@ internal fun ShiftCapsKeyButton(
     // 在这里读「是否在打拼音」，变化时只重组 Shift 键。
     val splitLabel = composingSplit?.invoke() == true
     val currentSplit by rememberUpdatedState(composingSplit)
+    val currentSplitRedundant by rememberUpdatedState(splitRedundant)
     val suppressCursorMove = LocalSuppressCursorMove.current
     val currentPress by rememberUpdatedState(onKeyPressDown)
     val currentKey by rememberUpdatedState(onKeyPress)
@@ -1953,7 +1959,10 @@ internal fun ShiftCapsKeyButton(
                     currentPress?.invoke("shift")
                     // Typing consumed the previous one-shot Shift; it cannot start a double tap.
                     if (viewModel.shiftMode.value != ShiftMode.SINGLE) lastTap = Long.MIN_VALUE
-                    viewModel.beginShiftHold()
+                    // 键面已是「分词」（打拼音中）：这一按只管分词，不按住 Shift、不拖出大写，键盘不闪大写，
+                    // 也不会按住打出大写字母把拼音打断（#464）。
+                    val splitTap = currentSplit?.invoke() == true
+                    if (!splitTap) viewModel.beginShiftHold()
                     var released = false
                     var dragged = false
                     var upTime = down.uptimeMillis
@@ -1965,7 +1974,7 @@ internal fun ShiftCapsKeyButton(
                             val pointer = bounds.topLeft + change.position
                             dragged = dragged || !bounds.contains(pointer) ||
                                 (change.position - down.position).getDistance() > viewConfiguration.touchSlop
-                            val target = if (dragged) targets?.move(bounds, pointer) else null
+                            val target = if (dragged && !splitTap) targets?.move(bounds, pointer) else null
                             change.consume()
                             if (!change.pressed) {
                                 released = true
@@ -1983,7 +1992,12 @@ internal fun ShiftCapsKeyButton(
                         targets?.finish()
                         isPressed = false
                         suppressCursorMove.value = false
-                        if (released && !dragged && !used && upTime - down.uptimeMillis < 350L) {
+                        if (splitTap) {
+                            // 只有短按插入分词；长按、拖走无效果；末尾已经是分词符就不再连着加。
+                            if (released && !dragged && upTime - down.uptimeMillis < 350L &&
+                                currentSplitRedundant?.invoke() != true) currentKey(SYLLABLE_SEPARATOR)
+                            lastTap = Long.MIN_VALUE
+                        } else if (released && !dragged && !used && upTime - down.uptimeMillis < 350L) {
                             // 打拼音时点按插入分词；不算进双击，连点两下不会锁成大写。
                             if (currentSplit?.invoke() == true) {
                                 currentKey(SYLLABLE_SEPARATOR)
