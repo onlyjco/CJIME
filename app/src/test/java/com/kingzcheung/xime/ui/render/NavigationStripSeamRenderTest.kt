@@ -134,9 +134,9 @@ class NavigationStripSeamRenderTest {
         org.junit.Assert.assertEquals(Color(0xFF2D0800), nav("sunset_gradient", true))
         org.junit.Assert.assertEquals(Color(0xFFA4E6E0), nav("aurora_gradient", false))
         org.junit.Assert.assertEquals(Color(0xFF011B19), nav("aurora_gradient", true))
-        // iOS 斜向渐变浅色贴合左下角 #9DCCCC，深色取左下向中间过渡的 #1E2627
+        // iOS 斜向渐变取 123 键下方左下角青色（#9DCCCC / #1B2626）
         org.junit.Assert.assertEquals(Color(0xFF9DCCCC), nav("transparent_glass", false))
-        org.junit.Assert.assertEquals(Color(0xFF1F2626), nav("transparent_glass", true))
+        org.junit.Assert.assertEquals(Color(0xFF1B2626), nav("transparent_glass", true))
         // 大漠流金取下方偏深沙影色
         org.junit.Assert.assertEquals(Color(0xFFDCCEAC), nav("olivcelso_desert", false))
         org.junit.Assert.assertEquals(Color(0xFF3E3111), nav("olivcelso_desert", true))
