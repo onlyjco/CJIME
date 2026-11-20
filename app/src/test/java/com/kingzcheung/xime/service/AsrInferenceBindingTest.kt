@@ -48,15 +48,21 @@ class AsrInferenceBindingTest {
         val reconnect = async { client.ensureBound() }
         runCurrent()
         assertFalse(reconnect.isCompleted)
-        assertEquals(1, host.registered.size)
-        registration.onServiceConnected(name, Binder())
-        assertTrue(reconnect.await())
-        registration.onBindingDied(name)
+        // #336: a lost voice process is bound again on the next start instead of waiting for the system
+        // to restart it (MIUI may not, until the app comes to the foreground).
         assertEquals(listOf(registration), host.removed)
+        val fresh = host.registered.last()
+        assertNotSame(registration, fresh)
+        registration.onServiceConnected(name, Binder()) // the dropped binding's late callback is ignored
+        assertFalse(reconnect.isCompleted)
+        fresh.onServiceConnected(name, Binder())
+        assertTrue(reconnect.await())
+        fresh.onBindingDied(name)
+        assertEquals(listOf(registration, fresh), host.removed)
 
         val retry = async { client.ensureBound() }
         runCurrent()
-        registration.onServiceConnected(name, Binder())
+        fresh.onServiceConnected(name, Binder())
         assertFalse(retry.isCompleted)
         host.registered.last().onServiceConnected(name, Binder())
         assertTrue(retry.await())

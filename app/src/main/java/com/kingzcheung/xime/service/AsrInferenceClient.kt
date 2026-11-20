@@ -51,11 +51,14 @@ class AsrInferenceClient(context: Context) {
 
     private inner class Binding : ServiceConnection {
         var ready = CompletableDeferred<Boolean>()
+        /** 连上过又断了（语音进程被系统收回），正在等系统把它重新拉起来。 */
+        @Volatile var lost = false
 
         override fun onServiceConnected(name: ComponentName, binder: IBinder) {
             synchronized(this@AsrInferenceClient) {
                 if (binding !== this) return
                 service = IInferenceAsrService.Stub.asInterface(binder)
+                lost = false
                 ready.complete(true)
             }
         }
@@ -64,6 +67,7 @@ class AsrInferenceClient(context: Context) {
             synchronized(this@AsrInferenceClient) {
                 if (binding !== this) return
                 service = null
+                lost = true
                 // Android keeps this registration and reconnects it when the service returns.
                 if (ready.isCompleted) ready = CompletableDeferred()
             }
@@ -93,6 +97,12 @@ class AsrInferenceClient(context: Context) {
         if (service != null) return true
         val (attempt, ready) = withContext(Dispatchers.Main.immediate) {
             synchronized(this@AsrInferenceClient) {
+                // 语音进程被收回后，系统按原来的绑定把它拉起来；有的系统（#336 小米 K30 Pro，MIUI / Android 12）后台不让
+                // 拉，这次点麦克风就一直等不到，开一次设置页（应用到了前台）才连上。点麦克风时还在等就丢掉旧绑定、重新绑定。
+                binding?.takeIf { it.lost }?.let { stale ->
+                    FileLogger.w(TAG, "AsrInferenceService still gone after a disconnect: binding again")
+                    discard(stale)
+                }
                 val active = binding ?: Binding().also {
                     binding = it
                     try {
