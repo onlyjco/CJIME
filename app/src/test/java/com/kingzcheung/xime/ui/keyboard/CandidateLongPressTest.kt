@@ -13,7 +13,7 @@ import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.test.performTouchInput
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import com.kingzcheung.xime.service.SENTENCE_CODE_HIGHLIGHT_COLOR
-import com.kingzcheung.xime.service.sentenceCodeRangeHighlight
+import com.kingzcheung.xime.service.sentenceCodeHighlight
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
@@ -42,15 +42,28 @@ class CandidateLongPressTest {
 
     @get:Rule val rule = createAndroidComposeRule<androidx.activity.ComponentActivity>()
 
-    @Test fun sentenceCodeRangeHighlightUsesSingleSoftBackgroundSpan() {
-        val styled = sentenceCodeRangeHighlight("nihao", 2, 5)
-        val bgSpans = styled.getSpans(0, styled.length, BackgroundColorSpan::class.java)
-        val underlineSpans = styled.getSpans(0, styled.length, UnderlineSpan::class.java)
-        assertEquals(1, bgSpans.size)
-        assertEquals(SENTENCE_CODE_HIGHLIGHT_COLOR, bgSpans[0].backgroundColor)
-        assertEquals(2, styled.getSpanStart(bgSpans[0]))
-        assertEquals(5, styled.getSpanEnd(bgSpans[0]))
-        assertEquals(0, underlineSpans.size)
+    @Test fun sentenceCodeHighlightKeepsUniformCharacterSpansAndUnderline() {
+        val first = sentenceCodeHighlight("nihao", 0, 2)
+        val second = sentenceCodeHighlight("nihao", 2, 5)
+        for ((styled, from, to) in listOf(Triple(first, 0, 2), Triple(second, 2, 5))) {
+            val bgSpans = styled.getSpans(0, styled.length, BackgroundColorSpan::class.java)
+            val underlineSpans = styled.getSpans(0, styled.length, UnderlineSpan::class.java)
+            assertEquals(5, bgSpans.size)
+            assertEquals(1, underlineSpans.size)
+            assertEquals(0, styled.getSpanStart(underlineSpans[0]))
+            assertEquals(5, styled.getSpanEnd(underlineSpans[0]))
+            bgSpans.forEach { span ->
+                val start = styled.getSpanStart(span)
+                val end = styled.getSpanEnd(span)
+                assertEquals(1, end - start)
+                val expected = if (start < to && end > from) SENTENCE_CODE_HIGHLIGHT_COLOR else android.graphics.Color.TRANSPARENT
+                assertEquals(expected, span.backgroundColor)
+            }
+        }
+        assertEquals(
+            first.getSpans(0, first.length, BackgroundColorSpan::class.java).map { first.getSpanStart(it) to first.getSpanEnd(it) },
+            second.getSpans(0, second.length, BackgroundColorSpan::class.java).map { second.getSpanStart(it) to second.getSpanEnd(it) },
+        )
     }
 
     @Test fun regularCandidateDelaysPinPopupUntilExtendedLongPress() {

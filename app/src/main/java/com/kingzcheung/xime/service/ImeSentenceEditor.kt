@@ -6,16 +6,16 @@ import kotlinx.coroutines.withContext
 
 internal const val SENTENCE_CODE_HIGHLIGHT_COLOR = 0x663399ff
 
-/** Highlight only the selected slice with one contiguous span so character spacing stays intact. */
-internal fun sentenceCodeRangeHighlight(text: String, from: Int, to: Int): android.text.SpannableString =
+/** Use parcelable system spans and keep the same character boundaries for each selection. */
+internal fun sentenceCodeHighlight(text: String, from: Int, to: Int): android.text.SpannableString =
     android.text.SpannableString(text).apply {
-        if (from in 0 until to && to <= text.length) {
-            setSpan(
-                android.text.style.BackgroundColorSpan(SENTENCE_CODE_HIGHLIGHT_COLOR),
-                from,
-                to,
-                android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
-            )
+        setSpan(android.text.style.UnderlineSpan(), 0, text.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        var index = 0
+        while (index < text.length) {
+            val next = index + Character.charCount(text.codePointAt(index))
+            val color = if (index < to && next > from) SENTENCE_CODE_HIGHLIGHT_COLOR else android.graphics.Color.TRANSPARENT
+            setSpan(android.text.style.BackgroundColorSpan(color), index, next, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+            index = next
         }
     }
 
@@ -127,7 +127,7 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
         val shown = dragOwner?.let { it.displaySelection(text) }
         if (shown == range) { dragOwner = owner; return }
         if (dragOwner == null && runCatching { !ic.getSelectedText(0).isNullOrEmpty() }.getOrDefault(true)) return
-        val styled = sentenceCodeRangeHighlight(text, range.first, range.last + 1)
+        val styled = sentenceCodeHighlight(text, range.first, range.last + 1)
         ic.beginBatchEdit()
         try {
             if (ic.setComposingText(styled, 1)) {
@@ -182,7 +182,8 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
         }
         val caret = if (code.isNotEmpty()) start + shownCode.length else before.trimEnd(' ', '\'').length.coerceAtMost(text.length)
         if (code.isEmpty() && text == previewWritten && caret == previewCaret) return
-        val styled = if (code.isNotEmpty()) sentenceCodeRangeHighlight(text, start, start + shownCode.length) else text
+        val styled = if (code.isNotEmpty()) sentenceCodeHighlight(text, start, start + shownCode.length)
+            else if (text.isNotEmpty()) sentenceCodeHighlight(text, 0, 0) else text
         ic.beginBatchEdit()
         try {
             if (runCatching { ic.setComposingText(styled, 1) }.getOrDefault(false)) {
