@@ -674,6 +674,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         set(value) { keyboardReportsChinese = value }
     internal var currentEffectiveKeyboardHeight: Int = 0
     private var floatingCardBounds: android.graphics.Rect? = null
+    /** 悬浮键盘拖动或调大小期间暂缓每帧 requestLayout 与毛玻璃更新，松手后统一刷新。 */
+    private var floatingDragging = false
     /** 悬浮卡片外四角角标把手（亮着时）：露在卡片外的部分也要能按到。 */
     private var floatingCornerHandleBounds: List<android.graphics.Rect> = emptyList()
     private var fixedCardBounds: android.graphics.Rect? = null
@@ -3008,12 +3010,15 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                 // 语义与按键按下反馈完全一致（模式/时长/振幅走同一配置）
                                 onHapticFeedback = { feedbackManager.hapticFeedback(hapticView) },
                                 onCardPositioned = { left: Int, top: Int, right: Int, bottom: Int ->
-                                    // 毛玻璃窗口只能是直角矩形，盖不住转过的卡片；转着时不放玻璃。
-                                    keyboardGlassCard = if (state.isFloatingMode && com.kingzcheung.xime.ui.keyboard
-                                            .isFloatingRotated(state.floatingRotation)) null
-                                        else android.graphics.Rect(left, top, right, bottom)
-                                    keyboardGlassCardOrigin = glassAnchorOrigin()
-                                    updateKeyboardGlass()
+                                    if (!floatingDragging) {
+                                        // 毛玻璃窗口只能是直角矩形，盖不住转过的卡片；转着时不放玻璃。
+                                        // 拖动/调大小期间暂缓每帧重建模糊窗口，停稳/松手时统一刷新一次。
+                                        keyboardGlassCard = if (state.isFloatingMode && com.kingzcheung.xime.ui.keyboard
+                                                .isFloatingRotated(state.floatingRotation)) null
+                                            else android.graphics.Rect(left, top, right, bottom)
+                                        keyboardGlassCardOrigin = glassAnchorOrigin()
+                                        updateKeyboardGlass()
+                                    }
                                     if (!state.isFloatingMode) navigationStripCard.value = androidx.compose.ui.geometry.Rect(
                                         left.toFloat(), top.toFloat(), right.toFloat(), bottom.toFloat())
                                     val cardHeightPx = bottom - top
@@ -3032,7 +3037,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                         val bounds = android.graphics.Rect(left, top, right, bottom)
                                         if (floatingCardBounds != bounds) {
                                             floatingCardBounds = bounds
-                                            keyboardContainer.requestLayout()
+                                            if (!floatingDragging) keyboardContainer.requestLayout()
                                         }
                                     }
                                 },
@@ -3040,6 +3045,21 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                     if (floatingCornerHandleBounds != rects) {
                                         floatingCornerHandleBounds = rects
                                         if (::keyboardContainer.isInitialized) keyboardContainer.requestLayout()
+                                    }
+                                },
+                                onFloatingDragStateChange = { dragging ->
+                                    if (floatingDragging != dragging) {
+                                        floatingDragging = dragging
+                                        if (!dragging) {
+                                            floatingCardBounds?.let { b ->
+                                                keyboardGlassCard = if (uiState.value.isFloatingMode && com.kingzcheung.xime.ui.keyboard
+                                                        .isFloatingRotated(uiState.value.floatingRotation)) null
+                                                    else android.graphics.Rect(b)
+                                                keyboardGlassCardOrigin = glassAnchorOrigin()
+                                            }
+                                            updateKeyboardGlass()
+                                            if (::keyboardContainer.isInitialized) keyboardContainer.requestLayout()
+                                        }
                                     }
                                 },
                             )
@@ -3331,6 +3351,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
 
     /** 模式变化立即撤销旧卡片的高度/触摸区域，避免宿主缓存上一帧的浮动留白。 */
     internal fun refreshKeyboardGeometry() {
+        if (!uiState.value.isFloatingMode) floatingDragging = false
         floatingCardBounds = null
         fixedCardBounds = null
         clearHardwareSurfaceBounds()
@@ -4380,11 +4401,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                         val bgType = theme.keyboardBackground?.type
                         val glass = com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences.read(this, isDark).frostedGlass
                         val rounded = SettingsPreferences.roundedKeyboardBottom(this)
-                        val iosGradient = state.themeId == com.kingzcheung.xime.ui.theme.TransparentGlassTheme.ID
-                        val transparentNav = glass.enabled || rounded || bgType == "image" || (bgType == "gradient" && !iosGradient)
+                        val transparentNav = glass.enabled || rounded || bgType == "image" || bgType == "gradient"
                         win.setNavigationBarColor(if (transparentNav) android.graphics.Color.TRANSPARENT
-                            else (if (iosGradient) com.kingzcheung.xime.ui.theme.resolveKeyboardPalette(state.themeId, isDark).surface else bgColor)
-                                .copy(alpha = 1f).toArgb())
+                            else bgColor.copy(alpha = 1f).toArgb())
                     } else {
                         win.setNavigationBarColor(android.graphics.Color.TRANSPARENT)
                     }

@@ -1,6 +1,8 @@
 package com.kingzcheung.xime.ui.keyboard
 
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.MutableFloatState
+import androidx.compose.runtime.State
 import androidx.compose.ui.graphics.TransformOrigin
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.input.pointer.positionChanged
@@ -213,6 +215,10 @@ internal fun KeyboardResizeOverlay(
         val viewRect = viewRectOf(maxWidth.value * density.density, maxHeight.value * density.density)
         val previewState = LocalKeyboardResizePreviewState.current
         var dragRect by remember(floatingMode, maxWidth, maxHeight) { mutableStateOf<ResizeRect?>(null) }
+        var activelyDragging by remember { mutableStateOf(false) }
+        val currentOnDragActiveChange by rememberUpdatedState(previewState.onDragActiveChange)
+        LaunchedEffect(activelyDragging) { currentOnDragActiveChange(activelyDragging) }
+        DisposableEffect(Unit) { onDispose { currentOnDragActiveChange(false) } }
         // 调节界面里拖边、拖角、拖着移动时按屏幕最高刷新率跟手（用户 11-19）。
         HighRefreshWhile(dragRect != null)
         var dragEdge by remember { mutableStateOf(ResizeHandle.NONE) }
@@ -221,13 +227,14 @@ internal fun KeyboardResizeOverlay(
         val rotationState = previewState.rotation?.takeIf { floatingMode }
         val rotation = rotationState?.floatValue ?: 0f
         var gesturePivot by remember { mutableStateOf<Offset?>(null) }
-        val frame = dragRect ?: previewState.rect?.let { rotateRectCenter(it, gesturePivot, -rotation) } ?: viewRect
+        val livePreviewRect = previewState.rectState?.value ?: previewState.rect
+        val frame = dragRect ?: livePreviewRect?.let { rotateRectCenter(it, gesturePivot, -rotation) } ?: viewRect
         val frameSpanDp = (minOf(frame.width, frame.height * 1.5f) / density.density).roundToInt()
         val frameStyle = remember(frameSpanDp) { resizeFrameStyle(frameSpanDp) }
         val dragAreaHeightDp = floatingDragAreaHeightDp(previewState.bottomPaddingDp,
             previewState.floatingBottomClearanceDp, frame.height / density.density, footerDp)
         val dragAreaHeightPx = dragAreaHeightDp * density.density
-        val currentPreviewRect by rememberUpdatedState(previewState.rect?.let { rotateRectCenter(it, gesturePivot, -rotation) })
+        val currentPreviewRect by rememberUpdatedState(livePreviewRect?.let { rotateRectCenter(it, gesturePivot, -rotation) })
         val currentInitialPreviewRect by rememberUpdatedState(previewState.initialRect)
         val currentPreviewRectSink by rememberUpdatedState(previewState.onRectChange)
         val currentOnPreviewRectChange: (ResizeRect) -> Unit = { rect ->
@@ -270,19 +277,20 @@ internal fun KeyboardResizeOverlay(
         // 把两条边中间一段（系统每边最多认 200dp）从系统手势里排除；分体时外侧边不可拖，不排除。
         val edgeExclusionHitPx = RESIZE_EDGE_HIT_DP * density.density
         val edgeExclusionHalfPx = minOf(frame.height, RESIZE_EDGE_GESTURE_EXCLUSION_DP * density.density) / 2f
-        androidx.compose.runtime.DisposableEffect(hostView, frame, overlayOrigin, splitActive, editingOpacity) {
-            if (AndroidPlatform.gestureExclusion) {
-                val viewInWindow = IntArray(2).also { hostView.getLocationInWindow(it) }
-                val dx = overlayOrigin.x - viewInWindow[0]
-                val dy = overlayOrigin.y - viewInWindow[1]
-                hostView.systemGestureExclusionRects = if (splitActive || editingOpacity) emptyList() else
-                    listOf(frame.left, frame.right).map { x ->
-                        android.graphics.Rect((x - edgeExclusionHitPx + dx).roundToInt(),
-                            (frame.centerY - edgeExclusionHalfPx + dy).roundToInt(),
-                            (x + edgeExclusionHitPx + dx).roundToInt(),
-                            (frame.centerY + edgeExclusionHalfPx + dy).roundToInt())
-                    }
-            }
+        LaunchedEffect(hostView, frame, overlayOrigin, splitActive, editingOpacity, activelyDragging) {
+            if (!AndroidPlatform.gestureExclusion || activelyDragging) return@LaunchedEffect
+            val viewInWindow = IntArray(2).also { hostView.getLocationInWindow(it) }
+            val dx = overlayOrigin.x - viewInWindow[0]
+            val dy = overlayOrigin.y - viewInWindow[1]
+            hostView.systemGestureExclusionRects = if (splitActive || editingOpacity) emptyList() else
+                listOf(frame.left, frame.right).map { x ->
+                    android.graphics.Rect((x - edgeExclusionHitPx + dx).roundToInt(),
+                        (frame.centerY - edgeExclusionHalfPx + dy).roundToInt(),
+                        (x + edgeExclusionHitPx + dx).roundToInt(),
+                        (frame.centerY + edgeExclusionHalfPx + dy).roundToInt())
+                }
+        }
+        androidx.compose.runtime.DisposableEffect(hostView) {
             onDispose {
                 if (AndroidPlatform.gestureExclusion)
                     hostView.systemGestureExclusionRects = emptyList()
@@ -413,7 +421,7 @@ internal fun KeyboardResizeOverlay(
                 clipPath(hole, ClipOp.Difference) { drawRect(Color.Black.copy(alpha = 0.44f)) }
             })
         fun confirmResize() {
-            val finalRect = currentPreviewRect ?: previewState.rect
+            val finalRect = currentPreviewRect ?: previewState.rectState?.value ?: previewState.rect
             if (floatingMode && finalRect != null) {
                 val geometry = finalRect.toGeometry(
                     viewWidthPx = viewRect.width,
@@ -788,11 +796,13 @@ internal fun KeyboardResizeOverlay(
                         try {
                             val start = awaitTouchSlopOrCancellation(down.id) { change, over ->
                                 change.consume()
+                                if (!activelyDragging) activelyDragging = true
                                 lastChange = change
                                 applyDelta(over)
                             }
                             if (start != null) {
                                 released = drag(start.id) { change ->
+                                    if (!activelyDragging) activelyDragging = true
                                     lastChange = change
                                     applyDelta(change.positionChange())
                                     change.consume()
@@ -805,6 +815,7 @@ internal fun KeyboardResizeOverlay(
                             dragRect = null
                             gesturePivot = null
                             dragEdge = ResizeHandle.NONE
+                            activelyDragging = false
                             if (didDrag) currentPreviewState.onDragEnd()
                             if (float) switchFloating(true)
                             if (dock) switchFloating(false)
@@ -1194,6 +1205,7 @@ internal fun KeyboardResizeOverlay(
         val floatingMoveGesture = Modifier.pointerInput(floatingMode) {
             detectDragGestures(
                 onDragStart = {
+                    activelyDragging = true
                     val base = dragRect ?: currentPreviewRect
                     gesturePivot = base?.takeIf { isFloatingRotated(rotationState?.floatValue ?: 0f) }
                         ?.let { Offset(it.centerX, it.centerY) }
@@ -1203,6 +1215,7 @@ internal fun KeyboardResizeOverlay(
                     val dock = dockGesture.progress >= 1f && morphTarget != null
                     endMorph()
                     dragRect = null
+                    activelyDragging = false
                     currentPreviewState.onDragEnd()
                     currentOnPositionDragEnd?.invoke()
                     if (dock) switchFloating(false)
@@ -1211,6 +1224,7 @@ internal fun KeyboardResizeOverlay(
                     gesturePivot = null
                     endMorph()
                     dragRect = null
+                    activelyDragging = false
                     currentPreviewState.onDragEnd()
                     currentOnPositionDragEnd?.invoke()
                 },
@@ -1318,7 +1332,7 @@ internal fun KeyboardResizeOverlay(
         }
         }
         if (!editingOpacity && !adjustingOpacity && floatingMode) {
-            val card = previewState.rect ?: frame
+            val card = previewState.rectState?.value ?: previewState.rect ?: frame
             val bottomInset = viewRect.bottom - (previewState.bounds ?: viewRect).bottom
             val viewport = floatingControlViewport(viewRect.width, viewRect.height, overlayOrigin, bottomInset)
             val handle = rotationState?.let { floatingRotateHandleRect(card, rotation, viewport, density.density) }
@@ -1382,7 +1396,7 @@ private fun RotateHandle(
                     val down = awaitFirstDown(requireUnconsumed = false)
                     val handle = coords?.takeIf { it.isAttached } ?: return@awaitEachGesture
                     down.consume()
-                    val start = currentPreview.rect ?: currentFrame
+                    val start = currentPreview.rectState?.value ?: currentPreview.rect ?: currentFrame
                     val view = currentView
                     val d = density.density
                     val bottomInsetDp = (view.height - (currentPreview.bounds ?: view).bottom).coerceAtLeast(0f) / d
@@ -1445,8 +1459,10 @@ internal data class KeyboardResizePreviewState(
     val aspectLimits: KeyboardAspectLimits = KeyboardAspectLimits.Letters,
     val squareSnap: KeyboardSquareSnap? = null,
     val rect: ResizeRect? = null,
+    val rectState: State<ResizeRect>? = null,
     val initialRect: ResizeRect? = null,
     val onRectChange: (ResizeRect) -> Unit = {},
+    val onDragActiveChange: (Boolean) -> Unit = {},
     val bounds: ResizeRect? = null,
     val fixedHeightRange: IntRange? = null,
     val fixedBottomInsetDp: Int = 0,
