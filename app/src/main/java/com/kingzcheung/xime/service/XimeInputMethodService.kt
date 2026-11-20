@@ -1,5 +1,6 @@
 package com.kingzcheung.xime.service
 
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.combine
 
 import androidx.compose.runtime.LaunchedEffect
@@ -1212,6 +1213,17 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         serviceScope.launch {
             SchemaManager.enabledSchemasChanged.collect {
                 if (inputReadiness.ticket() != null) sessionController.updateSchemaName()
+            }
+        }
+        // 设置页给正在用的语言换了方案或布局：键盘开着就马上换（用户 11-20）。刚启用的方案要先部署，
+        // 部署时键盘没准备好，等好了再换，最多等 60 秒；键盘收着不换，下次弹出读存好的当前方案。
+        serviceScope.launch {
+            com.kingzcheung.xime.settings.ImeSchemaRequests.picked.collectLatest { id ->
+                kotlinx.coroutines.withTimeoutOrNull(60_000L) {
+                    while (inputReadiness.ticket() == null) kotlinx.coroutines.delay(200L)
+                } ?: return@collectLatest
+                if (isInputViewShown && com.kingzcheung.xime.settings.ImeSchemaRequests.needsSwitch(id, uiState.value.currentSchemaId, uiState.value.isAsciiMode))
+                    schemaController.switchSchema(id, stayInHandwriting = false, quiet = true)
             }
         }
         initRimeEngine()

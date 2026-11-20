@@ -2170,7 +2170,8 @@ settings-fold:语言键切换方式	=
 已关闭，已下载词库保留	Off; downloaded dictionaries are kept
 已保存：{0} · {1}，下次切换到该语言时使用	Saved: {0} · {1}, used next time you switch to this language
 已保存：{0} · {1}，	Saved: {0} · {1}, 
-键盘下次弹出时使用	used the next time the keyboard opens
+键盘跟着换	the keyboard switches too
+好了键盘自动换上	the keyboard switches once it's ready
 下次切换到该语言时使用	used next time you switch to this language
 已打开并选好：{0} · {1}，正在部署，几秒后好；	Turned on and selected: {0} · {1}; deploying, ready in a few seconds;
 导入方案的语言	Language of imported schemes

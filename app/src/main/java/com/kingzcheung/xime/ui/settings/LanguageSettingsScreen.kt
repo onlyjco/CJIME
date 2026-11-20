@@ -131,7 +131,7 @@ fun LanguageSettingsContent(onOpenSchemaResources: () -> Unit = {}, onOpenDouble
                             onManage = onOpenSchemaResources) { entry ->
                             InputModes.selectProfile(context, entry)
                             remembered = remembered + (language to entry.schemaId)
-                            // 正在用的语言：同时改当前方案，键盘下次弹出就换（收起时在这里改了布局也算数）。
+                            // 正在用的语言：同时改当前方案，开着的键盘马上换过去（用户 11-20）；键盘收着时下次弹出就是新的。
                             val current = SettingsPreferences.getCurrentSchema(context)
                             val active = current.isNotBlank() && !com.kingzcheung.xime.ui.keyboard.isHandwritingSchema(current) &&
                                 InputModes.languageOf(current, availableProfiles) == language
@@ -139,9 +139,12 @@ fun LanguageSettingsContent(onOpenSchemaResources: () -> Unit = {}, onOpenDouble
                                 // 英文直接输入不是 Rime 方案，不启用、不部署、不写成当前方案；切到英文时按这里的选择开 ascii。
                                 message = "已保存：${language.displayName} · ${entry.selectionLabel}，下次切换到该语言时使用"
                             } else {
-                                if (active) SettingsPreferences.setCurrentSchema(context, entry.schemaId, language)
+                                if (active) {
+                                    SettingsPreferences.setCurrentSchema(context, entry.schemaId, language)
+                                    ImeSchemaRequests.pick(entry.schemaId)
+                                }
                                 message = "已保存：${language.displayName} · ${entry.selectionLabel}，" +
-                                    if (active) "键盘下次弹出时使用" else "下次切换到该语言时使用"
+                                    if (active) "键盘跟着换" else "下次切换到该语言时使用"
                             }
                         }
                         // 西班牙、德、法、俄语的补全词表在商店里，开启时自动下载；没下好时在这里说一声。
