@@ -2424,7 +2424,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                             // 无需 +1dp hack 强制造型变化。
                             handwritingNormalInsetDp = keyboardHeight + state.keyboardBottomPaddingDp + activeBottomDp
                             handwritingOverlayActive = handwritingExpanded
-                            if (!frostedGlass.enabled && (state.isFloatingMode || state.showKeyboardResize || state.isCompact)) {
+                            if (state.isFloatingMode || state.showKeyboardResize || state.isCompact) {
                                 keyboardContainer.updateMatchParentHeight()
                             } else {
                                 keyboardContainer.updateHeight(totalDp)
@@ -4445,10 +4445,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                     if (AndroidPlatform.navBarColorIgnored) {
                         // Android 15 起（targetSdk 35）这个颜色系统不再画，导航区照旧由 Compose 画；只是把底色报出去，
                         // 小米「输入法全面屏优化」用它给键盘下面那条系统抬高栏上色。
-                        // 渐变皮肤取底边衔接色，大漠流金取底部偏深沙影色；玻璃与底部圆角及其他图片保持透明。
-                        val glass = com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences.read(this, isDark).frostedGlass
+                        // 无论是否开启玻璃特效，渐变皮肤取底边衔接色、大漠流金取底部偏深沙影色；底部圆角及其他图片保持透明。
                         val rounded = SettingsPreferences.roundedKeyboardBottom(this)
-                        val navSurface = if (glass.enabled || rounded) null
+                        val navSurface = if (rounded) null
                             else com.kingzcheung.xime.ui.theme.resolveNavigationBarSurfaceColor(
                                 state.themeId, theme.keyboardBackground, isDark, bgColor)
                         win.setNavigationBarColor(navSurface?.copy(alpha = 1f)?.toArgb() ?: android.graphics.Color.TRANSPARENT)
