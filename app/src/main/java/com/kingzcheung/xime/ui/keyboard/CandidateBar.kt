@@ -525,8 +525,10 @@ fun CandidateBar(
     ) {
         val preeditBubbleShown = showPreedit && !previewPrefs.preeditInsideKeyboard
         PreeditBubbleHost(preeditBubbleShown) { hidden ->
+            val preeditBubbleSurface = visuals.preeditBackgroundColor
+                .takeUnless { it == Color.Unspecified || it.alpha == 0f } ?: themeSurface
             PreeditPreview(preeditText, protectedVisuals, onEditPreedit,
-                floatingPreeditColor(themeSurface, visuals.preeditBackgroundColor), hidden,
+                floatingPreeditColor(preeditBubbleSurface, visuals.preeditBackgroundColor), hidden,
                 onBubbleTopInWindow = { top -> preeditBubbleTopInWindow = top })
         }
         val avoidTopInWindow = when {
