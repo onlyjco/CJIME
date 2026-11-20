@@ -107,7 +107,6 @@ internal fun rememberImeKeyboardCallbacks(
             onOpenSentenceEdit = sentenceEditor::open,
             onSentenceCandidates = sentenceEditor::candidates,
             onApplySentenceEdit = sentenceEditor::apply,
-            onClearAfterSentenceEdit = sentenceEditor::clearAfterEdit,
             onSentencePreview = sentenceEditor::preview,
             onSentenceDragPreview = sentenceEditor::dragPreview,
             onEndSentencePreview = sentenceEditor::endPreview,

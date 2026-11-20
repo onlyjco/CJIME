@@ -947,23 +947,11 @@ fun KeyboardView(
                     owner == null -> false
                     sentenceApplying -> true
                     key == "space" || key == "enter" -> { applySentenceEdit(false); true }
-                    // 局部修改已全部删空后，上滑清空先把局部删除写进引擎再清空剩余编码，使撤回恢复局部删除后的编码。
+                    // 局部修改已全部删空后，上滑删除退出局部修改并交给引擎清空全部编码。
                     key == "clear_all" && sentenceCode.isEmpty() && sentenceConfirmed.isEmpty() -> {
+                        closeSentenceEdit()
                         if (!callbacks.isDeleteDragging()) viewModel.setCandidatePageExpanded(false)
-                        val clearAfter = callbacks.onClearAfterSentenceEdit
-                        if (clearAfter != null) {
-                            sentenceApplying = true
-                            clearAfter(owner) {
-                                if (sentenceEdit === owner) {
-                                    sentenceApplying = false
-                                    closeSentenceEdit()
-                                }
-                            }
-                            true
-                        } else {
-                            closeSentenceEdit()
-                            false
-                        }
+                        false
                     }
                     key == "clear_all" || key == "clear_composition" -> {
                         sentenceCode = ""
