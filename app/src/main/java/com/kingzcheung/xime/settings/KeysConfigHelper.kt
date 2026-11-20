@@ -669,11 +669,13 @@ object KeysConfigHelper {
     private var _sectionButtonLayouts: Map<String, ButtonLayout> = emptyMap()
     private var _customSectionButtonLayouts: Map<String, ButtonLayout> = emptyMap()
     private var _pkgSchemaButtonLayouts: Map<String, ButtonLayout> = emptyMap()
+    private var _pkgSchemaGestures: Map<String, Map<String, KeyGestureConfig>> = emptyMap()
     fun getButtonLayout(isAsciiMode: Boolean, schemaId: String = _activeSchemaId): ButtonLayout {
         if (isAsciiMode) return _buttonLayoutEn
-        val section = mergedSectionForSchema(schemaId)
+        val targetSchema = schemaId.ifEmpty { _activeSchemaId }
+        val section = mergedSectionForSchema(targetSchema)
         section?.let { _customSectionButtonLayouts[it] }?.let { return it }
-        _pkgSchemaButtonLayouts[schemaId]?.let { return it }
+        _pkgSchemaButtonLayouts[targetSchema]?.let { return it }
         return section?.let { _sectionButtonLayouts[it] } ?: _buttonLayoutZh
     }
 
@@ -696,6 +698,7 @@ object KeysConfigHelper {
 
     // 标准 26 键的基线缓存（合并键布局切换退出时恢复）
     private var _zhRowsBase: List<List<String>> = DEFAULT_ZH_ROWS
+    private var _keyGestureConfigZhDefault: Map<String, KeyGestureConfig> = emptyMap()
     private var _keyGestureConfigZhBase: Map<String, KeyGestureConfig> = emptyMap()
 
     // 合并键布局缓存：section（qwerty_14/17/18 及 custom 新增）→ 行布局 / 手势配置
@@ -798,6 +801,7 @@ object KeysConfigHelper {
         if (schemaId == _appliedLayoutSchemaId && section == _activeMergedSection) return
         _appliedLayoutSchemaId = schemaId
         _activeMergedSection = section
+        val pkgGestures = _pkgSchemaGestures[schemaId].orEmpty()
         // 自建布局的拼音方案，或双拼在自建合并键布局上的版本：按那个布局的键和手势。
         val custom = CustomKeyboardLayouts.forSchema(schemaId)
         _zhRows = getKeyRows(schemaId, false)
@@ -806,12 +810,15 @@ object KeysConfigHelper {
         } else if (section != null) {
             // Japanese romaji types on the arrangement chosen for Japanese; its own section keeps the swipes.
             val arranged = letterLayout(schemaId, false)
-            val gestures = _mergedGestureConfigs[section] ?: emptyMap()
+            val sectionGestures = _mergedGestureConfigs[section] ?: emptyMap()
+            val gestures = if (pkgGestures.isEmpty()) sectionGestures else pkgGestures + sectionGestures
             _keyGestureConfig.value = arranged?.gestures(gestures) ?: gestures
         } else {
             // Double pinyin and code tables type on the arrangement chosen for them (QWJRTK, Colemak, the user's own …); pinyin has none.
             val arranged = letterLayout(schemaId, false)
-            _keyGestureConfig.value = arranged?.gestures(_keyGestureConfigZhBase) ?: _keyGestureConfigZhBase
+            val baseGestures = if (pkgGestures.isEmpty()) _keyGestureConfigZhBase
+                else _keyGestureConfigZhDefault + pkgGestures + symbolCustomZh
+            _keyGestureConfig.value = arranged?.gestures(baseGestures) ?: baseGestures
         }
     }
 
@@ -986,6 +993,8 @@ object KeysConfigHelper {
                 .associate { it.id to CustomLayoutSymbols.load(context, it) }
             // 键盘手势（从原始 YAML 手动解析）
             val parsed = parseKeyboardFromAssets(context)
+            _keyGestureConfigZhDefault = readAssetText(context, XIME_CONFIG_FILE)
+                ?.let { parseKeyboardYamlSection(it, "qwerty") } ?: emptyMap()
             _keyGestureConfigZhBase = parsed?.first ?: emptyMap()
             _keyGestureConfigEnBase = parsed?.second ?: emptyMap()
             // 键盘颜色（从原始 YAML 手动解析）
@@ -1010,7 +1019,8 @@ object KeysConfigHelper {
             _zhRowsBase = parsedRows.first
             _enRowsBase = parsedRows.second
             applyEnglishLetterLayout()
-            val pkgTexts = readPackageConfigTexts(context)
+            val pkgEntries = readPackageConfigs(context)
+            val pkgTexts = pkgEntries.map { it.text }
             // 合并键绑定（keyboard.<section>.schemas，包隔离配置仅允许绑定自定义 section，全局 xime.custom.yaml 最高优）
             val builtInBindings = readAssetText(context, XIME_CONFIG_FILE)
                 ?.let { parseSchemaBindingsYamlText(it) } ?: emptyMap()
@@ -1040,7 +1050,8 @@ object KeysConfigHelper {
             val parsedSectionLayouts = parseSectionButtonLayouts(context, mergedRowsMap.keys)
             _sectionButtonLayouts = parsedSectionLayouts.first
             _customSectionButtonLayouts = parsedSectionLayouts.second
-            _pkgSchemaButtonLayouts = parsePackageSchemaButtonLayouts(pkgTexts)
+            _pkgSchemaButtonLayouts = parsePackageButtonLayouts(pkgEntries)
+            _pkgSchemaGestures = parsePackageSchemaGestures(pkgEntries)
             // 九键/笔画手势（keyboard.t9.keys / keyboard.stroke.keys，custom 键级覆盖）
             _t9GestureConfigs = parseGesturesSection(context, "t9")
             _strokeGestureConfigs = parseGesturesSection(context, "stroke")
@@ -1513,20 +1524,44 @@ object KeysConfigHelper {
         return effective to customOverrides
     }
 
+    internal data class PackageConfigEntry(val text: String, val schemaIds: Set<String> = emptySet())
+
     /**
      * 解析导入包隔离配置中各绑定方案的独立 button_layout：
      * 优先读取包内对应 section 的 button_layout，若仅在包内 qwerty 节声明则作为该包方案的兜底，
-     * 仅对导入包自身绑定的方案生效，不影响内置 26/14/17/18 键布局。
+     * 仅对导入包自身绑定的方案（或该包清单安装的主方案）生效，不影响内置 26/14/17/18 键布局。
      */
-    internal fun parsePackageSchemaButtonLayouts(pkgTexts: List<String>): Map<String, ButtonLayout> {
+    internal fun parsePackageSchemaButtonLayouts(pkgTexts: List<String>): Map<String, ButtonLayout> =
+        parsePackageButtonLayouts(pkgTexts.map { PackageConfigEntry(it) })
+
+    private fun parsePackageButtonLayouts(entries: List<PackageConfigEntry>): Map<String, ButtonLayout> {
         val result = mutableMapOf<String, ButtonLayout>()
-        for (text in pkgTexts) {
-            val bindings = parseSchemaBindingsYamlText(text)
-            val pkgQwertyLayout = parseButtonLayoutYamlText(text, "qwerty")
-            for ((schemaId, section) in bindings) {
+        for (entry in entries) {
+            val bindings = parseSchemaBindingsYamlText(entry.text)
+            val pkgQwertyLayout = parseButtonLayoutYamlText(entry.text, "qwerty")
+            for (schemaId in (bindings.keys + entry.schemaIds).distinct()) {
+                val section = bindings[schemaId]
                 if (section in CODE_LAYOUT_SECTIONS) continue
-                val layout = parseButtonLayoutYamlText(text, section) ?: pkgQwertyLayout ?: continue
+                val layout = section?.let { parseButtonLayoutYamlText(entry.text, it) } ?: pkgQwertyLayout ?: continue
                 result[schemaId] = layout
+            }
+        }
+        return result
+    }
+
+    /** 解析导入包隔离配置中各方案的专属按键手势（如 26 键/单字母布局下的 swipe_down 助记），不污染全局。 */
+    private fun parsePackageSchemaGestures(entries: List<PackageConfigEntry>): Map<String, Map<String, KeyGestureConfig>> {
+        val result = mutableMapOf<String, Map<String, KeyGestureConfig>>()
+        for (entry in entries) {
+            val bindings = parseSchemaBindingsYamlText(entry.text)
+            val pkgQwertyKeys = parseKeyboardYamlSection(entry.text, "qwerty").orEmpty()
+            for (schemaId in (bindings.keys + entry.schemaIds).distinct()) {
+                val section = bindings[schemaId]
+                if (section in CODE_LAYOUT_SECTIONS) continue
+                val sectionKeys = section?.takeIf { it != "qwerty" }
+                    ?.let { parseKeyboardYamlSection(entry.text, it) }.orEmpty()
+                val combined = pkgQwertyKeys + sectionKeys
+                if (combined.isNotEmpty()) result[schemaId] = combined
             }
         }
         return result
@@ -1585,10 +1620,15 @@ object KeysConfigHelper {
      * shift_key: { enabled: true/false, weight: 份，0.2～5 }（也可直接写 shift_key: false）。
      * 超范围的夹到范围内，写错的项当没写。
      */
+    private fun keyboardSectionNode(yamlText: String): YamlMap? {
+        val root = keyboardYamlNode(yamlText) as? YamlMap ?: return null
+        return root.opt<YamlMap>("keyboard")
+            ?: root.opt<YamlMap>("patch")?.opt<YamlMap>("keyboard")
+    }
+
     internal fun parseLetterGeometryYamlText(yamlText: String, section: String): LetterGeometryOverride? {
         return try {
-            val root = keyboardYamlNode(yamlText) as? YamlMap ?: return null
-            val sectionNode = root.opt<YamlMap>("keyboard")?.opt<YamlMap>(section) ?: return null
+            val sectionNode = keyboardSectionNode(yamlText)?.opt<YamlMap>(section) ?: return null
             val node = sectionNode.opt<YamlMap>("geometry") ?: return null
             fun number(map: YamlMap, key: String): Float? =
                 map.opt<YamlScalar>(key)?.content?.trim()?.toFloatOrNull()?.takeIf { it.isFinite() }
@@ -1628,8 +1668,7 @@ object KeysConfigHelper {
      */
     internal fun parseSchemaBindingsYamlText(yamlText: String): Map<String, String> {
         return try {
-            val root = keyboardYamlNode(yamlText) as? YamlMap ?: return emptyMap()
-            val keyboardNode = root.opt<YamlMap>("keyboard") ?: return emptyMap()
+            val keyboardNode = keyboardSectionNode(yamlText) ?: return emptyMap()
             val bindings = mutableMapOf<String, String>()
             for ((kNode, vNode) in keyboardNode.entries) {
                 val section = (kNode as? YamlScalar)?.content ?: continue
@@ -1653,8 +1692,7 @@ object KeysConfigHelper {
      */
     internal fun parseKeyboardLayoutYamlText(yamlText: String, section: String): List<List<String>>? {
         return try {
-            val root = keyboardYamlNode(yamlText) as? YamlMap ?: return null
-            val keyboardNode = root.opt<YamlMap>("keyboard") ?: return null
+            val keyboardNode = keyboardSectionNode(yamlText) ?: return null
             val sectionNode = keyboardNode.opt<YamlMap>(section) ?: return null
             val layoutNode = sectionNode.opt<YamlMap>("layout") ?: return null
             val rowsNode = layoutNode.opt<YamlList>("rows") ?: return null
@@ -1732,8 +1770,7 @@ object KeysConfigHelper {
     /** 从 YAML 文本中提取 keyboard.<section>.button_layout。 */
     private fun parseButtonLayoutYamlText(yamlText: String, section: String): ButtonLayout? {
         return try {
-            val root = keyboardYamlNode(yamlText) as? YamlMap ?: return null
-            val keyboardNode = root.opt<YamlMap>("keyboard") ?: return null
+            val keyboardNode = keyboardSectionNode(yamlText) ?: return null
             val sectionNode = keyboardNode.opt<YamlMap>(section) ?: return null
             val layoutNode = sectionNode.opt<YamlScalar>("button_layout") ?: return null
             ButtonLayout.fromValue(layoutNode.content)
@@ -1746,8 +1783,7 @@ object KeysConfigHelper {
     /** 从 YAML 文本中提取 keyboard.<section>.keys 段。 */
     internal fun parseKeyboardYamlSection(yamlText: String, section: String): Map<String, KeyGestureConfig>? {
         return try {
-            val root = keyboardYamlNode(yamlText) as? YamlMap ?: return null
-            val keyboardNode = root.opt<YamlMap>("keyboard") ?: return null
+            val keyboardNode = keyboardSectionNode(yamlText) ?: return null
             val sectionNode = keyboardNode.opt<YamlMap>(section) ?: return null
             val keysNode = sectionNode.opt<YamlMap>("keys") ?: return null
             val result = mutableMapOf<String, KeyGestureConfig>()
@@ -1902,17 +1938,38 @@ object KeysConfigHelper {
         readUserDataText(context, XIME_CUSTOM_CONFIG_FILE)
             ?: readAssetText(context, XIME_CUSTOM_CONFIG_FILE)
 
-    /** 读取各导入方案包隔离的键盘配置文件（仅用于解析自定义键盘 section，不污染全局设置）。 */
-    private fun readPackageConfigTexts(context: Context): List<String> {
+    /** 读取各导入方案包隔离的键盘配置文件及其清单绑定方案，不污染全局设置。 */
+    private fun readPackageConfigs(context: Context): List<PackageConfigEntry> {
         val dir = File(context.filesDir, "rime/${SchemaManifestManager.PACKAGE_XIME_DIR}")
         if (!dir.isDirectory) return emptyList()
         return dir.listFiles { file -> file.isFile && file.name.endsWith(".yaml") }
             ?.sortedBy { it.name }
             ?.mapNotNull { file ->
-                runCatching { file.readText().trimStart('\uFEFF') }
-                    .onFailure { Log.w(TAG, "readPackageConfigTexts: failed for ${file.name}", it) }
+                runCatching {
+                    val text = file.readText().trimStart('\uFEFF')
+                    val schemaIds = readPackageManifestSchemaIds(context, file.nameWithoutExtension)
+                    PackageConfigEntry(text = text, schemaIds = schemaIds)
+                }
+                    .onFailure { Log.w(TAG, "readPackageConfigs: failed for ${file.name}", it) }
                     .getOrNull()
             } ?: emptyList()
+    }
+
+    private fun readPackageManifestSchemaIds(context: Context, packageId: String): Set<String> {
+        val manifestFile = SchemaManifestManager.getManifestFile(context, packageId)
+        if (!manifestFile.isFile) return emptySet()
+        return runCatching {
+            val files = org.json.JSONObject(manifestFile.readText()).optJSONObject("files") ?: return@runCatching emptySet()
+            buildSet {
+                val keys = files.keys()
+                while (keys.hasNext()) {
+                    val name = keys.next()
+                    if ('/' !in name && '\\' !in name && name.endsWith(".schema.yaml")) {
+                        add(name.removeSuffix(".schema.yaml"))
+                    }
+                }
+            }
+        }.getOrDefault(emptySet())
     }
 
     fun loadXimeIndexConfig(context: Context): XimeIndexConfig {
@@ -2079,9 +2136,12 @@ object KeysConfigHelper {
                     return config[normalized]?.copy(swipeUp = null, swipeDown = null)
                 val owner = custom?.positionLetter(normalized) ?: cornerCellOwner(normalized, letters, isAsciiMode) ?: normalized
                 val variant = cornerVariant
+                val globalCustom = (if (english) symbolCustomEn else symbolCustomZh)[owner]
+                val pkgCustom = if (!english) _pkgSchemaGestures[_activeSchemaId]?.let { it[normalized] ?: it[owner] } else null
+                val effectiveCustom = mergeKeyGestureFallback(globalCustom, pkgCustom)
                 QwertySwipeSymbols.apply(owner, config[normalized],
                     (if (english) symbolOverridesEn else symbolOverridesZh)[variant].orEmpty(),
-                    (if (english) symbolCustomEn else symbolCustomZh)[owner], english, variant = variant,
+                    effectiveCustom, english, variant = variant,
                     follows = if (english) emptySet() else symbolFollowsZh[variant].orEmpty(), fullWidth = cornerFullWidth)
             }
             // 合并键（14/17/18 键、自建双字母布局）：按键的读顺序用同一张表（MergedKeySymbols），14 键可在设置页改。
@@ -2118,6 +2178,17 @@ object KeysConfigHelper {
             // 合并键 ID（如 "qw"）无手势配置时回退为代表字母（组内第一个字母）
             ?: key.takeIf { it.length > 1 }?.first()?.toString()
             ?: key
+    }
+
+    private fun mergeKeyGestureFallback(primary: KeyGestureConfig?, fallback: KeyGestureConfig?): KeyGestureConfig? = when {
+        primary == null -> fallback
+        fallback == null -> primary
+        else -> KeyGestureConfig(
+            tap = primary.tap ?: fallback.tap,
+            swipeUp = primary.swipeUp ?: fallback.swipeUp,
+            swipeDown = primary.swipeDown ?: fallback.swipeDown,
+            longPress = primary.longPress ?: fallback.longPress,
+        )
     }
 
     /** 获取某个按键指定手势的显示标签。 */

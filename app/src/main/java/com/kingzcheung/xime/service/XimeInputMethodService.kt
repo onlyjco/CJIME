@@ -1030,7 +1030,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 uiState.value = uiState.value.copy(hardwareOptions = com.kingzcheung.xime.settings.HardwareKeyboardPreferences.read(this))
             }
             // 底部留白、调低按横竖屏分开存（键名带方向后缀），哪个方向的改了都重新量。
-            if (key == SettingsPreferences.KEY_EDGE_TO_EDGE_KEYBOARD || SettingsPreferences.isBottomCalibrationKey(key)) {
+            if (key == SettingsPreferences.KEY_EDGE_TO_EDGE_KEYBOARD ||
+                key == SettingsPreferences.KEY_KEYBOARD_BOTTOM_POSITION ||
+                SettingsPreferences.isBottomCalibrationKey(key)) {
                 val decor = window.window?.decorView
                 refreshKeyboardBottomPadding()
                 updateKeyboardBottomInsets(decor?.rootWindowInsets)

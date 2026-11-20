@@ -101,6 +101,8 @@ import kotlin.math.roundToInt
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.onClick as semanticsOnClick
+import androidx.compose.ui.semantics.onLongClick as semanticsOnLongClick
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.Modifier
@@ -191,6 +193,8 @@ internal fun sentenceMagnifierCenter(
     )
     return Offset(sourceCenter.x, targetWindowY - textTopInWindow)
 }
+
+internal const val CANDIDATE_LONG_PRESS_TIMEOUT_MS = 1500L
 
 internal fun sentenceCandidateText(text: String, index: Int, drag: IntRange?,
                                    active: SentenceCandidateHighlight?, color: Color): AnnotatedString =
@@ -1300,10 +1304,19 @@ fun CandidateItem(
                 if (isSelected && selectionFill) accentColor.copy(alpha = 0.2f)
                 else Color.Transparent
             )
-            .semantics { selected = isSelected }
-            .then(if (interactive) Modifier.combinedClickable(
+            .semantics {
+                selected = isSelected
+                if (interactive) {
+                    semanticsOnClick { currentClick(); true }
+                    if (onSentenceSelection == null && currentLongClick != null) {
+                        semanticsOnLongClick { currentLongClick?.invoke(); true }
+                    }
+                }
+            }
+            .then(if (interactive) Modifier.tolerantClick(
+                longPressTimeoutMillis = CANDIDATE_LONG_PRESS_TIMEOUT_MS,
+                onLongClick = if (onSentenceSelection == null) onLongClick else null,
                 onClick = onClick,
-                onLongClick = if (onSentenceSelection == null) onLongClick else null
             ) else Modifier)
             .padding(horizontal = horizontalPadding, vertical = 2.dp),
         verticalAlignment = Alignment.CenterVertically
@@ -1346,35 +1359,59 @@ fun CandidateItem(
                     val first = characterAt(down.position)
                     var last = first
                     var dragged = false
+                    var longPressTriggered = false
+                    val dragThresholdMs = viewConfiguration.longPressTimeoutMillis
+                    var elapsedFromDownMs = dragThresholdMs
+                    val popupTimeoutMs = maxOf(CANDIDATE_LONG_PRESS_TIMEOUT_MS, dragThresholdMs)
                     dragSelection = first..first
                     currentSentenceSelectionChange?.invoke(first, first + 1)
                     magnifierPosition = held.position
-                    var completed = false
-                    try { do {
-                        val event = awaitPointerEvent()
-                        val change = event.changes.firstOrNull { it.id == down.id } ?: break
-                        if ((change.position - down.position).getDistance() >= viewConfiguration.touchSlop) dragged = true
-                        if (dragged) {
-                            val next = characterAt(change.position)
-                            if (next != last) {
-                                last = next
-                                dragSelection = minOf(first, last)..maxOf(first, last)
-                                currentSentenceSelectionChange?.invoke(minOf(first, last), maxOf(first, last) + 1)
+                    var released = false
+                    try {
+                        while (true) {
+                            val event = if (!dragged && !longPressTriggered && currentLongClick != null) {
+                                val remaining = (popupTimeoutMs - elapsedFromDownMs).coerceAtLeast(0L)
+                                if (remaining == 0L) null else withTimeoutOrNull(remaining) { awaitPointerEvent() }
+                            } else {
+                                awaitPointerEvent()
+                            }
+                            if (event == null) {
+                                longPressTriggered = true
+                                dragSelection = null
+                                currentSentenceSelectionEnd?.invoke()
+                                magnifierPosition = androidx.compose.ui.geometry.Offset.Unspecified
+                                currentLongClick?.invoke()
+                                continue
+                            }
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            elapsedFromDownMs = maxOf(elapsedFromDownMs, change.uptimeMillis - down.uptimeMillis)
+                            if (!longPressTriggered && (change.position - down.position).getDistance() >= viewConfiguration.touchSlop) {
+                                dragged = true
+                            }
+                            if (dragged) {
+                                val next = characterAt(change.position)
+                                if (next != last) {
+                                    last = next
+                                    dragSelection = minOf(first, last)..maxOf(first, last)
+                                    currentSentenceSelectionChange?.invoke(minOf(first, last), maxOf(first, last) + 1)
+                                }
+                                magnifierPosition = change.position
+                            }
+                            change.consume()
+                            if (!change.pressed) {
+                                released = true
+                                break
                             }
                         }
-                        magnifierPosition = change.position
-                        change.consume()
-                    } while (change.pressed)
-                        completed = true
                     } finally {
                         dragSelection = null
-                        if (!completed || !dragged) currentSentenceSelectionEnd?.invoke()
+                        if (!released || longPressTriggered) currentSentenceSelectionEnd?.invoke()
                         magnifierPosition = androidx.compose.ui.geometry.Offset.Unspecified
                     }
-                    if (dragged) {
+                    if (released && !longPressTriggered) {
                         currentSentenceSelection?.invoke(minOf(first, last), maxOf(first, last) + 1)
                         currentSentenceSelectionEnd?.invoke()
-                    } else currentLongClick?.invoke()
+                    }
                 }
             } else Modifier),
             onTextLayout = { textLayout = it },

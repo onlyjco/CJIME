@@ -4,6 +4,21 @@ import com.kingzcheung.xime.rime.RimeEngine
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 
+internal const val SENTENCE_CODE_HIGHLIGHT_COLOR = 0x663399ff
+
+/** Highlight only the selected slice with one contiguous span so character spacing stays intact. */
+internal fun sentenceCodeRangeHighlight(text: String, from: Int, to: Int): android.text.SpannableString =
+    android.text.SpannableString(text).apply {
+        if (from in 0 until to && to <= text.length) {
+            setSpan(
+                android.text.style.BackgroundColorSpan(SENTENCE_CODE_HIGHLIGHT_COLOR),
+                from,
+                to,
+                android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE,
+            )
+        }
+    }
+
 /** An isolated candidate lookup; the live composition changes only on confirmation. */
 data class SentenceEditSession(
         val inputSessionId: Long,
@@ -50,14 +65,10 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
     private var previewBase: String? = null
     private var previewWritten: String? = null
     private var previewCaret = 0
-    private var previewSelection: Triple<Int, Int, Int>? = null
     private var dragConnection: android.view.inputmethod.InputConnection? = null
     private var dragText: String? = null
     private var dragCaret = 0
     private var dragOwner: SentenceEditSession? = null
-    private var dragStart = -1
-    private var dragSelectionStart = -1
-    private var dragSelectionEnd = -1
     private var pendingDragOwner: SentenceEditSession? = null
     private var dragPreviewScheduled = false
     private val dragPreviewTask = Runnable {
@@ -89,44 +100,42 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
         val ic = service.currentInputConnection
         if (owner == null) {
             val text = dragText
-            if (previewSelection == null && ic != null && ic === dragConnection && text != null && service.inlinePinyinText() == text &&
-                service.inlinePinyinCaret() == dragCaret && dragOwner?.let(::current) == true) {
-                val value = runCatching { ic.getExtractedText(android.view.inputmethod.ExtractedTextRequest(), 0) }.getOrNull()
-                if (value != null && value.startOffset + value.selectionStart == dragSelectionStart &&
-                    value.startOffset + value.selectionEnd == dragSelectionEnd) {
-                    ic.setSelection(dragStart + dragCaret, dragStart + dragCaret)
-                }
+            if (previewOwner == null && ic != null && ic === dragConnection && text != null && service.inlinePinyinText() == text &&
+                service.inlinePinyinCaret() == dragCaret && dragOwner?.let(::current) == true &&
+                runCatching { ic.getSelectedText(0).isNullOrEmpty() }.getOrDefault(false)) {
+                ic.beginBatchEdit()
+                try {
+                    if (ic.setComposingText(text, 1)) {
+                        service.markInputBoxComposing(text)
+                        service.placeInlinePinyinCaret(text, dragCaret)
+                    }
+                } finally { ic.endBatchEdit() }
             }
-            dragConnection = null; dragText = null; dragOwner = null; dragStart = -1
-            dragSelectionStart = -1; dragSelectionEnd = -1
+            dragConnection = null; dragText = null; dragOwner = null
             return
         }
         if (!current(owner) || service.uiState.value.inputTarget.isInternal ||
             TerminalEditor.inputTextLocation(service) != com.kingzcheung.xime.settings.SettingsPreferences.INPUT_TEXT_INPUT_BOX || ic == null) return
         if (dragConnection == null) {
-            val text = service.inlinePinyinText() ?: return
-            val caret = service.inlinePinyinCaret()
-            val value = runCatching { ic.getExtractedText(android.view.inputmethod.ExtractedTextRequest(), 0) }.getOrNull() ?: return
-            val content = value.text ?: return
-            val selection = value.selectionStart
-            val start = selection - caret
-            if (value.startOffset < 0 || selection != value.selectionEnd || start < 0 ||
-                start + text.length > content.length || content.subSequence(start, start + text.length).toString() != text) return
-            dragText = text
-            dragCaret = caret
-            dragStart = value.startOffset + start
-            dragSelectionStart = dragStart + caret
-            dragSelectionEnd = dragSelectionStart
+            dragText = service.inlinePinyinText() ?: return
+            dragCaret = service.inlinePinyinCaret()
             dragConnection = ic
         }
         val text = dragText ?: return
         if (ic !== dragConnection || service.inlinePinyinText() != text || service.inlinePinyinCaret() != dragCaret) return
         val range = owner.displaySelection(text) ?: return
-        val from = dragStart + range.first
-        val to = dragStart + range.last + 1
-        if (ic.setSelection(from, to)) {
-            dragSelectionStart = from; dragSelectionEnd = to; dragOwner = owner
-        }
+        val shown = dragOwner?.let { it.displaySelection(text) }
+        if (shown == range) { dragOwner = owner; return }
+        if (dragOwner == null && runCatching { !ic.getSelectedText(0).isNullOrEmpty() }.getOrDefault(true)) return
+        val styled = sentenceCodeRangeHighlight(text, range.first, range.last + 1)
+        ic.beginBatchEdit()
+        try {
+            if (ic.setComposingText(styled, 1)) {
+                service.markInputBoxComposing(text)
+                if (!service.placeInlinePinyinCaret(text, dragCaret)) dragCaret = text.length
+                dragOwner = owner
+            }
+        } finally { ic.endBatchEdit() }
     }
 
     /** Only replace our own composing span; never touch surrounding host text. */
@@ -134,21 +143,10 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
         if (!current(owner) || service.uiState.value.inputTarget.isInternal ||
             TerminalEditor.inputTextLocation(service) != com.kingzcheung.xime.settings.SettingsPreferences.INPUT_TEXT_INPUT_BOX) return
         val ic = service.currentInputConnection ?: return
-        if (previewOwner == null && code == owner.originalCode && (dragConnection == null || dragConnection === ic)) {
+        if (previewOwner == null) {
             service.mainHandler.removeCallbacks(dragPreviewTask)
             pendingDragOwner = null
             dragPreviewScheduled = false
-            applyDragPreview(owner)
-            if (dragOwner == owner && dragSelectionStart != dragSelectionEnd) {
-                previewOwner = owner; previewConnection = ic; previewBase = dragText; previewWritten = dragText
-                previewCaret = dragCaret
-                previewSelection = Triple(dragSelectionStart, dragSelectionEnd, dragStart + dragCaret)
-                return
-            }
-        }
-        if (previewOwner === owner && previewSelection != null) {
-            if (code == owner.originalCode) return
-            if (!releasePreviewSelection(ic)) return
         }
         if (previewOwner !== owner) {
             val base = service.inlinePinyinText() ?: return
@@ -184,9 +182,10 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
         }
         val caret = if (code.isNotEmpty()) start + shownCode.length else before.trimEnd(' ', '\'').length.coerceAtMost(text.length)
         if (code.isEmpty() && text == previewWritten && caret == previewCaret) return
+        val styled = if (code.isNotEmpty()) sentenceCodeRangeHighlight(text, start, start + shownCode.length) else text
         ic.beginBatchEdit()
         try {
-            if (runCatching { ic.setComposingText(text, 1) }.getOrDefault(false)) {
+            if (runCatching { ic.setComposingText(styled, 1) }.getOrDefault(false)) {
                 previewWritten = text
                 service.markInputBoxComposing(text)
                 previewCaret = if (service.placeInlinePinyinCaret(text, caret)) caret else text.length
@@ -194,16 +193,6 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
         } finally {
             ic.endBatchEdit()
         }
-    }
-
-    private fun releasePreviewSelection(ic: android.view.inputmethod.InputConnection): Boolean {
-        val selection = previewSelection ?: return true
-        if (previewConnection !== ic) return false
-        val value = runCatching { ic.getExtractedText(android.view.inputmethod.ExtractedTextRequest(), 0) }.getOrNull() ?: return false
-        if (value.startOffset + value.selectionStart != selection.first || value.startOffset + value.selectionEnd != selection.second) return false
-        if (!ic.setSelection(selection.third, selection.third)) return false
-        previewSelection = null
-        return true
     }
 
     /** Rebuild the remaining keys as ordinary, unselected composing input. */
@@ -219,7 +208,6 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
 
     fun endPreview(owner: SentenceEditSession, restore: Boolean) {
         val ic = service.currentInputConnection
-        if (previewOwner === owner && ic != null && previewSelection != null) releasePreviewSelection(ic)
         if (restore && previewOwner === owner && previewConnection === ic && ic != null && current(owner) &&
             service.inlinePinyinText() == previewWritten && service.inlinePinyinCaret() == previewCaret &&
             runCatching { ic.getSelectedText(0).isNullOrEmpty() }.getOrDefault(false)) {
@@ -227,7 +215,7 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
             service.sessionController.refreshInputBoxComposition()
         }
         if (previewOwner === owner) {
-            previewOwner = null; previewConnection = null; previewBase = null; previewWritten = null; previewCaret = 0; previewSelection = null
+            previewOwner = null; previewConnection = null; previewBase = null; previewWritten = null; previewCaret = 0
         }
     }
 
