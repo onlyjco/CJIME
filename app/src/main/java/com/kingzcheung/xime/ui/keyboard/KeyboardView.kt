@@ -2629,7 +2629,11 @@ fun KeyboardView(
                         },
                         modifier = panelMaterial.fillMaxSize()
                     )
-                    is OverlayRoute.Clipboard -> ClipboardView(
+                    is OverlayRoute.Clipboard -> CompositionLocalProvider(
+                        com.kingzcheung.xime.ui.menubar.LocalClipboardCandidateChromeDp provides
+                            candidateBarHeightDp(candidateBarScaleState.floatValue)
+                    ) {
+                        ClipboardView(
                         clipboardItems = state.clipboardItems,
                         quickSendItems = state.quickSendItems,
                         selectedTab = p.route.tab,
@@ -2671,6 +2675,7 @@ fun KeyboardView(
                         onOpenSearch = callbacks.onClipboardSearchOpen,
                         onTranslateText = callbacks.onClipboardTranslate?.takeIf { callbacks.clipboardTranslateAvailable() },
                     )
+                    }
                     is OverlayRoute.ToolbarCustomize -> ToolbarCustomizeView(
                         toolbarButtons = state.toolbarButtons,
                         menuButtons = state.menuButtons,

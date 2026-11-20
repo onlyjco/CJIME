@@ -194,7 +194,7 @@ internal fun sentenceMagnifierCenter(
     return Offset(sourceCenter.x, targetWindowY - textTopInWindow)
 }
 
-internal const val CANDIDATE_LONG_PRESS_TIMEOUT_MS = 1500L
+internal const val CANDIDATE_LONG_PRESS_TIMEOUT_MS = 1000L
 
 internal fun sentenceCandidateText(text: String, index: Int, drag: IntRange?,
                                    active: SentenceCandidateHighlight?, color: Color): AnnotatedString =
