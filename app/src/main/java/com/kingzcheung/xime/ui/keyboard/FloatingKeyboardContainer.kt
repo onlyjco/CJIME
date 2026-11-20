@@ -42,9 +42,15 @@ import androidx.compose.material3.Text
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.clipToBounds
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.RoundRect
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.RectangleShape
+import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.CompositingStrategy
@@ -64,6 +70,7 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.unit.Constraints
 import androidx.compose.ui.unit.Density
 import androidx.compose.ui.unit.IntOffset
+import androidx.compose.ui.unit.LayoutDirection
 import androidx.compose.ui.unit.coerceAtLeast
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.platform.testTag
@@ -214,6 +221,11 @@ internal fun FloatingKeyboardContainer(
         seenResizing = resizing
     }
 
+    val clipboardExpansion = LocalClipboardPanelExpansion.current
+    fun clipboardDropPx(): Float = clipboardExpansion?.let {
+        (it.settledOrExpandedHeight - it.height).coerceAtLeast(0f) * density.density
+    } ?: 0f
+
     // 调节模式下固定键盘也放进稳定的全屏宿主里，previewRect 直接决定它的真实区域。
     // 这样控制面板可以放在键盘外面，边框也不会因为宿主高度变化而漂移。
     if (!isFloatingMode) {
@@ -230,21 +242,51 @@ internal fun FloatingKeyboardContainer(
                 val touchesLeft = shift <= -travel + 0.5f
                 val touchesRight = shift >= travel - 0.5f
                 val undockPull = remember { UndockPullState() }
-                Box(Modifier.align(Alignment.TopCenter)
-                    .absoluteOffset(x = shift.dp)
-                    .width(width).fillMaxSize().clip(cardShape(touchesLeft, touchesRight)).testTag("fixed-keyboard-card")
-                    .then(if (onUndock != null) Modifier.undockPull(undockPull, onUndock) else Modifier)
-                    .onGloballyPositioned { coords ->
-                        undockPull.card = coords
-                        val pos = coords.positionInWindow()
-                        onCardPositioned(pos.x.roundToInt(), pos.y.roundToInt(),
-                            (pos.x + coords.size.width).roundToInt(), (pos.y + coords.size.height).roundToInt())
-                    }) {
-                    CompositionLocalProvider(LocalKeyboardCardTopCorner provides cardTopCorner(touchesLeft, touchesRight)) {
-                        LanguageMenuPanel { keyboardContent() }
+                if (clipboardExpansion == null) {
+                    Box(Modifier.align(Alignment.TopCenter)
+                        .absoluteOffset(x = shift.dp)
+                        .width(width).fillMaxSize().clip(cardShape(touchesLeft, touchesRight)).testTag("fixed-keyboard-card")
+                        .then(if (onUndock != null) Modifier.undockPull(undockPull, onUndock) else Modifier)
+                        .onGloballyPositioned { coords ->
+                            undockPull.card = coords
+                            val pos = coords.positionInWindow()
+                            onCardPositioned(pos.x.roundToInt(), pos.y.roundToInt(),
+                                (pos.x + coords.size.width).roundToInt(), (pos.y + coords.size.height).roundToInt())
+                        }) {
+                        CompositionLocalProvider(LocalKeyboardCardTopCorner provides cardTopCorner(touchesLeft, touchesRight)) {
+                            LanguageMenuPanel { keyboardContent() }
+                        }
+                        if (onUndock != null) UndockHandle(Modifier.align(Alignment.TopCenter), undockPull,
+                            dragIndicatorColor, highlightColor)
                     }
-                    if (onUndock != null) UndockHandle(Modifier.align(Alignment.TopCenter), undockPull,
-                        dragIndicatorColor, highlightColor)
+                } else {
+                    val outerClip = if (roundedBottom) {
+                        if (!sidesFilled) FixedKeyboardBottomRoundedShape
+                        else filledSidesCardShape(touchesLeft, touchesRight, roundedTop = false, roundedBottom = true)
+                    } else RectangleShape
+                    Box(Modifier.align(Alignment.TopCenter)
+                        .absoluteOffset(x = shift.dp)
+                        .width(width).fillMaxSize()
+                        .clip(outerClip)
+                        .onGloballyPositioned { coords ->
+                            val pos = coords.positionInWindow()
+                            val drop = clipboardDropPx().roundToInt()
+                            val bottom = (pos.y + coords.size.height).roundToInt()
+                            onCardPositioned(pos.x.roundToInt(), (pos.y + drop).roundToInt().coerceAtMost(bottom),
+                                (pos.x + coords.size.width).roundToInt(), bottom)
+                        }) {
+                        Box(Modifier.fillMaxSize()
+                            .offset { IntOffset(0, clipboardDropPx().roundToInt()) }
+                            .clip(cardShape(touchesLeft, touchesRight)).testTag("fixed-keyboard-card")
+                            .then(if (onUndock != null) Modifier.undockPull(undockPull, onUndock) else Modifier)
+                            .onGloballyPositioned { coords -> undockPull.card = coords }) {
+                            CompositionLocalProvider(LocalKeyboardCardTopCorner provides cardTopCorner(touchesLeft, touchesRight)) {
+                                LanguageMenuPanel { keyboardContent() }
+                            }
+                            if (onUndock != null) UndockHandle(Modifier.align(Alignment.TopCenter), undockPull,
+                                dragIndicatorColor, highlightColor)
+                        }
+                    }
                 }
             }
         } else {
@@ -489,20 +531,31 @@ internal fun FloatingKeyboardContainer(
             .size(with(density) { cardRect.width.toDp() }, with(density) { cardRect.height.toDp() })
         // 位置提示角标：卡片外扩一圈，跟卡片一起移动、旋转；调节界面里有自己的边框，不画。
         // 亮着（含正按着角）时四角也是调大小的把手，见下面的 cornersActive。
+        val floatingClipShape = if (clipboardExpansion == null) FloatingKeyboardCardShape else remember(clipboardExpansion, density) {
+            val radiusPx = with(density) { FloatingKeyboardCardCorner.toPx() }
+            object : Shape {
+                override fun createOutline(size: Size, layoutDirection: LayoutDirection, density: Density): Outline {
+                    val top = clipboardDropPx().coerceIn(0f, (size.height - radiusPx * 2f).coerceAtLeast(0f))
+                    return Outline.Rounded(RoundRect(0f, top, size.width, size.height, CornerRadius(radiusPx, radiusPx)))
+                }
+            }
+        }
         val cornersLit = !suppressCornerHint && (highlight.lit || highlight.held)
         if (previewRect == null && !geometryLocked && !suppressCornerHint) Box(
             Modifier.align(Alignment.TopStart)
                 .absoluteOffset {
                     val shift = liveShiftPx()
                     val visual = visualCardRect()
+                    val drop = clipboardDropPx()
                     val gap = PositionHighlightGap.toPx()
-                    IntOffset((visual.left + shift.x - gap).roundToInt(), (visual.top + shift.y - gap).roundToInt())
+                    IntOffset((visual.left + shift.x - gap).roundToInt(), (visual.top + drop + shift.y - gap).roundToInt())
                 }
                 .layout { measurable, _ ->
                     val visual = visualCardRect()
+                    val drop = clipboardDropPx()
                     val gap = PositionHighlightGap.toPx()
                     val w = (visual.width + gap * 2f).roundToInt().coerceAtLeast(1)
-                    val h = (visual.height + gap * 2f).roundToInt().coerceAtLeast(1)
+                    val h = ((visual.height - drop).coerceAtLeast(1f) + gap * 2f).roundToInt().coerceAtLeast(1)
                     val placeable = measurable.measure(Constraints.fixed(w, h))
                     layout(w, h) { placeable.place(0, 0) }
                 }
@@ -517,11 +570,13 @@ internal fun FloatingKeyboardContainer(
                 .onGloballyPositioned { coords ->
                     val pos = coords.positionInWindow()
                     val size = coords.size
+                    val drop = clipboardDropPx()
+                    val bottom = (pos.y + size.height).roundToInt()
                     onCardPositioned(
                         pos.x.roundToInt(),
-                        pos.y.roundToInt(),
+                        (pos.y + drop).roundToInt().coerceAtMost(bottom),
                         (pos.x + size.width).roundToInt(),
-                        (pos.y + size.height).roundToInt()
+                        bottom
                     )
                 }
                 // 绕中心在 GPU 图层缩放并旋转，避免拖拽期间逐帧重排键盘。
@@ -533,7 +588,7 @@ internal fun FloatingKeyboardContainer(
                     scaleY = if (h0 > 0f) visual.height / h0 else 1f
                     rotationZ = previewRotationState?.value ?: restingRotation
                 }
-                .clip(FloatingKeyboardCardShape)
+                .clip(floatingClipShape)
                 // 边框和长按进度画在透明度图层外面：键盘调得再透明，进度也看得清。
                 .floatingLockOutline(geometryLocked, lockSweep, highlightColor, lockNudge)
                 .graphicsLayer {
@@ -545,7 +600,9 @@ internal fun FloatingKeyboardContainer(
         ) {
             Column {
                 val dragSpace = remember { KeyDragSpace() }
-                Box(modifier = Modifier.weight(1f).fillMaxWidth().onPlaced { dragSpace.card = it }) {
+                Box(modifier = Modifier.weight(1f).fillMaxWidth().clipToBounds().onPlaced { dragSpace.card = it }) {
+                    Box(Modifier.fillMaxSize().then(if (clipboardExpansion == null) Modifier
+                        else Modifier.offset { IntOffset(0, clipboardDropPx().roundToInt()) })) {
                     CompositionLocalProvider(
                         LocalDensity provides Density(density = density.density, fontScale = density.fontScale * fontScaleFactor),
                         LocalFloatingKeyboardRotation provides restingRotation,
@@ -556,6 +613,7 @@ internal fun FloatingKeyboardContainer(
                         // The resize overlay owns input while the card is being measured.
                         if (previewRect != null) keyboardContent()
                         else LanguageMenuPanel { keyboardContent() }
+                    }
                     }
                 }
                 Spacer(Modifier.height(footerDp.dp))

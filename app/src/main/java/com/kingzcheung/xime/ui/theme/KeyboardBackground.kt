@@ -91,7 +91,8 @@ internal fun gradientBottomEdgeColor(config: BackgroundConfig, isDark: Boolean):
 /**
  * 上报给系统导航栏/小米底部抬高栏的颜色：
  * - 纯色：主题底色；
- * - 渐变（落日余晖、极光青蓝、iOS 渐变及自定义渐变）：取底边中心颜色做无缝衔接；
+ * - iOS 渐变：取左下角向右延伸到渐变中心过渡前的中间色（浅色 #A7CBCD、深色 #212627 避免过暗）；
+ * - 其他渐变（落日余晖、极光青蓝及自定义渐变）：取底边中心颜色做无缝衔接；
  * - 大漠流金：取底部偏深沙影叠加主题遮罩后的颜色；
  * - 其他图片主题：返回 null（保持透明）。
  */
@@ -101,12 +102,22 @@ internal fun resolveNavigationBarSurfaceColor(
     isDark: Boolean,
     fallbackColor: Color,
 ): Color? = when (config?.type) {
-    "gradient" -> gradientBottomEdgeColor(config, isDark) ?: fallbackColor
+    "gradient" -> if (themeId == TransparentGlassTheme.ID) {
+        iosGradientBottomNavColor(config, isDark) ?: gradientBottomEdgeColor(config, isDark) ?: fallbackColor
+    } else {
+        gradientBottomEdgeColor(config, isDark) ?: fallbackColor
+    }
     "image" -> when (themeId) {
         "olivcelso_desert" -> if (isDark) Color(0xFF3E3111) else Color(0xFFDCCEAC)
         else -> null
     }
     else -> fallbackColor
+}
+
+private fun iosGradientBottomNavColor(config: BackgroundConfig, isDark: Boolean): Color? {
+    val stops = gradientColors(config, isDark) ?: return null
+    if (stops.size < 2) return null
+    return androidx.compose.ui.graphics.lerp(stops.last(), stops[stops.size / 2], if (isDark) 0.40f else 0.15f)
 }
 
 /**
