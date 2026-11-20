@@ -27,6 +27,7 @@ import androidx.compose.ui.draw.rotate
 import androidx.compose.animation.core.tween
 import com.kingzcheung.xime.ui.theme.cySwapFadeIn
 import androidx.compose.foundation.ExperimentalFoundationApi
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -95,6 +96,7 @@ import androidx.compose.ui.layout.FirstBaseline
 import kotlin.math.roundToInt
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.semantics.semantics
+import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.selected
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.Modifier
@@ -122,7 +124,6 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.layout.onSizeChanged
-import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.IntRect
@@ -134,7 +135,6 @@ import androidx.compose.ui.window.PopupProperties
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.text.withStyle
 import androidx.compose.ui.unit.sp
-import com.kingzcheung.xime.R
 import com.kingzcheung.xime.keyboard.MainType
 import com.kingzcheung.xime.keyboard.KeyboardPage
 import com.kingzcheung.xime.keyboard.OverlayRoute
@@ -611,9 +611,14 @@ fun CandidateBar(
                         } else {
                             KeyboardToolbarButton({ callbacks.onLogoClick?.invoke() }, iconButtonContainer,
                                 modifier = Modifier.testTag("toolbar-leading"), slotWidth = toolbarSlot) {
-                                // 图标照旧用 CyIME 标志，只把读屏说明改成它的作用「展开菜单」。
-                                Icon(painterResource(R.drawable.cyime_toolbar_mark), contentDescription = "展开菜单",
-                                    tint = iconButtonTint, modifier = Modifier.size(22.dp * LocalCandidateSizeFactor.current))
+                                Canvas(Modifier.size(22.dp * LocalCandidateSizeFactor.current)
+                                    .semantics { contentDescription = "展开菜单" }) {
+                                    val radius = size.minDimension * .115f
+                                    listOf(.2f, .5f, .8f).forEach { x ->
+                                        drawCircle(iconButtonTint, radius,
+                                            androidx.compose.ui.geometry.Offset(size.width * x, size.height / 2))
+                                    }
+                                }
                             }
                         }
                         Spacer(modifier = Modifier.width(4.dp))
