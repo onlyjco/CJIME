@@ -47,6 +47,24 @@ class PairedSymbolsTest {
         assertFalse(PairedSymbols.ignoresCaret(null))
     }
 
+    /** #436：浏览器地址栏查出不认光标，同一个浏览器里网页文本框照样补结尾。 */
+    @Test fun onlyTheEditorThatIgnoresTheCaretIsRemembered() {
+        val urlBar = PairedSymbols.editorKey("com.android.chrome", 0x7f0b0001, 0x11)
+        val webTextArea = PairedSymbols.editorKey("com.android.chrome", 0x7f0b0002, 0x20001)
+        org.junit.Assert.assertNotEquals(urlBar, webTextArea)
+        org.junit.Assert.assertEquals(urlBar, PairedSymbols.editorKey("com.android.chrome", 0x7f0b0001, 0x11))
+        org.junit.Assert.assertNull(PairedSymbols.editorKey(null, 1, 1))
+        org.junit.Assert.assertNull(PairedSymbols.editorKey("", 1, 1))
+        val ignoring = object : android.view.inputmethod.InputConnectionWrapper(connection, true) {
+            override fun commitText(text: CharSequence?, newCursorPosition: Int) = super.commitText(text, 1)
+        }
+        val (text, caret) = PairedSymbols.commitFor("（")
+        assertTrue(ignoring.commitTextWithCaret(text, caret, urlBar))
+        settle()
+        assertTrue(PairedSymbols.ignoresCaret(urlBar))
+        assertFalse(PairedSymbols.ignoresCaret(webTextArea))
+    }
+
     private fun settle() {
         val checks = pendingChecks.toList()
         pendingChecks.clear()

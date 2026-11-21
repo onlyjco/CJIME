@@ -216,7 +216,7 @@ internal class ImeTextCommit(private val service: XimeInputMethodService) {
         // 查出来不认光标位置的应用只上屏开头，不再补结尾又删掉（#489）。
         val (paired, caret) = if (!hardware && !service.isTerminalEditor() &&
             com.kingzcheung.xime.settings.SettingsPreferences.isPairedSymbolsEnabled(service) &&
-            !PairedSymbols.ignoresCaret(service.currentInputEditorInfo?.packageName))
+            !PairedSymbols.ignoresCaret(service.currentInputEditorInfo.pairedSymbolsKey()))
             PairedSymbols.commitFor(literal) else literal to CommitCaret.NONE
         service.voiceRecognitionHandler.abandonPendingOnManualInput()
         val owner = service.uiState.value.inputSessionId

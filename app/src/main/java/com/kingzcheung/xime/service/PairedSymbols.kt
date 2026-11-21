@@ -25,15 +25,22 @@ internal object PairedSymbols {
     private const val CARET_CHECK_DELAY_MS = 150L
 
     /**
-     * 查出来不认光标位置的应用（包名）：这次运行里在它们中不再补结尾，免得结尾闪一下又被删掉（#489 NotallyX）。
+     * 查出来不认光标位置的编辑框（[editorKey]）：这次运行里在它们中不再补结尾，免得结尾闪一下又被删掉（#489 NotallyX）。
      * 只记在内存里，输入法重启后重新判断。
      */
     private val caretIgnoringApps = java.util.concurrent.ConcurrentHashMap.newKeySet<String>()
 
-    fun ignoresCaret(packageName: String?): Boolean = packageName != null && packageName in caretIgnoringApps
+    fun ignoresCaret(editorKey: String?): Boolean = editorKey != null && editorKey in caretIgnoringApps
 
-    internal fun noteCaretIgnored(packageName: String?) {
-        if (!packageName.isNullOrEmpty()) caretIgnoringApps += packageName
+    /**
+     * 按编辑框记，不按应用记：包名 + 控件 id + 输入类型。只记包名时，浏览器地址栏查出来一次，
+     * 同一个浏览器里网页的文本框（GitHub 评论框）也不再补结尾（#436，1.15.103 反馈）。
+     */
+    fun editorKey(packageName: String?, fieldId: Int, inputType: Int): String? =
+        packageName?.takeIf { it.isNotEmpty() }?.let { "$it|$fieldId|$inputType" }
+
+    internal fun noteCaretIgnored(editorKey: String?) {
+        if (!editorKey.isNullOrEmpty()) caretIgnoringApps += editorKey
     }
 
     internal fun forgetCaretIgnoringApps() = caretIgnoringApps.clear()
@@ -57,6 +64,10 @@ internal object PairedSymbols {
     }
 }
 
+/** 当前编辑框在「不认光标位置」记录里的名字（见 [PairedSymbols.editorKey]）。 */
+internal fun android.view.inputmethod.EditorInfo?.pairedSymbolsKey(): String? =
+    PairedSymbols.editorKey(this?.packageName, this?.fieldId ?: 0, this?.inputType ?: 0)
+
 /**
  * 上屏后的光标处理：[caretBack] 上屏后光标往回退几个字（落在成对符号中间）；
  * [overtype] 光标后紧挨着这段文字时先把它去掉再上屏，效果是光标跳过它。
@@ -68,7 +79,7 @@ internal data class CommitCaret(val caretBack: Int = 0, val overtype: String? = 
 }
 
 /** 按 [caret] 上屏：结尾单独上屏并把光标放在它前面（newCursorPosition 0 = 插入文字的开头），整段算一次编辑。 */
-internal fun InputConnection.commitTextWithCaret(text: String, caret: CommitCaret, packageName: String? = null): Boolean {
+internal fun InputConnection.commitTextWithCaret(text: String, caret: CommitCaret, editorKey: String? = null): Boolean {
     val back = caret.caretBack.coerceIn(0, text.length)
     beginBatchEdit()
     try {
@@ -87,7 +98,7 @@ internal fun InputConnection.commitTextWithCaret(text: String, caret: CommitCare
         val generation = ++PairedSymbols.commitGeneration
         PairedSymbols.deferCaretCheck {
             if (generation == PairedSymbols.commitGeneration && dropClosingIfCaretIgnored(text, back))
-                PairedSymbols.noteCaretIgnored(packageName)
+                PairedSymbols.noteCaretIgnored(editorKey)
         }
     }
     return true
