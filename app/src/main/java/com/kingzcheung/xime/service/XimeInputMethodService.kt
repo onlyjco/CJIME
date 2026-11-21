@@ -4095,8 +4095,10 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         try {
             if (clipboardManager.images.pasteFailure.value?.packageName != attribute?.packageName) clipboardManager.images.clearPasteFailure()
             clipboardManager.refreshClipboard()
-            recentClipboardItemsState.value = clipboardManager.getRecentItems(30)
-            val recentImage = clipboardManager.images.preview.value?.takeIf { it.timestamp >= (recentClipboardItemsState.value.maxOfOrNull { item -> item.timestamp } ?: 0) }
+            // 「候选栏显示刚复制的内容」关掉时只剩验证码，图片也不冒出来。
+            val showCopied = com.kingzcheung.xime.clipboard.clipboardShowsInCandidateBar(this)
+            recentClipboardItemsState.value = clipboardManager.getRecentItems(30, includeCopied = showCopied)
+            val recentImage = clipboardManager.images.preview.value?.takeIf { showCopied && it.timestamp >= (recentClipboardItemsState.value.maxOfOrNull { item -> item.timestamp } ?: 0) }
             // 将最近剪切板内容显示在候选栏。没有可显示的就不标成「在显示剪贴板」：以前一律标上，
             // 回到输入框（微信退出聊天再进来）第一下退格只去收起这个看不见的剪贴板，不删字（用户 11-01）。
             candidateState.value = candidateState.value.copy(
@@ -4115,11 +4117,12 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         clipboardCollectorJob?.cancel()
         clipboardCollectorJob = serviceScope.launch {
             combine(clipboardManager.clipboardItems, clipboardManager.verificationCode, clipboardManager.images.preview) { _, _, _ -> Unit }.collect {
-                val items = clipboardManager.getRecentItems(30)
+                val showCopied = com.kingzcheung.xime.clipboard.clipboardShowsInCandidateBar(this@XimeInputMethodService)
+                val items = clipboardManager.getRecentItems(30, includeCopied = showCopied)
                 if (!canShowClipboardSuggestions(candidateState.value.isComposing,
                         candidateState.value.pendingEnglishText, inputCommands.hasPendingCommands)) return@collect
                 recentClipboardItemsState.value = items
-                val image = clipboardManager.images.preview.value?.takeIf { it.timestamp >= (items.maxOfOrNull { item -> item.timestamp } ?: 0) }
+                val image = clipboardManager.images.preview.value?.takeIf { showCopied && it.timestamp >= (items.maxOfOrNull { item -> item.timestamp } ?: 0) }
                 if (items.isNotEmpty() || image != null) {
                     // 清空Rime联想词等
                     rimeEngine.clearComposition()

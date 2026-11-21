@@ -372,6 +372,8 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("验证码发到其他设备", clipboard, SettingsRoutes.ClipboardPanel, "验证码 短信 电脑 平板 同步 发送 code"),
         SettingsSearchEntry("记录密码等敏感内容", clipboard, SettingsRoutes.ClipboardPanel, "密码 敏感 银行卡 密码管理器 剪贴板 password"),
         SettingsSearchEntry("上屏后自动关闭剪贴板", clipboard, SettingsRoutes.ClipboardPanel, "剪贴板 关闭 粘贴 连续贴"),
+        SettingsSearchEntry("候选栏显示刚复制的内容", clipboard, SettingsRoutes.ClipboardPanel,
+            "剪贴板 候选栏 最新复制 刚复制 最近复制 自动显示 弹出 不显示 隐私 关掉"),
         SettingsSearchEntry("卡片显示行数", clipboard, SettingsRoutes.ClipboardPanel,
             "剪贴板 卡片 行数 几行 显示 记录 折叠 最多显示 剪贴板卡片最多显示 卡片最多显示"),
         SettingsSearchEntry("图片高度", clipboard, SettingsRoutes.ClipboardPanel,

@@ -39,6 +39,8 @@ import com.kingzcheung.xime.clipboard.ClipboardImages
 import com.kingzcheung.xime.clipboard.ImageAccessActivity
 import com.kingzcheung.xime.settings.PerformanceCosts
 import com.kingzcheung.xime.clipboard.CLIPBOARD_IMAGE_HEIGHT_KEY
+import com.kingzcheung.xime.clipboard.CLIPBOARD_SHOW_IN_BAR_KEY
+import com.kingzcheung.xime.clipboard.clipboardShowsInCandidateBar
 import com.kingzcheung.xime.clipboard.ClipboardImageHeight
 import com.kingzcheung.xime.clipboard.clipboardImageHeight
 import com.kingzcheung.xime.clipboard.CLIPBOARD_RECENT_IMAGE_COUNT_KEY
@@ -195,7 +197,19 @@ private fun ClipboardPasteSettings() {
     val prefs = remember(context) { context.getSharedPreferences("clipboard_board", Context.MODE_PRIVATE) }
     // Same switch as the clipboard's own ⋯ menu (same preference).
     var closeAfterPaste by remember { mutableStateOf(clipboardClosesAfterPaste(prefs)) }
+    var showInBar by remember { mutableStateOf(clipboardShowsInCandidateBar(context)) }
     SettingsSection(title = "粘贴", content = {
+        // 用户 11-20 转来的反馈：最新复制的内容要能选不显示。默认开，和以前一样。
+        SettingsToggleItem(
+            icon = Icons.TwoTone.ContentPaste,
+            title = "候选栏显示刚复制的内容",
+            subtitle = "复制后打开键盘，候选栏先放刚复制的文字和图片；验证码不受影响",
+            checked = showInBar,
+            onCheckedChange = {
+                showInBar = it
+                prefs.edit().putBoolean(CLIPBOARD_SHOW_IN_BAR_KEY, it).apply()
+            },
+        )
         SettingsToggleItem(
             icon = Icons.TwoTone.ContentPaste,
             title = "上屏后自动关闭剪贴板",

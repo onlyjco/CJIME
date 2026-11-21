@@ -47,7 +47,7 @@ object BackupManager {
     internal val PERSONAL_PREFS = listOf("online_speech_api")
 
     /** 只带其中几个键的设置文件：clipboard_board 里还存着固定条目（pins），备份只带面板设置键。 */
-    internal val PARTIAL_PREFS = mapOf("clipboard_board" to setOf("card_max_lines", "image_height", "recent_image_count", "list_layout", "image_cache_mb", "close_after_paste"))
+    internal val PARTIAL_PREFS = mapOf("clipboard_board" to setOf("card_max_lines", "image_height", "recent_image_count", "list_layout", "image_cache_mb", "close_after_paste", "show_in_candidate_bar"))
 
     /** 只留 [keys] 里的键（[prefsToJson] 格式）。 */
     internal fun keepKeys(json: String, keys: Set<String>): String {
