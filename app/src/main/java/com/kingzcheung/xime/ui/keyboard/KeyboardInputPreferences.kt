@@ -157,8 +157,15 @@ data class KeyboardInputPreferences(
     val doublePinyinAuxCode: Boolean = false,
     /** 中文全拼 26 键中英混输（nihaohello → 你好hello），默认关；见 app/data/cyime_mixed_input.lua。 */
     val mixedInput: Boolean = false,
-    /** 中文全拼 26 键、双拼和九键补出生僻字（瀺 chan、槻 gui），默认关；见 app/data/cyime_rare_chars.lua。 */
+    /** 中文全拼 26 键、双拼和九键补出中文生僻字（瀺 chan），默认关；见 app/data/cyime_rare_chars.lua。 */
     val rareCharacters: Boolean = false,
+    /**
+     * 日文汉字（沢 ze、榎本武扬）、韩文汉字（乫 jia）、粤语字（佢 qu），11-20 从生僻字里分出来，各自默认关；同一个 lua。
+     * 没存过时跟「生僻字」原来的值（[splitFromRare]），开过生僻字的人更新后照样打得出。
+     */
+    val japaneseKanji: Boolean = false,
+    val koreanHanja: Boolean = false,
+    val cantoneseCharacters: Boolean = false,
     /**
      * 中文候选和上屏用台湾正体（台灣、計畫），默认关；Rime 选项 traditionalization，转换表见 assets/rime_chinese/opencc。
      * 注音也跟这一个开关（11-09 合并了原来单独的「注音输出简体」）：关时注音方案开 zhuyin_simplified 转简体。
@@ -298,6 +305,16 @@ data class KeyboardInputPreferences(
         const val MIXED_INPUT_KEY = "mixed_input"
         /** 生僻字开关；同繁体输出，输入法按字母、数字键前读它（ImeKeyRouter）。 */
         const val RARE_CHARACTERS_KEY = "rare_characters"
+        /** 日文汉字、韩文汉字、粤语字开关；同生僻字，按键前读。 */
+        const val JAPANESE_KANJI_KEY = "japanese_kanji"
+        const val KOREAN_HANJA_KEY = "korean_hanja"
+        const val CANTONESE_CHARACTERS_KEY = "cantonese_characters"
+
+        /**
+         * 11-20 前这些字都在「生僻字」里：新开关没存过时取生僻字的值，开过生僻字的人更新后不少字；没开过的照样是关。
+         */
+        fun splitFromRare(prefs: SharedPreferences, key: String): Boolean =
+            prefs.getBoolean(key, prefs.getBoolean(RARE_CHARACTERS_KEY, false))
         /** 繁体输出开关；同中英混输，输入法按键前读它（ImeKeyRouter）。 */
         const val TRADITIONAL_OUTPUT_KEY = "traditional_output"
         /** 旧的「注音输出简体」，已并入 [TRADITIONAL_OUTPUT_KEY]；不再读，[save] 顺手删掉。 */
@@ -376,6 +393,7 @@ data class KeyboardInputPreferences(
                 com.kingzcheung.xime.settings.LetterSwipeBindings.CHINESE, com.kingzcheung.xime.settings.LetterSwipeBindings.ENGLISH,
                 SettingsPreferences.KEY_SPLIT_KEYBOARD, SettingsPreferences.KEY_SPLIT_RIGHT_G, SettingsPreferences.KEY_FILL_KEYBOARD_BLANK, SettingsPreferences.KEY_WIDE_KEYS, SettingsPreferences.KEY_EVEN_MERGED_KEYS, SettingsPreferences.KEY_NUMBER_ROW, SettingsPreferences.KEY_SPLIT_GAP_PORTRAIT, SettingsPreferences.KEY_SPLIT_GAP_LANDSCAPE, CHINESE_GLIDE_KEY, DELETE_CHINESE_GLIDE_CHARACTER_KEY, GLIDE_PREVIEW_KEY, ENGLISH_AUTO_SPACE_KEY, ENGLISH_PUNCTUATION_SPACE_KEY, EMAIL_SUFFIXES_KEY, ADDRESS_FIELDS_ENGLISH_KEY, SYMBOL_NAMES_KEY, GREEK_LETTERS_KEY, CYLM_LONG_ALTERNATIVE_KEY,
                 "space_hold_action", "cursor_gesture_mode", "cursor_hold_seconds", "neighbor_correction", com.kingzcheung.xime.settings.SpellingPatches.DOUBLE_PINYIN_CORRECTION_KEY, MIXED_INPUT_KEY, RARE_CHARACTERS_KEY, TRADITIONAL_OUTPUT_KEY, CANDIDATE_EMOJI_KEY, DATETIME_CANDIDATES_KEY, "symbol_input_mode", "symbol_long_press_seconds", "symbol_long_press_seconds_v2", "cursor_step_dp", "cursor_swipe_lines", "cursor_step_haptic", "cursor_step_sound", "key_text_scale", CORNER_HINT_OPACITY_KEY, HIDE_FUNCTION_KEY_HINTS_KEY, UPPERCASE_KEY_LABELS_KEY, CHINESE_UPPERCASE_KEY_LABELS_KEY, "fixed_symbols",
+                JAPANESE_KANJI_KEY, KOREAN_HANJA_KEY, CANTONESE_CHARACTERS_KEY,
                 "fourteen_letter_swipe", "fourteen_letter_swipe_dp", "reverse_symbol_swipe", CLEAR_ALL_WHILE_COMPOSING_KEY, CLEAR_BEFORE_CURSOR_ONLY_KEY, SWIPE_DISTANCE_DELETE_KEY, com.kingzcheung.xime.keyboard.DeleteRepeatSpeed.KEY, REVERSE_DELETE_SWIPE_KEY, CLEAR_SWIPE_PERCENT_KEY, "syllable_split_key", "shift_syllable_split", "kana_direction_hints", "flick_direction_disc", "flick_direction_disc_v2",
                 "glide_typing", "glide_typing_v2", "letter_long_press_menu", "t9_flick_letters", "t9_glide_typing", "language_key_hold_seconds", "language_key_hold_seconds_v2", LANGUAGE_KEY_IME_PICKER_KEY, "symbol_key_hold_seconds", "t9_candidate_drag_percent", T9_MERGE_ZERO_ENTER_KEY, STROKE_MERGE_ZERO_ENTER_KEY,
                 SettingsPreferences.KEY_HANDWRITING_WUBI_HINTS, "qwerty_stagger_mode", "qwerty_stagger_custom", "qwerty_comma_key", "qwerty_period_key", "qwerty_period_key_v2", "bottom_punctuation_swipe_up_v3", com.kingzcheung.xime.service.ENGLISH_SENTENCE_CAPS,
@@ -467,6 +485,9 @@ data class KeyboardInputPreferences(
                     prefs.getString(com.kingzcheung.xime.settings.SpellingPatches.AUX_CODE_KEY, null)) != null,
                 mixedInput = prefs.getBoolean(MIXED_INPUT_KEY, false),
                 rareCharacters = prefs.getBoolean(RARE_CHARACTERS_KEY, false),
+                japaneseKanji = splitFromRare(prefs, JAPANESE_KANJI_KEY),
+                koreanHanja = splitFromRare(prefs, KOREAN_HANJA_KEY),
+                cantoneseCharacters = splitFromRare(prefs, CANTONESE_CHARACTERS_KEY),
                 traditionalOutput = prefs.getBoolean(TRADITIONAL_OUTPUT_KEY, false),
                 datetimeCandidates = prefs.getBoolean(DATETIME_CANDIDATES_KEY, false),
                 englishAutoSpace = prefs.getBoolean(ENGLISH_AUTO_SPACE_KEY, false),
@@ -540,6 +561,9 @@ data class KeyboardInputPreferences(
             .putBoolean(DOUBLE_PINYIN_SEMICOLON_ON_SHIFT_KEY, doublePinyinSemicolonOnShift)
             .putBoolean(MIXED_INPUT_KEY, mixedInput)
             .putBoolean(RARE_CHARACTERS_KEY, rareCharacters)
+            .putBoolean(JAPANESE_KANJI_KEY, japaneseKanji)
+            .putBoolean(KOREAN_HANJA_KEY, koreanHanja)
+            .putBoolean(CANTONESE_CHARACTERS_KEY, cantoneseCharacters)
             .putBoolean(TRADITIONAL_OUTPUT_KEY, traditionalOutput)
             .remove(LEGACY_ZHUYIN_SIMPLIFIED_KEY)
             .putBoolean(DATETIME_CANDIDATES_KEY, datetimeCandidates)

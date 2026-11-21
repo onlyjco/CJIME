@@ -41,6 +41,10 @@ object PerformanceCosts {
         CHINESE_GLIDE("chinese_glide", "中文滑行"),
         TRADITIONAL("traditional_output", "繁体输出"),
         RARE_CHARACTERS("rare_characters", "生僻字"),
+        // 11-20 从生僻字分出来的三张表，表小（几百条），开着时每键多查一次。
+        JAPANESE_KANJI("japanese_kanji", "日文汉字"),
+        KOREAN_HANJA("korean_hanja", "韩文汉字"),
+        CANTONESE_CHARACTERS("cantonese_characters", "粤语字"),
         DATETIME("datetime_candidates", "时间日期候选"),
         EMOJI("candidate_emoji", "候选里显示表情"),
         SYMBOL_NAMES("symbol_names", "打符号名出符号"),
@@ -173,6 +177,9 @@ object PerformanceCosts {
             Item.CHINESE_GLIDE -> input.chineseGlideTyping
             Item.TRADITIONAL -> input.traditionalOutput
             Item.RARE_CHARACTERS -> input.rareCharacters
+            Item.JAPANESE_KANJI -> input.japaneseKanji
+            Item.KOREAN_HANJA -> input.koreanHanja
+            Item.CANTONESE_CHARACTERS -> input.cantoneseCharacters
             Item.DATETIME -> input.datetimeCandidates
             Item.EMOJI -> input.candidateEmoji
             Item.SYMBOL_NAMES -> input.symbolNames
@@ -248,6 +255,9 @@ object PerformanceCosts {
             Item.CHINESE_GLIDE -> input.copy(chineseGlideTyping = on).save(context)
             Item.TRADITIONAL -> input.copy(traditionalOutput = on).save(context)
             Item.RARE_CHARACTERS -> input.copy(rareCharacters = on).save(context)
+            Item.JAPANESE_KANJI -> input.copy(japaneseKanji = on).save(context)
+            Item.KOREAN_HANJA -> input.copy(koreanHanja = on).save(context)
+            Item.CANTONESE_CHARACTERS -> input.copy(cantoneseCharacters = on).save(context)
             Item.DATETIME -> input.copy(datetimeCandidates = on).save(context)
             Item.EMOJI -> input.copy(candidateEmoji = on).save(context)
             Item.SYMBOL_NAMES -> input.copy(symbolNames = on).save(context)

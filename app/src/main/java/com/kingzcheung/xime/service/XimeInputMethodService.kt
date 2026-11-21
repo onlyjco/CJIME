@@ -1070,7 +1070,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 SettingsPreferences.KEY_LOCK_WORD_ORDER -> {
                     privacy.setLockWordOrder(SettingsPreferences.isLockWordOrder(this))
                 }
-                // 候选开关（繁体输出、表情、时间日期、符号名、希腊字母、生僻字、中英混输）：工具栏、菜单按钮或设置页一改就写进引擎，
+                // 候选开关（繁体输出、表情、时间日期、符号名、希腊字母、生僻字、日文汉字、韩文汉字、粤语字、中英混输）：工具栏、菜单按钮或设置页一改就写进引擎，
                 // 正在打的拼音当场按新设置出候选，不用等下一个字母键（以前关了繁体直接点候选或空格，上屏的还是繁体）。
                 com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences.TRADITIONAL_OUTPUT_KEY,
                 com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences.CANDIDATE_EMOJI_KEY,
@@ -1079,6 +1079,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences.GREEK_LETTERS_KEY,
                 com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences.CYLM_LONG_ALTERNATIVE_KEY,
                 com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences.RARE_CHARACTERS_KEY,
+                com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences.JAPANESE_KANJI_KEY,
+                com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences.KOREAN_HANJA_KEY,
+                com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences.CANTONESE_CHARACTERS_KEY,
                 com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences.MIXED_INPUT_KEY -> inputCommands.submit {
                     if (sessionController.applyCandidateOptions(persist = true)) withContext(Dispatchers.Main) { updateUI() }
                 }

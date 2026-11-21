@@ -31,7 +31,7 @@ class SettingsSearchTest {
 
     /** 11-02 整理：中文输出、拼音纠错、模糊音收进「中文输入」页，英文输入单独一页；搜到的都去那一页。 */
     @Test fun chineseAndEnglishInputItemsOpenTheirOwnPages() {
-        val chinese = listOf("繁体输出", "生僻字", "时间日期候选", "候选里显示表情", "打符号名出符号", "希腊字母",
+        val chinese = listOf("繁体输出", "生僻字", "日文汉字", "韩文汉字", "粤语字", "时间日期候选", "候选里显示表情", "打符号名出符号", "希腊字母",
             "邻键纠错", "双拼邻键纠错", "九键按数字也模糊", "模糊音也用于双拼", "模糊音")
         val english = listOf("网址、邮箱框自动切英文", "选词后自动加空格", "标点后自动加空格", "打 @ 时给邮箱后缀")
         for (title in chinese) SettingsSearchIndex.single { it.title == title }.let {

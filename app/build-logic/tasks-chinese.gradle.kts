@@ -48,7 +48,7 @@ val prepareChineseDictionaries by tasks.registering {
     inputs.property("candidateComments", 1)
     inputs.property("cyimeTerms", 3)
     inputs.property("taiwanTraditional", 1)
-    inputs.property("rareCharacters", 2)
+    inputs.property("rareCharacters", 3)
     inputs.property("datetimeHints", 2)
     inputs.property("symbolNames", 1)
     inputs.property("greekLetters", 1)
@@ -88,6 +88,13 @@ val prepareChineseDictionaries by tasks.registering {
     inputs.file(mixedInput)
     val rareChars = file("data/cyime_rare_chars.lua")
     inputs.file(rareChars)
+    // 日文汉字、韩文汉字、粤语字（他 11-20：是什么就叫什么），各自一个默认关的开关，不进主词库也不算生僻字。
+    val japaneseKanji = file("data/cyime_japanese_kanji.txt")
+    inputs.file(japaneseKanji)
+    val koreanChars = file("data/cyime_korean_chars.txt")
+    inputs.file(koreanChars)
+    val cantoneseChars = file("data/cyime_cantonese_chars.txt")
+    inputs.file(cantoneseChars)
     val greekLetters = file("data/cyime_greek_letters.lua")
     inputs.file(greekLetters)
     val shortcutOrder = file("data/cyime_shortcut_order.lua")
@@ -854,7 +861,8 @@ val prepareChineseDictionaries by tasks.registering {
 
         // 用户 11-11（B 站）说打不出的字：8105 里没有，原来只在默认关着的生僻字开关里（读音取 rime-ice 41448）。
         // 直接进主词库，单字权重 1 排在同音字最后，不抢常用字；生僻字表不再重复带它们。雫 8105 只有 xia，补上 na。
-        val directRareChars = linkedSetOf("吔\tye", "蚵\tke", "槻\tgui", "榎\tjia", "塁\tlei",
+        // 槻 榎 塁 原来也在这里，11-20 挪到「日文汉字」（日本的字，他：不该在主词库里）。
+        val directRareChars = linkedSetOf("吔\tye", "蚵\tke",
             // 用户 11-19（蛇喰梦子）：can qi sun 都打不出喰，它只在词里（东京喰种）。补上字典里的三个读音。
             "喰\tcan", "喰\tqi", "喰\tsun")
         val directRareTexts = directRareChars.mapTo(HashSet()) { it.substringBefore('\t') }
@@ -909,6 +917,44 @@ val prepareChineseDictionaries by tasks.registering {
             val fields = line.split('\t')
             if (!line.startsWith("#") && fields.size >= 2) { common += fields[0]; commonCodes += fields[1] }
         }
+        // 日文汉字（他 11-20：沢 这种字他从没见过，凭什么打得出来；是日语的字就叫日语的字，词组也一样）：
+        // data/cyime_japanese_kanji.txt 里的字和日本人名、地名、作品名不进主词库，挪到 cyime_japanese.txt，
+        // 「日文汉字」开着才出（lua/cyime_rare_chars.lua，默认关）。韩国自造的字、粤语字也各自一张表、一个开关。
+        fun charList(file: File): Pair<Set<String>, Set<String>> {
+            val chars = LinkedHashSet<String>()
+            val words = LinkedHashSet<String>()
+            file.readLines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }.forEach { line ->
+                if (line.startsWith("|")) words += line.drop(1)
+                else line.codePoints().forEach { chars += String(Character.toChars(it)) }
+            }
+            return chars to words
+        }
+        val (japaneseChars, japaneseWords) = charList(japaneseKanji)
+        val koreanSet = charList(koreanChars).first
+        val cantoneseSet = charList(cantoneseChars).first
+        check(japaneseChars.size > 400 && japaneseWords.isNotEmpty() && koreanSet.isNotEmpty() && cantoneseSet.size > 100) {
+            "Character lists in data/ are empty"
+        }
+        val japaneseRows = mutableListOf<String>()
+        for (name in listOf("base", "ext", "tencent", "others")) {
+            val dict = File(root, "cn_dicts/$name.dict.yaml")
+            var body = false
+            val kept = dict.readLines().filter { line ->
+                if (!body) { body = line.trim() == "..."; return@filter true }
+                val fields = line.split('\t')
+                val text = fields[0]
+                val japanese = !line.startsWith("#") && fields.size >= 2 &&
+                    (text in japaneseWords || text.codePoints().anyMatch { String(Character.toChars(it)) in japaneseChars })
+                if (japanese) japaneseRows += text + "\t" + fields[1]
+                !japanese
+            }
+            dict.writeText(kept.joinToString("\n", postfix = "\n"))
+        }
+        // 主词库里带日本字的词都要在表里（上游改了才会多出来，要人看过再分），表里的词也都要找到。
+        val movedWords = japaneseRows.map { it.substringBefore('\t') }.toSet()
+        check(movedWords == japaneseWords) {
+            "Japanese words in rime-ice changed: not listed ${movedWords - japaneseWords}, not found ${japaneseWords - movedWords}"
+        }
         val largeTable = File(root, "cn_dicts/41448.dict.yaml")
         var largeBody = false
         val rare = largeTable.readLines().filter { line ->
@@ -922,8 +968,21 @@ val prepareChineseDictionaries by tasks.registering {
         }
         check(rare.any { it == "瀺\tchan" } && rare.size > 15000) { "Upstream 41448.dict.yaml changed" }
         // Within a reading the large table goes by code point, Ext A (㙴) first; the URO ones (瀺) are the likelier.
-        File(root, "cyime_rare.txt").writeText(rare.sortedBy { if (it.codePointAt(0) < 0x4E00) 1 else 0 }
-            .joinToString("\n", postfix = "\n"))
+        fun writeList(name: String, rows: List<String>) = File(root, name).writeText(
+            rows.sortedBy { if (it.codePointAt(0) < 0x4E00) 1 else 0 }.joinToString("\n", postfix = "\n"))
+        val (japaneseCharRows, notJapanese) = rare.partition { it.substringBefore('\t') in japaneseChars }
+        val (koreanRows, notKorean) = notJapanese.partition { it.substringBefore('\t') in koreanSet }
+        val (cantoneseRows, chineseRows) = notKorean.partition { it.substringBefore('\t') in cantoneseSet }
+        // 表里的字都要在大字表里找得到（𠮟 是扩展 B，字体多半没有，不收）。
+        val found = (japaneseCharRows + koreanRows + cantoneseRows).map { it.substringBefore('\t') }.toSet()
+        check(found == (japaneseChars + koreanSet + cantoneseSet).filter { it.codePointAt(0) < 0x10000 }.toSet() &&
+            japaneseCharRows.any { it == "沢\tze" }) { "Character lists no longer match 41448.dict.yaml" }
+        writeList("cyime_rare.txt", chineseRows)
+        // Words keep their order (by reading as in rime-ice) after the characters.
+        File(root, "cyime_japanese.txt").writeText((japaneseCharRows.sortedBy { if (it.codePointAt(0) < 0x4E00) 1 else 0 } +
+            japaneseRows.distinct()).joinToString("\n", postfix = "\n"))
+        writeList("cyime_korean.txt", koreanRows)
+        writeList("cyime_cantonese.txt", cantoneseRows)
         largeTable.delete()
         val iceDict = File(root, "rime_ice.dict.yaml")
         val othersImport = "  - cn_dicts/others   # 一些杂项\n"

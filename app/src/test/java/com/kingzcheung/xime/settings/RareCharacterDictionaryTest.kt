@@ -11,6 +11,9 @@ class RareCharacterDictionaryTest {
 
     @Test fun offByDefaultAndOutsideTheMainDictionary() {
         assertFalse(KeyboardInputPreferences().rareCharacters)
+        assertFalse(KeyboardInputPreferences().japaneseKanji)
+        assertFalse(KeyboardInputPreferences().koreanHanja)
+        assertFalse(KeyboardInputPreferences().cantoneseCharacters)
         // Imported into rime_ice the list cost the nine-key replay +140% dictionary entries per key.
         assertFalse("cyime_rare" in DictionaryLookup.importTables(File(root, "rime_ice.dict.yaml")))
         assertFalse(File(root, "cn_dicts/41448.dict.yaml").exists())
@@ -42,8 +45,9 @@ class RareCharacterDictionaryTest {
         val commonCodes = common.map { it[1] }.toSet()
         val rare = File(root, "cyime_rare.txt").readLines().filter { it.isNotEmpty() }.map { it.split('\t') }
         assertTrue(listOf("瀺", "chan") in rare)
-        // 槻 went into the main dictionary 2026-11-12 with 吔、蚵、榎、塁; the rare list no longer repeats them.
-        listOf("槻", "吔", "蚵", "榎", "塁").forEach { ch -> assertFalse(ch, rare.any { it[0] == ch }) }
+        // 吔、蚵 went into the main dictionary 2026-11-12; the rare list no longer repeats them.
+        // 槻、榎、塁 (and 沢) are Japanese: 11-20 they are in cyime_japanese.txt, neither here nor in the main dictionary.
+        listOf("槻", "吔", "蚵", "榎", "塁", "沢").forEach { ch -> assertFalse(ch, rare.any { it[0] == ch }) }
         rare.forEach { row ->
             assertEquals(row.toString(), 2, row.size)
             assertEquals(row.toString(), 1, row[0].length)
@@ -51,5 +55,40 @@ class RareCharacterDictionaryTest {
             assertFalse(row.toString(), row[0] in commonText)
             assertTrue(row.toString(), row[1] in commonCodes)
         }
+    }
+
+    /**
+     * 他 11-20：沢 他从没见过，凭什么打得出来；是日语的字就叫日语的字，词组也一样。日文汉字、韩文汉字、粤语字各一张表、
+     * 一个开关，不在主词库，也不在「生僻字」里。
+     */
+    @Test fun japaneseKoreanAndCantoneseHaveTheirOwnLists() {
+        fun rows(name: String) = File(root, name).readLines().filter { it.isNotEmpty() }.map { it.split('\t') }
+        val rare = rows("cyime_rare.txt").map { it[0] }.toSet()
+        val japanese = rows("cyime_japanese.txt")
+        val korean = rows("cyime_korean.txt")
+        val cantonese = rows("cyime_cantonese.txt")
+        listOf("沢" to "ze", "槻" to "gui", "榎" to "jia", "塁" to "lei", "県" to "xian")
+            .forEach { (ch, code) -> assertTrue(ch, listOf(ch, code) in japanese) }
+        assertTrue(listOf("榎本武扬", "jia ben wu yang") in japanese)
+        assertTrue(listOf("四糸乃", "si si nai") in japanese)
+        assertTrue(listOf("乫", "jia") in korean)
+        assertTrue(listOf("佢", "qu") in cantonese)
+        for (list in listOf(japanese, korean, cantonese)) list.forEach { row ->
+            assertEquals(row.toString(), 2, row.size)
+            assertFalse(row.toString(), row[0] in rare)
+        }
+        // 中文也在用的留在中文：糸 砦 疋 碁 袴 竜 还在生僻字里，宏碁、石碁镇、者竜乡、糸部 还在主词库。
+        listOf("糸", "砦", "疋", "碁", "袴", "竜").forEach { assertTrue(it, it in rare) }
+        // 只是多一个粤语义项的字（㩒 同擒）还算中文生僻字。
+        assertTrue("㩒" in rare)
+        fun mainTexts(name: String) = File(root, "cn_dicts/$name.dict.yaml").readLines().dropWhile { it.trimEnd() != "..." }
+            .drop(1).filter { it.isNotBlank() && !it.startsWith("#") }.map { it.substringBefore('\t') }.toSet()
+        val main = listOf("base", "ext", "tencent", "others").flatMap { mainTexts(it) }.toSet()
+        val japaneseChars = japanese.map { it[0] }.filter { it.codePointCount(0, it.length) == 1 }.toSet()
+        main.forEach { word -> assertFalse(word, word.codePoints().anyMatch { String(Character.toChars(it)) in japaneseChars }) }
+        listOf("榎本武扬", "栃木县", "三个県", "糸守镇", "四糸乃").forEach { assertFalse(it, it in main) }
+        listOf("宏碁", "石碁镇", "者竜乡", "糸部", "古砦仫佬族乡").forEach { assertTrue(it, it in main) }
+        val terms = File(root, "cyime_terms.dict.yaml").readText()
+        listOf("槻\t", "榎\t", "塁\t").forEach { assertFalse(it, terms.contains("\n$it")) }
     }
 }

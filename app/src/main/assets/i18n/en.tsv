@@ -3735,6 +3735,12 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 在号码、验证码等输入框里自动打开数字键盘	Open the number pad in phone number and code fields
 在展开的菜单里直接调整按钮顺序和显示	Rearrange and show or hide buttons right in the open menu
 在常用字后面给出生僻字	Show rare characters after common ones
+在常用字后面给出中文生僻字	Show rare Chinese characters after common ones
+在中文字后面给出日本的字和日本人名地名	Show Japanese-only characters and Japanese names and places after Chinese ones
+韩文汉字	Korean hanja
+在中文字后面给出韩国自造的汉字	Show Korea-made characters after Chinese ones
+粤语字	Cantonese characters
+在中文字后面给出粤语用字	Show Cantonese characters after Chinese ones
 在当前语言和英文之间切换	Switch between the current language and English
 在桌面放一个图标，点一下打开字幕	Add a home screen icon that opens captions
 在游戏里不弹键盘，按键直接给游戏	In games, don't show the keyboard; keys go straight to the game

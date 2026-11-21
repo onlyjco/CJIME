@@ -79,10 +79,32 @@ private fun ChineseOutputSection() {
             costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.TRADITIONAL)
         HorizontalDivider()
         SettingsToggleItem(Icons.TwoTone.FontDownload, "生僻字",
-            "在常用字后面给出生僻字",
+            "在常用字后面给出中文生僻字",
             checked = input.rareCharacters, onCheckedChange = { input.copy(rareCharacters = it).save(context) },
             costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.RARE_CHARACTERS)
-        CandidateExtraLegend("rare-characters-legend", "gui", listOf("鬼", "贵", "归"), "槻", input.rareCharacters,
+        CandidateExtraLegend("rare-characters-legend", "chan", listOf("缠", "馋", "产"), "瀺", input.rareCharacters,
+            skipped = true)
+        HorizontalDivider()
+        // 11-20 从生僻字分出来（他：是日语的字就叫日语的字，是什么就叫什么），各自默认关，候选后面注「日」「韩」「粤」。
+        SettingsToggleItem(Icons.TwoTone.FontDownload, "日文汉字",
+            "在中文字后面给出日本的字和日本人名地名",
+            checked = input.japaneseKanji, onCheckedChange = { input.copy(japaneseKanji = it).save(context) },
+            costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.JAPANESE_KANJI)
+        CandidateExtraLegend("japanese-kanji-legend", "ze", listOf("泽", "则", "责"), "沢", input.japaneseKanji,
+            skipped = true)
+        HorizontalDivider()
+        SettingsToggleItem(Icons.TwoTone.FontDownload, "韩文汉字",
+            "在中文字后面给出韩国自造的汉字",
+            checked = input.koreanHanja, onCheckedChange = { input.copy(koreanHanja = it).save(context) },
+            costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.KOREAN_HANJA)
+        CandidateExtraLegend("korean-hanja-legend", "jia", listOf("家", "加", "假"), "乫", input.koreanHanja,
+            skipped = true)
+        HorizontalDivider()
+        SettingsToggleItem(Icons.TwoTone.FontDownload, "粤语字",
+            "在中文字后面给出粤语用字",
+            checked = input.cantoneseCharacters, onCheckedChange = { input.copy(cantoneseCharacters = it).save(context) },
+            costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.CANTONESE_CHARACTERS)
+        CandidateExtraLegend("cantonese-characters-legend", "qu", listOf("去", "区", "取"), "佢", input.cantoneseCharacters,
             skipped = true)
         HorizontalDivider()
         SettingsToggleItem(Icons.TwoTone.Schedule, "时间日期候选",

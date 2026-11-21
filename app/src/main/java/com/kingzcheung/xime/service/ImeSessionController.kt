@@ -594,6 +594,10 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             val cylmAlternative = prefs.getBoolean(KeyboardInputPreferences.CYLM_LONG_ALTERNATIVE_KEY, false)
             if (persist || cylmAlternative) add("cyime_cylm_alternative" to cylmAlternative)
             add("cyime_rare_chars" to prefs.getBoolean(KeyboardInputPreferences.RARE_CHARACTERS_KEY, false))
+            // 日文汉字、韩文汉字、粤语字（11-20 从生僻字分出来），同一个 lua 按各自的选项查各自的表。
+            add("cyime_japanese_kanji" to KeyboardInputPreferences.splitFromRare(prefs, KeyboardInputPreferences.JAPANESE_KANJI_KEY))
+            add("cyime_korean_hanja" to KeyboardInputPreferences.splitFromRare(prefs, KeyboardInputPreferences.KOREAN_HANJA_KEY))
+            add("cyime_cantonese_chars" to KeyboardInputPreferences.splitFromRare(prefs, KeyboardInputPreferences.CANTONESE_CHARACTERS_KEY))
             // 九键停一下后的数字纠错跟「拼音纠错」的开关走：按到上下左右的键跟邻键纠错，两个数字按反跟顺序纠错
             // （设置页里它要先开邻键纠错），少按一个跟漏键纠错。选项为真 = 关，没写过时都开。
             val neighbor = prefs.getBoolean("neighbor_correction", true)
