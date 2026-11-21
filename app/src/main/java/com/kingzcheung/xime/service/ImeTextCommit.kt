@@ -225,7 +225,9 @@ internal class ImeTextCommit(private val service: XimeInputMethodService) {
         // 编码是 h s p n z，原样上屏没有用（11-18 贡献者）。
         val strokeKeyboard = !hardware && service.uiState.value.let {
             !it.isAsciiMode && it.inputProfile.scheme == com.kingzcheung.xime.settings.InputScheme.STROKE }
-        val candidateFirst = !hardware && (strokeKeyboard || isSentencePunctuation(literal) &&
+        // 数字行、角标、长按打的数字（11-21 他报：想点候选误触了数字行，上屏成了 pinyinzimu1）：打着中文时先上屏高亮的候选再接数字
+        // （拼音字母 + 1），不再把字母原样上屏；打「di2」得到「第2」。实体键盘的数字照旧按序号选词，标点照旧先上屏字母。
+        val candidateFirst = !hardware && (strokeKeyboard || isComposingDigit(literal) || isSentencePunctuation(literal) &&
             com.kingzcheung.xime.settings.SettingsPreferences.isPunctuationCommitsCandidateEnabled(service))
         val submit: suspend () -> Unit = literal@ {
             if (owner != service.uiState.value.inputSessionId) return@literal
@@ -265,6 +267,10 @@ internal class ImeTextCommit(private val service: XimeInputMethodService) {
         }
         return submit
     }
+
+    /** 屏幕键盘打出的一个数字（半角或全角），见 [literalSubmission] 里的 candidateFirst。 */
+    private fun isComposingDigit(literal: String): Boolean =
+        literal.length == 1 && (literal[0] in '0'..'9' || literal[0] in '０'..'９')
 
     /** One editor transaction for prefix + literal, reused when leaving a typing panel.
      * [asTyped]: symbols, panels and the language key keep the letters, not the first candidate. */
