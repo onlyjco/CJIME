@@ -130,7 +130,7 @@ class SpaceVoiceHoldHintTest {
     private var cancelled = false
     private val lock = SpaceVoiceLockState()
 
-    /** 上面一条 100dp 高的「候选栏」，下面是空格；锁定区是候选栏右端一格。 */
+    /** 240×164dp 的「键区」，空格在最下面 64dp；锁按钮那一层铺满键区，按钮在右上角。 */
     private fun setKeyWithBar(swipeCancel: Boolean) {
         rule.setContent {
             CompositionLocalProvider(
@@ -143,12 +143,15 @@ class SpaceVoiceHoldHintTest {
                     isVoiceMode = listening, voiceSticky = listening),
                 LocalSpaceVoiceLock provides lock,
             ) {
-                androidx.compose.foundation.layout.Column {
-                    Box(Modifier.size(240.dp, 100.dp).spaceVoiceLockTarget(lock, Color.Blue).testTag("bar"))
-                    Box(Modifier.size(240.dp, 64.dp)) {
-                        SpaceKeyButton(onClick = {}, backgroundColor = Color.White, textColor = Color.Black,
-                            modifier = Modifier.testTag("space"))
+                Box(Modifier.size(240.dp, 164.dp)) {
+                    androidx.compose.foundation.layout.Column {
+                        Box(Modifier.size(240.dp, 100.dp).testTag("keys"))
+                        Box(Modifier.size(240.dp, 64.dp)) {
+                            SpaceKeyButton(onClick = {}, backgroundColor = Color.White, textColor = Color.Black,
+                                modifier = Modifier.testTag("space"))
+                        }
                     }
+                    SpaceVoiceLockLayer(lock, Color.Blue, Color.White, Modifier.matchParentSize())
                 }
             }
         }
@@ -158,7 +161,7 @@ class SpaceVoiceHoldHintTest {
     private fun hint(): List<String> = texts("space-voice-hold-hint") + texts("space-voice-cancel-hint")
 
     private fun state(): String = "listening=$listening cancelled=$cancelled armed=${lock.armed} locked=${lock.locked} " +
-        "holding=${lock.holding} bar=${lock.bar}\n${tree()}"
+        "holding=${lock.holding} host=${lock.host} space=${lock.space}\n${tree()}"
 
     /**
      * 按住空格到开麦，再分几步滑到 [to]（空格自己的坐标），停稳再看。
@@ -180,9 +183,12 @@ class SpaceVoiceHoldHintTest {
         setKeyWithBar(swipeCancel = false)
         holdAndSlide { androidx.compose.ui.geometry.Offset(width - 4f, -height * 0.4f) }
         assertEquals(state(), listOf("松手锁定"), hint())
+        // 按住说话时锁按钮浮出来，松手后收起（锁定后空格自己带锁）。
+        assertEquals(state(), 1, rule.onAllNodesWithTag("space-voice-lock-button", useUnmergedTree = true).fetchSemanticsNodes().size)
         rule.onNodeWithTag("space").performTouchInput { up() }
         settle()
         assertTrue("letting go in the corner must not end voice\n${state()}", listening && lock.locked)
+        assertEquals(state(), 0, rule.onAllNodesWithTag("space-voice-lock-button", useUnmergedTree = true).fetchSemanticsNodes().size)
         assertEquals(state(), listOf("点按结束"), hint())
         assertEquals(state(), 1, rule.onAllNodesWithTag("space-voice-lock-icon", useUnmergedTree = true).fetchSemanticsNodes().size)
         // 点一下空格：结束并上屏，键面恢复。

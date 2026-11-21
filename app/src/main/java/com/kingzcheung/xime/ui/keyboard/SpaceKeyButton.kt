@@ -31,6 +31,7 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
+import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.positionInRoot
 import androidx.compose.ui.platform.testTag
@@ -84,7 +85,7 @@ fun SpaceKeyButton(
         voiceLock?.holding = false
         voiceLock?.armed = false
     } }
-    // 空格在 Compose 根里的左上角：手指位置换算到根坐标，和右上角锁定区比。只在手势里读，不触发重组。
+    // 空格在 Compose 根里的左上角：手指位置换算到根坐标，和锁按钮比。只在手势里读，不触发重组。
     val spaceOrigin = remember { floatArrayOf(0f, 0f) }
     val currentClick by rememberUpdatedState(onClick)
     val currentPress by rememberUpdatedState(onPress)
@@ -122,7 +123,7 @@ fun SpaceKeyButton(
     val voiceLocked = voiceLock?.locked == true && isVoiceMode
     // 进入语音的样子同样只在麦克风真开着时出现：总开关关着、输入框不许语音时不假装在听。
     val showVoiceHold = (voiceHoldStarted || voiceLocked) && isVoiceMode
-    // 手指在右上角：松手就锁定。
+    // 手指在锁按钮上：松手就锁定。
     val showVoiceLockArmed = voiceHoldStarted && voiceLock?.armed == true
     // 锁定后这句结束了（点麦克风停、发送后没接着听、离开输入框）：稍等一下再解除，发送后接着听时锁定的样子不闪掉。
     LaunchedEffect(isVoiceMode, voiceLock?.locked) {
@@ -180,6 +181,7 @@ fun SpaceKeyButton(
             .onGloballyPositioned {
                 spaceCoords = it
                 it.positionInRoot().let { p -> spaceOrigin[0] = p.x; spaceOrigin[1] = p.y }
+                voiceLock?.space = it.boundsInRoot()
             }
             .pointerInput(holdAction, settings.cursorStepDp, settings.cursorSwipeLines, cursorUnitPx, settings.spaceHoldDelayMs,
                 settings.voiceSwipeCancel) {
@@ -249,11 +251,12 @@ fun SpaceKeyButton(
                             lastX = change.position.x
                             val dy = change.position.y - lastY
                             lastY = change.position.y
-                            // 滑到右上角（工具栏语音键的位置）：松手锁定。那一格不算上滑取消。
+                            // 滑到右上角浮起来的锁按钮上：松手锁定。那里不算上滑取消。
                             var lockArmed = false
                             if (startedVoice && voiceLock != null) {
-                                lockArmed = voiceLock.zoneContains(Offset(spaceOrigin[0] + change.position.x,
-                                    spaceOrigin[1] + change.position.y))
+                                val inRoot = Offset(spaceOrigin[0] + change.position.x, spaceOrigin[1] + change.position.y)
+                                lockArmed = voiceLock.zoneContains(inRoot)
+                                voiceLock.finger = inRoot
                                 if (lockArmed != voiceLock.armed) {
                                     voiceLock.armed = lockArmed
                                     if (lockArmed) view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
@@ -353,6 +356,7 @@ fun SpaceKeyButton(
                         }
                         voiceLock?.holding = false
                         voiceLock?.armed = false
+                        voiceLock?.finger = Offset.Unspecified
                         voiceHolding = false
                         voiceCancelArmed = false
                         voiceCancelPull = 0f

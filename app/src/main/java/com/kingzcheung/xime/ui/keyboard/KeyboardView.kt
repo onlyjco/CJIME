@@ -436,7 +436,7 @@ fun KeyboardView(
         ?: SettingsPreferences.punctuationFullWidth(androidx.compose.ui.platform.LocalContext.current, true))
     // 打开了「跟随全角半角」的字母键角标按它换写法（KeysConfigHelper.getKeyGesture）；在画键之前更新。
     com.kingzcheung.xime.settings.KeysConfigHelper.cornerFullWidth = punctuationFull
-    // 按住空格说话滑到右上角锁定：空格和候选栏右端的锁共用这一份状态（SpaceVoiceLock）。
+    // 按住空格说话滑到右上角锁定：空格和键区右上角浮出的锁按钮共用这一份状态（SpaceVoiceLock）。
     val spaceVoiceLock = remember { SpaceVoiceLockState() }
     CompositionLocalProvider(
         LocalInlineQuickActionEditor provides inlineEditor,
@@ -1740,7 +1740,7 @@ fun KeyboardView(
                         }
                     }
                 } else Modifier)
-                    .clipboardPanelExpandGesture().spaceVoiceLockTarget(spaceVoiceLock, accentColor).drawWithContent {
+                    .clipboardPanelExpandGesture().drawWithContent {
                     drawContent()
                     InputLatencyTrace.finish(candidateState.value.traceEventId, "draw-submitted")
                 },
@@ -2678,6 +2678,8 @@ fun KeyboardView(
                     }
                 }
             }
+            // 按住空格说话时键区右上角浮出的锁按钮（SpaceVoiceLock）：最上面一层，不接触摸、不占布局。
+            SpaceVoiceLockLayer(spaceVoiceLock, accentColor, keyBgColor, Modifier.matchParentSize().zIndex(30f))
             }
             }
 
