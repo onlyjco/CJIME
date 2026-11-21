@@ -17,6 +17,9 @@ import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
+import androidx.compose.ui.graphics.Paint
+import androidx.compose.ui.graphics.drawscope.clipRect
+import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
@@ -61,11 +64,20 @@ internal fun spaceVoiceLockZoneContains(bar: Rect, minWidthPx: Float, point: Off
     return point.x >= bar.right - zoneWidth && point.y <= bar.bottom
 }
 
+/** 锁那一格的左边（候选栏自己的坐标）。 */
+internal fun spaceVoiceLockZoneLeft(barWidth: Float, zoneWidth: Float): Float = (barWidth - zoneWidth).coerceAtLeast(0f)
+
+/** 锁那一格里原来内容的透明度：锁出现多少，底下就淡掉多少。 */
+internal fun spaceVoiceLockUnderAlpha(lockShown: Float): Float = (1f - lockShown).coerceIn(0f, 1f)
+
 /** 上滑取消：手指高过空格顶边一个键高（[yInKey] 是空格自己的坐标），右上角锁定区那一格除外。 */
 internal fun spaceVoiceCancelArmed(lockArmed: Boolean, yInKey: Float, keyHeight: Float): Boolean =
     !lockArmed && yInKey < -keyHeight
 
-/** 候选栏右端的锁：按住说话时淡出一个浅色圆，手指到位时涨满强调色、锁变白。 */
+/**
+ * 候选栏右端的锁：按住说话时淡出一个浅色圆，手指到位时涨满强调色、锁变白。
+ * 那一格原来的东西（▾ 展开、⌄ 收起键盘、候选字）跟着锁出现淡掉，松手再回来，不和锁叠在一起（#531）。
+ */
 @Composable
 internal fun Modifier.spaceVoiceLockTarget(state: SpaceVoiceLockState?, accent: Color): Modifier {
     if (state == null) return this
@@ -76,9 +88,21 @@ internal fun Modifier.spaceVoiceLockTarget(state: SpaceVoiceLockState?, accent: 
     return this
         .onGloballyPositioned { state.bar = it.boundsInRoot(); state.minZoneWidthPx = minWidthPx }
         .drawWithContent {
-            drawContent()
-            if (shown <= 0f) return@drawWithContent
+            if (shown <= 0f) {
+                drawContent()
+                return@drawWithContent
+            }
             val zoneWidth = maxOf(minWidthPx, size.width * SPACE_VOICE_LOCK_ZONE_FRACTION)
+            val zoneLeft = spaceVoiceLockZoneLeft(size.width, zoneWidth)
+            clipRect(right = zoneLeft) { this@drawWithContent.drawContent() }
+            val under = spaceVoiceLockUnderAlpha(shown)
+            if (under > 0f) clipRect(left = zoneLeft) {
+                drawIntoCanvas { canvas ->
+                    canvas.saveLayer(Rect(zoneLeft, 0f, size.width, size.height), Paint().apply { alpha = under })
+                    this@drawWithContent.drawContent()
+                    canvas.restore()
+                }
+            }
             val center = Offset(size.width - zoneWidth / 2f, size.height / 2f)
             val radius = size.height * (0.34f + 0.08f * armed) * shown
             drawCircle(accent.copy(alpha = (0.20f + 0.80f * armed) * shown), radius, center)

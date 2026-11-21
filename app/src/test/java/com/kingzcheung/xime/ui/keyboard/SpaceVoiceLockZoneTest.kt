@@ -26,6 +26,14 @@ class SpaceVoiceLockZoneTest {
         assertFalse("top-right key, below the toolbar", spaceVoiceLockZoneContains(bar, 150f, Offset(1000f, 760f)))
     }
 
+    @Test fun `what sits under the lock fades out as the lock comes in`() {
+        org.junit.Assert.assertEquals(1f, spaceVoiceLockUnderAlpha(0f), 0f)
+        org.junit.Assert.assertEquals(0.25f, spaceVoiceLockUnderAlpha(0.75f), 1e-6f)
+        org.junit.Assert.assertEquals(0f, spaceVoiceLockUnderAlpha(1f), 0f)
+        org.junit.Assert.assertEquals(907.2f, spaceVoiceLockZoneLeft(1080f, 172.8f), 1e-3f)
+        org.junit.Assert.assertEquals(0f, spaceVoiceLockZoneLeft(40f, 150f), 0f)
+    }
+
     @Test fun `narrow bars keep a finger-sized slot`() {
         val narrow = Rect(0f, 0f, 300f, 80f)
         // 0.16 * 300 = 48 < 150：用最小宽度。
