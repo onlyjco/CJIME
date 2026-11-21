@@ -60,6 +60,9 @@ internal data class CommitCaret(val caretBack: Int = 0, val overtype: String? = 
 /** 按 [caret] 上屏：结尾单独上屏并把光标放在它前面（newCursorPosition 0 = 插入文字的开头），整段算一次编辑。 */
 internal fun InputConnection.commitTextWithCaret(text: String, caret: CommitCaret): Boolean {
     val back = caret.caretBack.coerceIn(0, text.length)
+    // 跳过结尾也算一次新的上屏：上一次补结尾的延后检查作废。不然 300 ms 内点「(」再点「)」，光标前正好是 ()，
+    // 会被当成编辑框不认光标、又挪回括号中间（11-22 审查）。
+    if (caret.overtype != null) PairedSymbols.commitGeneration++
     beginBatchEdit()
     try {
         caret.overtype?.let { overtype ->

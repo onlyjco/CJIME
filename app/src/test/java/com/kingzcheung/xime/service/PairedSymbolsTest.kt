@@ -170,6 +170,14 @@ class PairedSymbolsTest {
         assertEquals("（《|》）", shown())
     }
 
+    /** 点「(」后马上点「)」（延后检查还没跑）：跳过结尾后光标留在 () 后面，不被前一次的检查挪回中间（11-22 审查）。 */
+    @Test fun closingRightAfterOpeningStaysOutside() {
+        type("("); type(")")
+        assertEquals("()|", shown())
+        settle(); settle()
+        assertEquals("()|", shown())
+    }
+
     @Test fun aSelectionIsReplacedByThePairLikeAnyTypedSymbol() {
         field.setText("你好")
         field.setSelection(0, 2)
