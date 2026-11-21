@@ -213,10 +213,9 @@ internal class ImeTextCommit(private val service: XimeInputMethodService) {
         val literal = keyboardLiteral(text, preserveWidth = preserveWidth, hardware = hardware)
         // 成对符号只管屏幕键盘；实体键盘的符号多数由引擎处理，只配一部分反而不一致。
         // 终端不认光标回退：补上的结尾会留在光标前面。
-        // 查出来不认光标位置的应用只上屏开头，不再补结尾又删掉（#489）。
+        // 不认光标位置的编辑框（#489 NotallyX、#436 浏览器）也补结尾，上屏后等它处理完再把光标挪回中间。
         val (paired, caret) = if (!hardware && !service.isTerminalEditor() &&
-            com.kingzcheung.xime.settings.SettingsPreferences.isPairedSymbolsEnabled(service) &&
-            !PairedSymbols.ignoresCaret(service.currentInputEditorInfo.pairedSymbolsKey()))
+            com.kingzcheung.xime.settings.SettingsPreferences.isPairedSymbolsEnabled(service))
             PairedSymbols.commitFor(literal) else literal to CommitCaret.NONE
         service.voiceRecognitionHandler.abandonPendingOnManualInput()
         val owner = service.uiState.value.inputSessionId

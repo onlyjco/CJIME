@@ -29,40 +29,56 @@ class PairedSymbolsTest {
 
     @org.junit.After fun restoreDeferredChecks() {
         PairedSymbols.deferCaretCheck = defaultDefer
-        PairedSymbols.forgetCaretIgnoringApps()
     }
 
-    /** 查出不认光标位置的应用记下来，之后在它里面不再补结尾（#489：结尾闪一下又被删）；正常编辑框不记。 */
-    @Test fun anAppThatIgnoresTheCaretIsRemembered() {
-        val ignoring = object : android.view.inputmethod.InputConnectionWrapper(connection, true) {
+    /** 不认 newCursorPosition 的编辑框，测试里用它模拟 NotallyX（#489）、浏览器地址栏（#436）。 */
+    private fun caretIgnoring(ignoreSelection: Boolean = false) =
+        object : android.view.inputmethod.InputConnectionWrapper(connection, true) {
             override fun commitText(text: CharSequence?, newCursorPosition: Int) = super.commitText(text, 1)
+            override fun setSelection(start: Int, end: Int) = if (ignoreSelection) true else super.setSelection(start, end)
+            // 测试里的 EditText 没挂到窗口上，按键送不到它：照宿主的样子处理左方向键。
+            override fun sendKeyEvent(event: android.view.KeyEvent): Boolean {
+                if (event.keyCode == android.view.KeyEvent.KEYCODE_DPAD_LEFT && event.action == android.view.KeyEvent.ACTION_DOWN)
+                    field.setSelection((field.selectionStart - 1).coerceAtLeast(0))
+                return true
+            }
         }
-        val (text, caret) = PairedSymbols.commitFor("（")
-        assertTrue(connection.commitTextWithCaret(text, caret, "normal.app"))
+
+    private fun InputConnection.typeAndSettle(literal: String) {
+        val (text, caret) = PairedSymbols.commitFor(literal)
+        assertTrue(commitTextWithCaret(text, caret))
         settle()
-        assertFalse(PairedSymbols.ignoresCaret("normal.app"))
-        assertTrue(ignoring.commitTextWithCaret(text, caret, "com.philkes.notallyx"))
         settle()
-        assertTrue(PairedSymbols.ignoresCaret("com.philkes.notallyx"))
-        assertFalse(PairedSymbols.ignoresCaret(null))
     }
 
-    /** #436：浏览器地址栏查出不认光标，同一个浏览器里网页文本框照样补结尾。 */
-    @Test fun onlyTheEditorThatIgnoresTheCaretIsRemembered() {
-        val urlBar = PairedSymbols.editorKey("com.android.chrome", 0x7f0b0001, 0x11)
-        val webTextArea = PairedSymbols.editorKey("com.android.chrome", 0x7f0b0002, 0x20001)
-        org.junit.Assert.assertNotEquals(urlBar, webTextArea)
-        org.junit.Assert.assertEquals(urlBar, PairedSymbols.editorKey("com.android.chrome", 0x7f0b0001, 0x11))
-        org.junit.Assert.assertNull(PairedSymbols.editorKey(null, 1, 1))
-        org.junit.Assert.assertNull(PairedSymbols.editorKey("", 1, 1))
-        val ignoring = object : android.view.inputmethod.InputConnectionWrapper(connection, true) {
-            override fun commitText(text: CharSequence?, newCursorPosition: Int) = super.commitText(text, 1)
-        }
+    /** #489 / #436：不认光标位置的编辑框也补结尾，等它处理完把光标挪回中间；接着打字留在里面，打结尾跳出去。 */
+    @Test fun editorsThatIgnoreTheCaretStillGetBothHalvesWithTheCaretBetween() {
+        val ignoring = caretIgnoring()
+        ignoring.typeAndSettle("《")
+        assertEquals("《|》", shown())
+        ignoring.typeAndSettle("好")
+        ignoring.typeAndSettle("的")
+        assertEquals("《好的|》", shown())
+        ignoring.typeAndSettle("》")
+        assertEquals("《好的》|", shown())
+    }
+
+    /** 连 setSelection 都不认的编辑框（部分网页）：再等一下按左方向键。 */
+    @Test fun editorsThatAlsoIgnoreSetSelectionGetLeftArrowKeys() {
+        val ignoring = caretIgnoring(ignoreSelection = true)
         val (text, caret) = PairedSymbols.commitFor("（")
-        assertTrue(ignoring.commitTextWithCaret(text, caret, urlBar))
+        assertTrue(ignoring.commitTextWithCaret(text, caret))
         settle()
-        assertTrue(PairedSymbols.ignoresCaret(urlBar))
-        assertFalse(PairedSymbols.ignoresCaret(webTextArea))
+        assertEquals("（）|", shown())
+        settle()
+        assertEquals("（|）", shown())
+    }
+
+    /** 正常编辑框不挪：光标本来就在中间，延后检查什么都不做。 */
+    @Test fun normalEditorsAreLeftAlone() {
+        type("（")
+        settle(); settle()
+        assertEquals("（|）", shown())
     }
 
     private fun settle() {
@@ -123,28 +139,6 @@ class PairedSymbolsTest {
         assertFalse(connection.deleteEmptyPairAroundCursor())
     }
 
-    /**
-     * 编辑框不认 newCursorPosition 0（光标总落在上屏文字后面，#280）：没法可靠地停在中间，
-     * 只上屏开头，不补结尾（11-14：挪回中间以后打一个字光标又跳出去）。接着打字留在原处，结尾自己打也不会多一个。
-     */
-    @Test fun editorsThatIgnoreTheCaretPositionGetOnlyTheOpeningHalf() {
-        val ignoring = object : android.view.inputmethod.InputConnectionWrapper(connection, true) {
-            override fun commitText(text: CharSequence?, newCursorPosition: Int) = super.commitText(text, 1)
-        }
-        fun typeInto(literal: String) {
-            val (text, caret) = PairedSymbols.commitFor(literal)
-            assertTrue(ignoring.commitTextWithCaret(text, caret))
-            settle()
-        }
-        typeInto("《")
-        assertEquals("《|", shown())
-        typeInto("好")
-        typeInto("的")
-        assertEquals("《好的|", shown())
-        typeInto("》")
-        assertEquals("《好的》|", shown())
-    }
-
     /** 正常编辑框：括号里连着打几个字都留在里面，打结尾才跳出去，不重复加（用户 11-14）。 */
     @Test fun typingSeveralCharactersStaysInsideUntilTheClosingHalf() {
         type("（"); type("n"); type("i"); type("好")
@@ -169,7 +163,7 @@ class PairedSymbolsTest {
         assertEquals("（|）", shown())
     }
 
-    /** 连着点两次开头：只按最后一次查，前一次的检查不再删东西。 */
+    /** 连着点两次开头：只按最后一次查，前一次的检查不再挪光标。 */
     @Test fun onlyTheLatestPairIsChecked() {
         type("（"); type("《")
         settle()
