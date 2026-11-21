@@ -292,7 +292,14 @@ fun HandwritingKeyboardLayout(
                                 letterCost = OverlappedHandwritingRecognizer.MODEL_LETTER_COST)).recognize(
                             points, gaps,
                             // 作废的识别在下一段推理前就停（见上），不会跑完整个切分再放锁
-                            predictFn = { seg, topK -> ensureActive(); HandwritingEngine.predict(seg, topK, recognitionLanguage) },
+                            predictFn = { seg, topK ->
+                                ensureActive()
+                                val candidates = HandwritingEngine.predict(seg, topK, recognitionLanguage)
+                                // 中文：日文汉字、韩文汉字、粤语字按各自的开关（默认关时不出，11-20）
+                                if (recognitionLanguage == InputLanguage.CHINESE)
+                                    com.kingzcheung.xime.settings.CharacterSwitchLists.withoutHidden(context, candidates) { it.char }
+                                else candidates
+                            },
                         ).segments, startsWord)
                     }
                 }

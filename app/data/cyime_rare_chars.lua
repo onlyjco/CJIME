@@ -15,10 +15,13 @@
   日文汉字、韩文汉字、粤语字（11-20，他：是什么就叫什么）：同样的查法，各自一张表、一个开关（默认关），候选注释
   加「日」「韩」「粤」（九键只写读音，右选和拂动筛选按注释里的拼音对）。日文汉字表里还有日本人名、地名
   （榎本武扬 jia ben wu yang），只在 26 键全拼和九键打满整个词时出。
+  常用字的少见读音（谜 mei、那 nei，8105 字表没收、大字表有的，11-20 他问开了开关还缺不缺字）也跟生僻字开关，
+  排在这个读音的生僻字前面；这些字本来就常用，上屏时不记次数（不然打一次 谜 mi，mei 下面的 谜 就提前了）。
+  注音（11-20）同 14 键、双拼：按注音方案的拼写规则把读音算成大千键码再查。
 --]]
 -- 排在同音字后面的先后：中文生僻字、日文汉字、韩文汉字、粤语字（选过的字照样提前，见 yield_rare）。
 local LISTS = {
-  { option = "cyime_rare_chars", file = "/cyime_rare.txt", mark = "" },
+  { option = "cyime_rare_chars", file = "/cyime_rare.txt", mark = "", readings = "/cyime_rare_readings.txt" },
   { option = "cyime_japanese_kanji", file = "/cyime_japanese.txt", mark = "日" },
   { option = "cyime_korean_hanja", file = "/cyime_korean.txt", mark = "韩" },
   { option = "cyime_cantonese_chars", file = "/cyime_cantonese.txt", mark = "粤" },
@@ -139,36 +142,45 @@ end
 -- librime-lua runs a full garbage collection every 256 Lua translations, and with 2 万 small tables each one stalled
 -- a key for about 3 ms on the PC host engine (16–21 times in 4,000 keys), also after the switch was turned off
 -- again. As strings no key took over 0.6 ms (2026-11-02).
--- list.chars: syllable → the characters of that reading, concatenated
+-- list.chars: syllable → the characters of that reading, concatenated (list.readings first)
+-- list.counted: the characters whose commits are counted (not the common ones of list.readings), one string
 -- list.words: whole code without spaces → "词\n" rows (日文汉字的人名、地名；只有 26 键全拼和九键查)
 -- list.digits: nine-key digits → "字\tsyllable\n" rows in file order (words: "词\tjia ben wu yang\n")
 local loaded = 0  -- lists loaded so far (count_rare_text rebuilds its string when this grows)
+local function read_rows(path, each)
+  local f = io.open(rime_api.get_shared_data_dir() .. path, "r") or io.open(rime_api.get_user_data_dir() .. path, "r")
+  if not f then return end
+  for line in f:lines() do
+    local text, code = line:match("^([^\t]+)\t(%l[%l ]*)$")
+    if text then each(text, code) end
+  end
+  f:close()
+end
+
 local function load_chars(list)
   if list.chars then return list.chars end
   local chars, words, digits = {}, {}, {}
   list.chars, list.words, list.digits, list.merged = chars, words, digits, {}
   loaded = loaded + 1
-  local f = io.open(rime_api.get_shared_data_dir() .. list.file, "r") or io.open(rime_api.get_user_data_dir() .. list.file, "r")
-  if not f then return chars end
-  local by_code, by_word, by_keys = {}, {}, {}
-  for line in f:lines() do
-    local text, code = line:match("^([^\t]+)\t(%l[%l ]*)$")
-    if text then
-      local joined = code:gsub(" ", "")
-      local into = joined == code and by_code or by_word
-      local same = into[joined]
-      if not same then same = {}; into[joined] = same end
-      same[#same + 1] = joined == code and text or text .. "\n"
-      local keys = joined:gsub("%l", function(c) local i = c:byte() - 96; return KEYPAD:sub(i, i) end)
-      local rows = by_keys[keys]
-      if not rows then rows = {}; by_keys[keys] = rows end
-      rows[#rows + 1] = text .. "\t" .. code .. "\n"
-    end
+  local by_code, by_word, by_keys, counted = {}, {}, {}, {}
+  local function add(text, code, count)
+    local joined = code:gsub(" ", "")
+    local into = joined == code and by_code or by_word
+    local same = into[joined]
+    if not same then same = {}; into[joined] = same end
+    same[#same + 1] = joined == code and text or text .. "\n"
+    if count and joined == code then counted[#counted + 1] = text end
+    local keys = joined:gsub("%l", function(c) local i = c:byte() - 96; return KEYPAD:sub(i, i) end)
+    local rows = by_keys[keys]
+    if not rows then rows = {}; by_keys[keys] = rows end
+    rows[#rows + 1] = text .. "\t" .. code .. "\n"
   end
-  f:close()
+  if list.readings then read_rows(list.readings, function(text, code) add(text, code, false) end) end
+  read_rows(list.file, function(text, code) add(text, code, true) end)
   for code, same in pairs(by_code) do chars[code] = table.concat(same) end
   for code, same in pairs(by_word) do words[code] = table.concat(same) end
   for keys, rows in pairs(by_keys) do digits[keys] = table.concat(rows) end
+  list.counted = table.concat(counted)
   return chars
 end
 
@@ -239,8 +251,9 @@ local function merged_map(env, list)
   -- One string per code (syllables separated by spaces), not a table: see load_chars.
   for _, form in ipairs(forms) do
     local code, syllable = form[1], form[2]
-    -- 分号：微软、搜狗双拼把 ing 放在分号键上。
-    if code:match("^[%l;]+$") then
+    -- 分号：微软、搜狗双拼把 ing 放在分号键上。注音的大千键码还有数字和 , . / - 键（声调是 3 4 6 7）；
+    -- 第一声是空格键，打出来的空格不算读音（reading 去掉了），只认不带声调和二到五声的码。
+    if not code:find("[%s'%u]") then
       map.codes[code] = map.codes[code] and (map.codes[code] .. " " .. syllable) or syllable
       if #code > map.longest then map.longest = #code end
     end
@@ -250,7 +263,7 @@ end
 
 -- 输入（合并键大写、侧滑选的字母小写）能对上的读音，按键上字母的顺序。
 local function merged_syllables(map, input)
-  if #input > map.longest or not input:match("^[%a;]+$") then return {} end
+  if #input > map.longest or input:find("[%s']") then return {} end
   local found, seen = {}, {}
   local function walk(i, prefix)
     if i > #input then
@@ -395,9 +408,7 @@ function count_rare_text(text)
   if not chars_all or chars_loaded ~= loaded then
     chars_loaded = loaded
     local parts = {}
-    for _, list in ipairs(LISTS) do
-      for _, same in pairs(list.chars or {}) do parts[#parts + 1] = same end
-    end
+    for _, list in ipairs(LISTS) do parts[#parts + 1] = list.counted end
     for _, common in pairs(COMMON) do parts[#parts + 1] = common end
     chars_all = table.concat(parts)
   end

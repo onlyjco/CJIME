@@ -91,4 +91,33 @@ class RareCharacterDictionaryTest {
         val terms = File(root, "cyime_terms.dict.yaml").readText()
         listOf("槻\t", "榎\t", "塁\t").forEach { assertFalse(it, terms.contains("\n$it")) }
     }
+
+    /**
+     * 他 11-20：开了开关还缺不缺字？常用字在大字表里的少见读音（谜 mei）也跟生僻字开关；手写、双拼、仓颉、注音都要一样。
+     */
+    @Test fun everyInputMethodFollowsTheSwitches() {
+        val common = File(root, "cn_dicts/8105.dict.yaml").readLines().dropWhile { it.trimEnd() != "..." }.drop(1)
+            .filter { it.isNotBlank() && !it.startsWith("#") }.map { it.split('\t') }
+        val readings = File(root, "cyime_rare_readings.txt").readLines().filter { it.isNotEmpty() }.map { it.split('\t') }
+        assertTrue(listOf("谜", "mei") in readings)
+        readings.forEach { row ->
+            assertEquals(row.toString(), 2, row.size)
+            assertTrue(row.toString(), common.any { it[0] == row[0] })
+            assertFalse(row.toString(), common.any { it[0] == row[0] && it[1] == row[1] })
+        }
+        // 注音：按注音自己的拼写规则查四张表。
+        val zhuyin = File("src/main/assets/rime_chinese/cyime_zhuyin.schema.yaml").readText()
+        assertTrue(zhuyin.contains("    - script_translator\n"))
+        assertTrue(zhuyin.contains("    - lua_translator@*cyime_rare_chars\n"))
+        assertTrue(zhuyin.contains("\ncyime_rare_merged_keys: true\n"))
+        // 仓颉、速成、笔画：码表按字形什么字都有，日文、韩文、粤语三类按开关滤掉。
+        for (name in listOf("cyime_cangjie", "cyime_quick", "stroke")) {
+            assertTrue(name, File("src/main/assets/rime_chinese/$name.schema.yaml").readText().contains("    - lua_filter@*cyime_char_lists\n"))
+        }
+        assertTrue(File("src/main/assets/rime_chinese/lua/cyime_char_lists.lua").isFile)
+        // 手写中文用同一份表（CharacterSwitchLists 读 assets 里的 rime_ice/）。
+        val japanese = com.kingzcheung.xime.settings.CharacterSwitchLists.parse(File(root, "cyime_japanese.txt").readText())
+        assertTrue("沢" in japanese && "槻" in japanese)
+        assertFalse("榎本武扬" in japanese)
+    }
 }

@@ -48,7 +48,7 @@ val prepareChineseDictionaries by tasks.registering {
     inputs.property("candidateComments", 1)
     inputs.property("cyimeTerms", 3)
     inputs.property("taiwanTraditional", 1)
-    inputs.property("rareCharacters", 3)
+    inputs.property("rareCharacters", 4)
     inputs.property("datetimeHints", 2)
     inputs.property("symbolNames", 1)
     inputs.property("greekLetters", 1)
@@ -911,11 +911,15 @@ val prepareChineseDictionaries by tasks.registering {
         // 黁 nun). The large table itself is no longer bundled: the generated list is about half its size.
         val common = HashSet<String>()
         val commonCodes = HashSet<String>()
+        val commonReadings = HashMap<String, MutableSet<String>>()
         var commonBody = false
         File(root, "cn_dicts/8105.dict.yaml").forEachLine { line ->
             if (!commonBody) { commonBody = line.trimEnd() == "..."; return@forEachLine }
             val fields = line.split('\t')
-            if (!line.startsWith("#") && fields.size >= 2) { common += fields[0]; commonCodes += fields[1] }
+            if (!line.startsWith("#") && fields.size >= 2) {
+                common += fields[0]; commonCodes += fields[1]
+                commonReadings.getOrPut(fields[0]) { HashSet() } += fields[1]
+            }
         }
         // 日文汉字（他 11-20：沢 这种字他从没见过，凭什么打得出来；是日语的字就叫日语的字，词组也一样）：
         // data/cyime_japanese_kanji.txt 里的字和日本人名、地名、作品名不进主词库，挪到 cyime_japanese.txt，
@@ -956,6 +960,17 @@ val prepareChineseDictionaries by tasks.registering {
             "Japanese words in rime-ice changed: not listed ${movedWords - japaneseWords}, not found ${japaneseWords - movedWords}"
         }
         val largeTable = File(root, "cn_dicts/41448.dict.yaml")
+        // 常用字的少见读音（他 11-20：开了生僻字还缺不缺字？谜 读 mei，8105 只有 mi）：大字表里有、8105 这个字没有的读音，
+        // 跟生僻字开关走（lua 里排在这个读音的生僻字前面，上屏不记次数）。雫 na 已经在 cyime_terms 里。
+        var readingsBody = false
+        val rareReadings = largeTable.readLines().filter { line ->
+            if (!readingsBody) { readingsBody = line.trimEnd() == "..."; return@filter false }
+            val fields = line.split('\t')
+            !line.startsWith("#") && fields.size == 2 && fields[0] in common && fields[1] in commonCodes &&
+                fields[1] !in commonReadings.getValue(fields[0]) && line != "雫\tna"
+        }.distinct()
+        check(rareReadings.any { it == "谜\tmei" } && rareReadings.size in 300..2000) { "Upstream readings changed: ${rareReadings.size}" }
+        File(root, "cyime_rare_readings.txt").writeText(rareReadings.joinToString("\n", postfix = "\n"))
         var largeBody = false
         val rare = largeTable.readLines().filter { line ->
             if (!largeBody) { largeBody = line.trimEnd() == "..."; return@filter false }
