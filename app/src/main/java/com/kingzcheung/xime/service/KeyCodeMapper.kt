@@ -89,6 +89,13 @@ internal fun capitalsKeepLiteralKey(key: String): Boolean = key.length == 1 && (
 
 internal fun compositionIsAllCapitals(input: String?): Boolean = !input.isNullOrEmpty() && input.all { it in 'A'..'Z' }
 
+/**
+ * 屏幕键盘数字行：只打了大写字母（N）时连同大写原样上屏（N1）。只在雾凇 26 键（rime_ice）——
+ * 14 键、双拼 14 键、自建合并键的编码本来就是大写代表字母（打 di 送进引擎的是 DU），那里打拼音再点 2 照旧得到「第2」。
+ */
+internal fun screenDigitKeepsCapitals(schemaId: String, input: String?): Boolean =
+    schemaId == "rime_ice" && compositionIsAllCapitals(input)
+
 internal fun isHardwareArrow(keyCode: Int): Boolean = keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
     keyCode == KeyEvent.KEYCODE_DPAD_RIGHT || keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
 

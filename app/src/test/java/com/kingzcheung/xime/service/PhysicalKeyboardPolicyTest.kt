@@ -156,6 +156,15 @@ class PhysicalKeyboardPolicyTest {
         for (key in listOf(",", "a", "N", "10", "space", "。")) assertFalse(key, capitalsKeepLiteralKey(key))
     }
 
+    /** 屏幕键盘数字行的大写例外只在雾凇 26 键：14 键打 di 送进引擎的是 DU，点 2 还要得到「第2」（11-22 审查）。 */
+    @Test fun `screen digit keeps capitals only on the 26-key rime_ice scheme`() {
+        assertTrue(screenDigitKeepsCapitals("rime_ice", "N"))
+        assertFalse("26 键拼音照旧先上屏候选", screenDigitKeepsCapitals("rime_ice", "di"))
+        assertFalse("14 键合并键是大写代表字母", screenDigitKeepsCapitals("pinyin_14jian", "DU"))
+        assertFalse("双拼 14 键同样", screenDigitKeepsCapitals("double_pinyin_flypy_14jian", "DU"))
+        assertFalse(screenDigitKeepsCapitals("t9_pinyin", "34"))
+    }
+
     /** 要在实体键盘数字选词、. 翻页之前拦下，不然 N1 的 1 还是会选词。 */
     @Test fun `the capitals check runs before digit selection and paging`() {
         val src = java.io.File("src/main/java/com/kingzcheung/xime/service/ImeKeyRouter.kt").readText()

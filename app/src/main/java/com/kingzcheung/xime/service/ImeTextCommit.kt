@@ -252,7 +252,9 @@ internal class ImeTextCommit(private val service: XimeInputMethodService) {
                 withContext(Dispatchers.Main) { Unit }
             }
             // 只打了大写字母（N、AGENTS）时点数字行，连同大写原样上屏（N1），同实体键盘 #528，不先上屏首选英文词。
-            val capitalsDigit = isComposingDigit(literal) && compositionIsAllCapitals(engine.getInput())
+            // 只在雾凇 26 键：14 键的合并键在引擎里是大写代表字母（di 送进去是 DU），不能当成打了大写（11-22 审查）。
+            val capitalsDigit = isComposingDigit(literal) &&
+                screenDigitKeepsCapitals(service.uiState.value.currentSchemaId, engine.getInput())
             if (candidateFirst && !capitalsDigit && !emailDomain && owner == service.uiState.value.inputSessionId &&
                 commitCandidateAndPunctuation(paired, caret)) return@literal
             if (owner != service.uiState.value.inputSessionId) return@literal
