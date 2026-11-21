@@ -251,7 +251,9 @@ internal class ImeTextCommit(private val service: XimeInputMethodService) {
                 // onT9RefreshComposition 不再二次 post，屏上候选与本队列的引擎输入因此同源。
                 withContext(Dispatchers.Main) { Unit }
             }
-            if (candidateFirst && !emailDomain && owner == service.uiState.value.inputSessionId &&
+            // 只打了大写字母（N、AGENTS）时点数字行，连同大写原样上屏（N1），同实体键盘 #528，不先上屏首选英文词。
+            val capitalsDigit = isComposingDigit(literal) && compositionIsAllCapitals(engine.getInput())
+            if (candidateFirst && !capitalsDigit && !emailDomain && owner == service.uiState.value.inputSessionId &&
                 commitCandidateAndPunctuation(paired, caret)) return@literal
             if (owner != service.uiState.value.inputSessionId) return@literal
             val committed = commitCompositionAndLiteral(output, asTyped = true, caret = caret)
