@@ -144,4 +144,25 @@ class PhysicalKeyboardPolicyTest {
         assertFalse("不按 Shift 的符号本来就走 Rime", hardwareSymbolIsLiteral("'", shifted = false, numpad = false, chinesePunctuation = true))
         assertFalse("Shift 字母不归这里管", hardwareSymbolIsLiteral("A", shifted = true, numpad = false, chinesePunctuation = false))
     }
+
+    @Test fun `digits and a dot after an all-capitals composition are typed as they are`() {
+        assertTrue(compositionIsAllCapitals("N"))
+        assertTrue(compositionIsAllCapitals("AGENTS"))
+        assertFalse("夹着拼音照旧", compositionIsAllCapitals("zuogeDNA"))
+        assertFalse(compositionIsAllCapitals("ni"))
+        assertFalse(compositionIsAllCapitals(""))
+        assertFalse(compositionIsAllCapitals(null))
+        for (key in listOf("0", "1", "9", ".")) assertTrue(key, capitalsKeepLiteralKey(key))
+        for (key in listOf(",", "a", "N", "10", "space", "。")) assertFalse(key, capitalsKeepLiteralKey(key))
+    }
+
+    /** 要在实体键盘数字选词、. 翻页之前拦下，不然 N1 的 1 还是会选词。 */
+    @Test fun `the capitals check runs before digit selection and paging`() {
+        val src = java.io.File("src/main/java/com/kingzcheung/xime/service/ImeKeyRouter.kt").readText()
+        val body = src.substringAfter("private fun routeKeyPress(")
+        val capitals = body.indexOf("compositionIsAllCapitals(")
+        assertTrue(capitals > 0)
+        assertTrue(capitals < body.indexOf("if (processHardwareCandidateKey(hardwareEvent)) return@command"))
+        assertTrue(capitals < body.indexOf("if (hardwarePageDirection != 0 &&"))
+    }
 }

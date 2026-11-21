@@ -1472,6 +1472,15 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 return@command
             }
             if (englishAutoSpace.isArmed && consumeEnglishAutoSpace(key)) return@command
+            // 实体键盘：大写字母组字（N、AGENTS）后打数字、点，原样接在后面上屏，不选词、不翻页（#528）。
+            // 屏幕键盘的数字、点本来就把字母原样上屏（literalSubmission），不走这里。
+            if (hardwareEvent != null && capitalsKeepLiteralKey(key) && !service.uiState.value.isAsciiMode &&
+                service.t9PartialSegments.isEmpty() &&
+                !(hardwareEvent.isCtrlPressed || hardwareEvent.isAltPressed || hardwareEvent.isMetaPressed) &&
+                compositionIsAllCapitals(service.rimeEngine.readQueuedComposition()?.input)) {
+                commitHardwareLiteral(key)
+                return@command
+            }
             if (hardwareEvent != null && !service.uiState.value.isAsciiMode &&
                 service.uiState.value.inputProfile.scheme == com.kingzcheung.xime.settings.InputScheme.ZHUYIN &&
                 routeZhuyinHardwareKey(key)) return@command

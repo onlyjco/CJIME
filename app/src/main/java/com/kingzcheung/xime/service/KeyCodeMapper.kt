@@ -80,6 +80,15 @@ internal fun hardwareSymbolIsLiteral(key: String, shifted: Boolean, numpad: Bool
     return !(chinesePunctuation && isLiteralPunctuation(key))
 }
 
+/**
+ * #528：雾凇系 26 键里大写字母进编码（zuogeDNAjiance → 做个DNA检测）。整串都是大写字母时，
+ * 后面的数字、点不是选第几个候选、也不是翻页，连同大写原样上屏：N1、B12、AGENTS.MD。
+ * 夹着拼音的（zuogeDNA）照旧。先看键，键对了才去读编码。
+ */
+internal fun capitalsKeepLiteralKey(key: String): Boolean = key.length == 1 && (key[0] in '0'..'9' || key[0] == '.')
+
+internal fun compositionIsAllCapitals(input: String?): Boolean = !input.isNullOrEmpty() && input.all { it in 'A'..'Z' }
+
 internal fun isHardwareArrow(keyCode: Int): Boolean = keyCode == KeyEvent.KEYCODE_DPAD_LEFT ||
     keyCode == KeyEvent.KEYCODE_DPAD_RIGHT || keyCode == KeyEvent.KEYCODE_DPAD_UP || keyCode == KeyEvent.KEYCODE_DPAD_DOWN
 
