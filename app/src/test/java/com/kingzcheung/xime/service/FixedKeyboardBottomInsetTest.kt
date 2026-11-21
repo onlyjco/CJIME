@@ -141,19 +141,67 @@ class FixedKeyboardBottomInsetTest {
         assertEquals(0, measure())
     }
 
-    /** 盘点冲突 4：自动档手势时三星「隐藏键盘」按钮不留位（11-03 用户要的），悬浮键盘照旧避开。 */
-    @Test fun samsungHideButtonIsCoveredInAutoButFloatingAvoidsIt() {
+    /**
+     * 11-21 三星用户截图：系统那条「⌄ 收起键盘」盖住了最下一排。那层在键盘窗口外面，键盘盖不住它（盘点冲突 4 当时想反了）：
+     * 自动档竖屏给它留位，悬浮键盘照旧避开。
+     */
+    @Test fun samsungHideButtonKeepsItsBarInAutoAndFloatingAvoidsIt() {
         ShadowBuild.setManufacturer("samsung")
         mode(2)
+        Settings.Global.putInt(activity.contentResolver, "navigation_bar_gesture_while_hidden", 1)
         Settings.Global.putInt(activity.contentResolver, "navigation_bar_gesture_hint", 1)
         Settings.Global.putInt(activity.contentResolver, "navigation_bar_button_to_hide_keyboard", 1)
+        assertEquals(48, measure())
+        // 关了「显示隐藏键盘按钮」：照旧贴到底。
+        Settings.Global.putInt(activity.contentResolver, "navigation_bar_button_to_hide_keyboard", 0)
         assertEquals(0, measure())
+        Settings.Global.putInt(activity.contentResolver, "navigation_bar_button_to_hide_keyboard", 1)
         val insets = WindowInsets.Builder().setInsets(WindowInsets.Type.navigationBars(), Insets.of(0, 0, 0, 48)).build()
         val normal = extractBottomInset(insets, activity.window)
         assertEquals(48, normal)
         assertEquals(48, floatingMinimumInsetPx(activity.window, insets, normal))
         SettingsPreferences.setKeyboardBottomPosition(activity, SettingsPreferences.KeyboardBottomPosition.KEEP_BUTTONS)
         assertEquals(48, measure())
+    }
+
+    /** 三星说明里「显示隐藏键盘按钮」只在竖屏显示：横屏照旧贴到底。 */
+    @Test @Config(qualifiers = "sw360dp-w800dp-h360dp-land-mdpi")
+    fun samsungHideButtonDoesNotKeepTheBarInLandscape() {
+        ShadowBuild.setManufacturer("samsung")
+        mode(2)
+        Settings.Global.putInt(activity.contentResolver, "navigation_bar_gesture_while_hidden", 1)
+        Settings.Global.putInt(activity.contentResolver, "navigation_bar_gesture_hint", 1)
+        Settings.Global.putInt(activity.contentResolver, "navigation_bar_button_to_hide_keyboard", 1)
+        assertEquals(0, measure())
+    }
+
+    /**
+     * 他的 S23 Ultra（One UI 8.5、Android 16）11-21 实测，换算成 dp（密度 2.625）：
+     * 手势 +「显示隐藏键盘按钮」：导航栏 39px=15dp，可点区域、手势区 126px=48dp，那条里有切换键盘和 ⌄；三键：三项都是 48dp。
+     * 两种都要留出整条 48dp，不管系统开关写的是什么。
+     */
+    @Test fun samsungOneUi85MeasuredReadingsKeepTheButtons() {
+        ShadowBuild.setManufacturer("samsung")
+        fun measureBars(nav: Int, tappable: Int, mandatory: Int): Int {
+            val insets = WindowInsets.Builder()
+                .setInsets(WindowInsets.Type.navigationBars(), Insets.of(0, 0, 0, nav))
+                .setInsets(WindowInsets.Type.tappableElement(), Insets.of(0, 0, 0, tappable))
+                .setInsets(WindowInsets.Type.mandatorySystemGestures(), Insets.of(0, 0, 0, mandatory)).build()
+            return fixedKeyboardBottomInsetPx(insets, activity.window, extractBottomInset(insets, activity.window))
+        }
+        Settings.Global.putInt(activity.contentResolver, "navigation_bar_button_to_hide_keyboard", 0)
+        for ((navigationMode, whileHidden) in listOf(2 to 1, 0 to 0)) {
+            mode(navigationMode)
+            Settings.Global.putInt(activity.contentResolver, "navigation_bar_gesture_while_hidden", whileHidden)
+            assertEquals("mode=$navigationMode", 48, measureBars(nav = 15, tappable = 48, mandatory = 48))
+        }
+        mode(0)
+        Settings.Global.putInt(activity.contentResolver, "navigation_bar_gesture_while_hidden", 0)
+        assertEquals(48, measureBars(nav = 48, tappable = 48, mandatory = 48))
+        // 手势、没报可点区域（没有按钮）：贴到底。
+        mode(2)
+        Settings.Global.putInt(activity.contentResolver, "navigation_bar_gesture_while_hidden", 1)
+        assertEquals(0, measureBars(nav = 15, tappable = 0, mandatory = 32))
     }
 
     @Test fun floatingKeyboardAvoidsReportedButtonsAndTheGestureZone() {

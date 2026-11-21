@@ -86,7 +86,7 @@ internal fun tryGetStatusBarHeightDp(context: Context, imeWindow: Window?): Int 
  * 自动档又把五条线索用「或」叠在一起，修一次「有缝」就多一台被挡的机型）。
  */
 internal enum class BottomNavKind(val label: String) {
-    TASKBAR("任务栏"), IME_BUTTONS("系统按钮条"), BUTTONS("三键"), GESTURE("手势"), UNKNOWN("说不清")
+    TASKBAR("任务栏"), IME_BUTTONS("系统按钮条"), SYSTEM_BUTTONS("系统盖在键盘上的按钮"), BUTTONS("三键"), GESTURE("手势"), UNKNOWN("说不清")
 }
 
 /** 一次读到的底部数值（px）和系统开关；读不到的开关为 null。 */
@@ -105,6 +105,8 @@ internal data class BottomNavReading(
     val largeScreen: Boolean = false,
     /** 三星手势提示开着、又开了「显示隐藏键盘按钮」：按钮画在键盘下面那条里。 */
     val samsungHideButton: Boolean = false,
+    /** 横屏。三星说明里「显示隐藏键盘按钮」只在竖屏显示。 */
+    val landscape: Boolean = false,
     /** 手势导航时系统给的手势条高度。 */
     val gestureBarPx: Int = 0,
     val density: Float = 1f,
@@ -118,9 +120,12 @@ internal data class BottomNavDecision(val kind: BottomNavKind, val step: Int)
  * 1 大屏有导航栏 → 任务栏；
  * 2 厂商手势开关说关（且 navigation_mode 没说手势），或 navigation_mode 可靠的厂商写 0/1 → 三键；
  * 3 本窗口里系统画了按钮条 → 按钮条（系统只在手势导航时画；开关明说三键时仍按整条三键留，只留按钮条会挡住三键）；
- * 4 navigation_mode=2（厂商开关没说关），或厂商手势开关说开 → 手势；
- * 开关读不到或互相矛盾才看 inset：5 可点区域占满整条 → 三键；6 可点区域没占满，且强制手势区比导航栏矮或整条只有手势条高 → 手势；
- * 7 其余说不清 → 整条留着（用户可选「贴到最底」）。
+ * 4 系统在键盘窗口外面画了一层按钮、盖在键盘上 → 给它留位（11-21）：可点区域比导航栏高出一截（三星 One UI 8.5 手势 +
+ *   「显示隐藏键盘按钮」实测导航栏 15dp、可点区域 48dp），或三星竖屏手势提示开着又开了「显示隐藏键盘按钮」（老 One UI 那条
+ *   只有 ⌄，可点区域报不报没量过）。11-03 以为键盘会盖住这个按钮，三星用户截图是按钮盖住了最下一排；
+ * 5 navigation_mode=2（厂商开关没说关），或厂商手势开关说开 → 手势；
+ * 开关读不到或互相矛盾才看 inset：6 可点区域占满整条 → 三键；7 可点区域没占满，且强制手势区比导航栏矮或整条只有手势条高 → 手势；
+ * 8 其余说不清 → 整条留着（用户可选「贴到最底」）。
  */
 internal fun classifyBottomNav(r: BottomNavReading): BottomNavDecision {
     val slack = (4 * r.density).roundToInt()
@@ -132,11 +137,12 @@ internal fun classifyBottomNav(r: BottomNavReading): BottomNavDecision {
             r.verifiedVendor && r.vendorGesture != true && (r.navigationMode == 0 || r.navigationMode == 1) ->
             at(BottomNavKind.BUTTONS, 2)
         r.imeButtonsPx > 0 -> at(BottomNavKind.IME_BUTTONS, 3)
-        r.navigationMode == 2 && r.vendorGesture != false || r.vendorGesture == true -> at(BottomNavKind.GESTURE, 4)
-        r.navPx <= 0 && r.tappablePx <= 0 -> at(BottomNavKind.GESTURE, 6)
-        r.tappablePx > 0 && r.tappablePx >= r.navPx - slack -> at(BottomNavKind.BUTTONS, 5)
-        r.tappablePx < r.navPx && (r.mandatoryPx < r.navPx || r.navPx <= gestureBarMax) -> at(BottomNavKind.GESTURE, 6)
-        else -> at(BottomNavKind.UNKNOWN, 7)
+        r.tappablePx > r.navPx + slack || r.samsungHideButton && !r.landscape -> at(BottomNavKind.SYSTEM_BUTTONS, 4)
+        r.navigationMode == 2 && r.vendorGesture != false || r.vendorGesture == true -> at(BottomNavKind.GESTURE, 5)
+        r.navPx <= 0 && r.tappablePx <= 0 -> at(BottomNavKind.GESTURE, 7)
+        r.tappablePx > 0 && r.tappablePx >= r.navPx - slack -> at(BottomNavKind.BUTTONS, 6)
+        r.tappablePx < r.navPx && (r.mandatoryPx < r.navPx || r.navPx <= gestureBarMax) -> at(BottomNavKind.GESTURE, 7)
+        else -> at(BottomNavKind.UNKNOWN, 8)
     }
 }
 
@@ -178,6 +184,7 @@ internal fun readBottomNav(insets: WindowInsets, context: Context, window: Windo
         verifiedVendor = gestureStripVerifiedVendor(vendor),
         largeScreen = context.resources.configuration.smallestScreenWidthDp >= 600,
         samsungHideButton = hideButton,
+        landscape = context.resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE,
         gestureBarPx = gestureBarHeightPx(context, hintHidden = gestureHint == 0),
         density = context.resources.displayMetrics.density,
     )
@@ -291,7 +298,7 @@ internal fun View.observeKeyboardBottomInsets(window: Window?, update: (WindowIn
 /**
  * 固定键盘底部下限（px）。「底部位置」三档：贴到最底 = 只躲屏幕底部缺口（系统画的按钮条也盖住，说明里写了）；
  * 留出导航按钮 = 整条导航栏；自动 = 决策表 [classifyBottomNav] 的结论，不再用几条线索「或」起来猜。
- * 自动档手势导航时不给三星「隐藏键盘」按钮留位（11-03 用户要的贴底效果），悬浮键盘照旧避开它。
+ * 系统盖在键盘上的按钮（第 4 步，如三星「隐藏键盘」按钮）留出它的高度：那层在键盘窗口外面，键盘盖不住它，只会被它挡住（11-21）。
  */
 internal fun fixedKeyboardMinimumInsetPx(insets: WindowInsets, window: Window, normalPx: Int,
     position: SettingsPreferences.KeyboardBottomPosition = SettingsPreferences.keyboardBottomPosition(window.context),
@@ -302,9 +309,14 @@ internal fun fixedKeyboardMinimumInsetPx(insets: WindowInsets, window: Window, n
     return when (position) {
         SettingsPreferences.KeyboardBottomPosition.FLUSH -> r.cutoutPx
         SettingsPreferences.KeyboardBottomPosition.KEEP_BUTTONS -> maxOf(normalPx, controls, r.navPx)
-        SettingsPreferences.KeyboardBottomPosition.AUTO -> when (classifyBottomNav(r).kind) {
+        SettingsPreferences.KeyboardBottomPosition.AUTO -> when (classifyBottomNav(r).also {
+            // 读数和走到第几步写进 logcat：以后看日志就知道那条是谁留的、按的哪一步（11-21 只拿到 inset，没拿到当时的判断）。
+            Log.d(INSETS_TAG, "decision: step=${it.step} ${it.kind} nav=${r.navPx} tappable=${r.tappablePx} " +
+                "mandatory=${r.mandatoryPx} ime=${r.imeButtonsPx} mode=${r.navigationMode} vendor=${r.vendorGesture} hide=${r.samsungHideButton}")
+        }.kind) {
             BottomNavKind.TASKBAR -> maxOf(r.navPx, controls)
             BottomNavKind.IME_BUTTONS -> maxOf(r.cutoutPx, r.imeButtonsPx)
+            BottomNavKind.SYSTEM_BUTTONS -> maxOf(controls, if (r.samsungHideButton) normalPx else 0)
             BottomNavKind.GESTURE -> r.cutoutPx
             BottomNavKind.BUTTONS, BottomNavKind.UNKNOWN -> maxOf(normalPx, controls, r.navPx)
         }
@@ -354,15 +366,21 @@ internal fun fixedKeyboardBottomInsetPx(insets: WindowInsets, window: Window, no
 
 /**
  * 手势导航时系统底部手势区的上沿（px，[view] 所在窗口的坐标）：从这里往下按住上滑会被系统当成回桌面。
- * 是不是手势导航看同一张决策表；手势区报得太小或没报时按 [GESTURE_ZONE_MIN_DP] 算。不是手势导航、Android 9 或读不到时为 null。
+ * 是不是手势导航看同一张决策表；手势区报得太小或没报时按 [GESTURE_ZONE_MIN_DP] 算。系统盖在键盘上的按钮（第 4 步）也算进去，
+ * 把手放在按钮上面。不是手势导航、Android 9 或读不到时为 null。
  */
 internal fun bottomGestureZoneTopInWindowPx(view: android.view.View): Int? {
     if (!AndroidPlatform.gestureInsets) return null
     val insets = view.rootWindowInsets ?: return null
     return runCatching {
         val r = readBottomNav(insets, view.context, null)
-        if (classifyBottomNav(r).kind != BottomNavKind.GESTURE) null
-        else view.rootView.height - maxOf(r.mandatoryPx, (GESTURE_ZONE_MIN_DP * r.density).roundToInt())
+        when (classifyBottomNav(r).kind) {
+            BottomNavKind.GESTURE -> view.rootView.height - maxOf(r.mandatoryPx, (GESTURE_ZONE_MIN_DP * r.density).roundToInt())
+            // 盖在键盘上的系统按钮：把手放在按钮和手势区上面，落在按钮里按不到。
+            BottomNavKind.SYSTEM_BUTTONS -> view.rootView.height -
+                maxOf(r.mandatoryPx, r.tappablePx, if (r.samsungHideButton) r.navPx else 0, (GESTURE_ZONE_MIN_DP * r.density).roundToInt())
+            else -> null
+        }
     }.getOrNull()
 }
 
@@ -376,7 +394,7 @@ internal fun floatingMinimumInsetPx(window: Window, insets: WindowInsets, normal
     val r = reading
     val controls = maxOf(r.cutoutPx, r.tappablePx, r.imeButtonsPx)
     return when (classifyBottomNav(r).kind) {
-        BottomNavKind.GESTURE, BottomNavKind.IME_BUTTONS -> maxOf(controls,
+        BottomNavKind.GESTURE, BottomNavKind.IME_BUTTONS, BottomNavKind.SYSTEM_BUTTONS -> maxOf(controls,
             if (r.mandatoryPx > 0) r.mandatoryPx else (GESTURE_ZONE_MIN_DP * r.density).roundToInt(),
             if (r.samsungHideButton) normalPx else 0)
         else -> maxOf(normalPx, controls, r.navPx, r.mandatoryPx)
