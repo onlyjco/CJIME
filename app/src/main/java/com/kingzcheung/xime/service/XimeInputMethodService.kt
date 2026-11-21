@@ -3616,6 +3616,12 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             return true
         }
         val e = event ?: return super.onKeyDown(keyCode, event)
+        // 没接实体键盘时的 Ctrl+字母（XposedEdge 等手势工具的复制、粘贴、全选、撤销）：交给应用，不打成字母（用户 11-21）。
+        if (passesInjectedShortcutToApp(hasHardwareKeyboard, e.isCtrlPressed, e.isAltPressed, e.isMetaPressed)) {
+            if (isHardwarePasteShortcut(keyCode, e.isCtrlPressed, e.isAltPressed, e.isMetaPressed, e.repeatCount) &&
+                !isTerminalEditor()) hideClipboardSuggestionsAfterPaste()
+            return super.onKeyDown(keyCode, event)
+        }
         if (hasHardwareKeyboard) {
             // Shift 单击切语言时这个键会被下面的快捷键吞掉，按住状态要先记下。
             // 全键盘手机的 Alt 数字层（Titan 2：Alt+字母 = 数字）：打字中按出数字就和数字键一样选候选（GitHub #295）。
