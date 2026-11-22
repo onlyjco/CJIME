@@ -202,6 +202,12 @@ traditionalize_user:
 
 # 四条整句里由词组模型挑最自然的一条放第一，同 26 键小鹤（双拼两个键一个字，按键数算音节）。没有 t9_ngram.lm 时照原样。
 t9:
+  # 按偏一个键（太大了 打成 TAUDAJE 太大可）：纠出的整词也拿来和原样的整句一起让词组模型比，词组模型认为纠出的
+  # 常见 e^9 倍以上（每纠一个音节算一次）才排第一，原样的退第二。2026-11-22 回归：打对的 15218 条里 2 条首选变
+  # （蛮软→埋怨、没可惜→没关系），按偏一个键的 1600 条里 272 条变成首选对。打的键本身拼得出词时不造句，不纠；
+  # 英文和专名照样第一（CTUmE 仍是 CyIME）。
+  slip_correction_margin: 9.0
+  slip_whole_words: true
   sentence_rescore: true
   rescore_keys_per_syllable: 2
   ngram_model: t9_ngram

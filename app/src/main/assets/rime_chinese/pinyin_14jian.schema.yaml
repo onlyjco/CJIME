@@ -235,6 +235,12 @@ recognizer:
 # 词组模型给 Rime 的四条整句重新打分（同 26 键；2026-10-20 电脑回归：整句首选 调参 LCCC 299→365、SMS 324→387，
 # 各列不变差，逐键 p95 约 +1.5%）。没有 t9_ngram.lm 时照原样只出一条。14 键不传前文，第一个词不按句首算。
 t9:
+  # 按偏一个键（太大了 打成 TAUDAJE 太大可）：纠出的整词也拿来和原样的整句一起让词组模型比，词组模型认为纠出的
+  # 常见 e^9 倍以上（每纠一个音节算一次）才排第一，原样的退第二。2026-11-22 回归：打对的 15218 条里 2 条首选变
+  # （蛮软→埋怨、没可惜→没关系），按偏一个键的 1600 条里 272 条变成首选对。打的键本身拼得出词时不造句，不纠；
+  # 英文和专名照样第一（CTUmE 仍是 CyIME）。
+  slip_correction_margin: 9.0
+  slip_whole_words: true
   sentence_rescore: true
   ngram_model: t9_ngram
   ngram_sentence_start: false

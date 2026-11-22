@@ -678,12 +678,18 @@ class PolicyTranslation : public Translation {
         const auto p = As<Phrase>(Candidate::GetGenuineCandidate(item));
         return p && p->correction_marks().find('=') != std::string::npos;
       };
+      // A corrected sentence first is the word model's choice (t9/slip_correction_margin, t9/slip_whole_words) and stays
+      // before Chinese readings; the word model knows nothing of a word that is not Chinese, so that one still leads.
+      const auto front = Candidate::GetGenuineCandidate(head_.front());
       if (is_corrected(head_.front())) {
+        const bool chosen = front && front->type() == "sentence";
         const auto second = head_.begin() + 1;
         const auto typed = std::find_if(second, head_.end(), [&](const an<Candidate>& item) {
-          return !is_corrected(item) && (!HanCharacters(item->text()).empty() || item == *second);
+          if (is_corrected(item)) return false;
+          return item == *second || (!chosen && !HanCharacters(item->text()).empty());
         });
-        if (typed != head_.end() && (*typed)->start() == 0 && (*typed)->end() == end_)
+        if (typed != head_.end() && (*typed)->start() == 0 && (*typed)->end() == end_ &&
+            (!chosen || HanCharacters((*typed)->text()).empty()))
           std::rotate(head_.begin(), typed, typed + 1);
       }
     }
@@ -730,8 +736,12 @@ class PolicyTranslation : public Translation {
     // the word or the sentence the word model chose); corrected words for part of the keys are dropped.
     if (merged_corrections_) {
       if (const auto p = As<Phrase>(Candidate::GetGenuineCandidate(cand))) {
-        if (p->correction_marks().find('=') != std::string::npos) {
-          if (cand->end() != end_ || merged_corrected_whole_) return nullptr;
+        const auto& marks = p->correction_marks();
+        if (marks.find('=') != std::string::npos) {
+          // One slip corrects one syllable. A reading through more corrected syllables (GABGZGUBQUE: 当众侮辱 for
+          // 刚准确) is listed only where the word model put it first (t9/slip_correction_margin, paid per syllable).
+          const bool one_slip = std::count(marks.begin(), marks.end(), '=') == 1;
+          if (cand->end() != end_ || merged_corrected_whole_ || (!one_slip && !head_.empty())) return nullptr;
           merged_corrected_whole_ = true;
         }
       }

@@ -2402,7 +2402,7 @@ index 99e4511..e518976 100644
      set_exhausted(true);
    }
    bool Evaluate(Dictionary* dict, UserDictionary* user_dict);
-@@ -161,12 +194,30 @@ class ScriptTranslation : public Translation {
+@@ -161,12 +202,30 @@ class ScriptTranslation : public Translation {
    virtual an<Candidate> Peek();
  
   protected:
@@ -2434,7 +2434,7 @@ index 99e4511..e518976 100644
    WordGraph PrepareForMakingSentence(Dictionary* dict,
                                       UserDictionary* user_dict);
    // 增量：只查新桶（end > old_interpreted）追加进缓存的 inc->graph，
-@@ -175,6 +226,7 @@ class ScriptTranslation : public Translation {
+@@ -175,6 +234,7 @@ class ScriptTranslation : public Translation {
    void EnrollIncrementalBuckets(Dictionary* dict,
                                  UserDictionary* user_dict,
                                  size_t old_interpreted);
@@ -2442,7 +2442,7 @@ index 99e4511..e518976 100644
    an<Sentence> MakeSentence(Dictionary* dict, UserDictionary* user_dict);
    deque<an<Sentence>> MakeSentences(Dictionary* dict,
                                      UserDictionary* user_dict);
-@@ -183,11 +235,38 @@ class ScriptTranslation : public Translation {
+@@ -183,11 +243,38 @@ class ScriptTranslation : public Translation {
    Poet* poet_;
    size_t start_;
    size_t end_of_input_;
@@ -2481,7 +2481,7 @@ index 99e4511..e518976 100644
  
    an<Phrase> candidate_ = nullptr;
    size_t candidate_index_ = 0;
-@@ -210,6 +289,12 @@ class ScriptTranslation : public Translation {
+@@ -210,6 +297,12 @@ class ScriptTranslation : public Translation {
    bool enable_correction_;
  };
  
@@ -2494,7 +2494,7 @@ index 99e4511..e518976 100644
  // ScriptTranslator implementation
  
  ScriptTranslator::ScriptTranslator(const Ticket& ticket)
-@@ -227,7 +312,16 @@ ScriptTranslator::ScriptTranslator(const Ticket& ticket)
+@@ -227,7 +320,16 @@ ScriptTranslator::ScriptTranslator(const Ticket& ticket)
                           &enable_word_completion_)) {
        enable_word_completion_ = enable_completion_;
      }
@@ -2511,7 +2511,7 @@ index 99e4511..e518976 100644
      config->GetBool(name_space_ + "/incremental_compose",
                      &incremental_enabled_);
      poet_.reset(new Poet(language(), config));
-@@ -262,7 +355,8 @@ an<Translation> ScriptTranslator::Query(const string& input,
+@@ -262,7 +364,8 @@ an<Translation> ScriptTranslator::Query(const string& input,
    // the translator should survive translations it creates
    auto result = New<ScriptTranslation>(
        this, corrector_.get(), poet_.get(), input, segment.start, end_of_input,
@@ -2521,7 +2521,7 @@ index 99e4511..e518976 100644
    if (!result || !result->Evaluate(
                       dict_.get(), enable_user_dict ? user_dict_.get() : NULL)) {
      return nullptr;
-@@ -329,11 +423,18 @@ bool ScriptTranslator::ProcessSegmentOnCommit(CommitEntry& commit_entry,
+@@ -329,11 +432,18 @@ bool ScriptTranslator::ProcessSegmentOnCommit(CommitEntry& commit_entry,
    bool recognized = Language::intelligible(phrase, this);
    if (recognized) {
      queue_.push_back(phrase);
@@ -2540,7 +2540,7 @@ index 99e4511..e518976 100644
    }
  
    return true;
-@@ -413,12 +514,28 @@ size_t ScriptSyllabifier::BuildSyllableGraph(Prism& prism) {
+@@ -413,12 +523,28 @@ size_t ScriptSyllabifier::BuildSyllableGraph(Prism& prism) {
      if (inc->enabled)
        cache = &inc->syllable_cache;
    }
@@ -2572,7 +2572,7 @@ index 99e4511..e518976 100644
    vector<bool> path_attributes;
    path_attributes.reserve(8);
  
-@@ -435,7 +552,15 @@ bool ScriptSyllabifier::IsCorrection(const Code& code,
+@@ -435,7 +561,15 @@ bool ScriptSyllabifier::IsCorrection(const Code& code,
            if (end_iter != start_iter->second.end()) {
              auto prop_iter = end_iter->second.find(id);
              if (prop_iter != end_iter->second.end()) {
@@ -2589,7 +2589,7 @@ index 99e4511..e518976 100644
                return;
              }
            }
-@@ -446,7 +571,7 @@ bool ScriptSyllabifier::IsCorrection(const Code& code,
+@@ -446,7 +580,7 @@ bool ScriptSyllabifier::IsCorrection(const Code& code,
        // pop
        [&](SyllabifyTask* task, size_t depth) { path_attributes.pop_back(); }};
  
@@ -2598,7 +2598,7 @@ index 99e4511..e518976 100644
      for (bool is_correction : path_attributes) {
        if (is_correction)
          return true;
-@@ -455,6 +580,132 @@ bool ScriptSyllabifier::IsCorrection(const Code& code,
+@@ -455,6 +589,132 @@ bool ScriptSyllabifier::IsCorrection(const Code& code,
    return false;
  }
  
@@ -2731,7 +2731,7 @@ index 99e4511..e518976 100644
  string ScriptSyllabifier::GetPreeditString(const Phrase& cand) const {
    const auto& delimiters = translator_->delimiters();
    std::stack<size_t> lengths;
-@@ -492,7 +743,7 @@ string ScriptSyllabifier::GetOriginalSpelling(const Phrase& cand) const {
+@@ -492,7 +752,7 @@ string ScriptSyllabifier::GetOriginalSpelling(const Phrase& cand) const {
  
  template <class Ptr, class Iter>
  static bool has_exact_match_phrase(Ptr ptr, Iter iter, size_t consumed) {
@@ -2740,7 +2740,7 @@ index 99e4511..e518976 100644
           iter->second.Peek()->IsExactMatch();
  }
  
-@@ -508,7 +759,8 @@ bool ScriptTranslation::Evaluate(Dictionary* dict, UserDictionary* user_dict) {
+@@ -508,7 +768,8 @@ bool ScriptTranslation::Evaluate(Dictionary* dict, UserDictionary* user_dict) {
      T9IncTimer pos0_timer("stage-eval-pos0");
      phrase_ =
          dict->Lookup(syllable_graph, 0, &translator_->blacklist(),
@@ -2750,7 +2750,7 @@ index 99e4511..e518976 100644
      if (user_dict) {
        const size_t kUnlimitedDepth = 0;
        const size_t kNumSyllablesToPredictWord = 4;
-@@ -525,19 +777,122 @@ bool ScriptTranslation::Evaluate(Dictionary* dict, UserDictionary* user_dict) {
+@@ -525,19 +786,126 @@ bool ScriptTranslation::Evaluate(Dictionary* dict, UserDictionary* user_dict) {
    if (user_phrase_)
      user_phrase_iter_ = user_phrase_->rbegin();
  
@@ -2838,7 +2838,11 @@ index 99e4511..e518976 100644
 +  if (phrase_ && phrase_iter_ != phrase_->rend() && phrase_iter_->first == consumed &&
 +      !phrase_iter_->second.exhausted() && syllabifier_->HasDoubledLetterIn(0, consumed) &&
 +      syllabifier_->UsesDoubledLetter(phrase_iter_->second.Peek()->code, consumed)) {
-+    merged_tail_word = phrase_iter_->second.Peek();
++    // A corrected word (14-key neighbour correction, translator/cyime_merged_key_neighbors) never leads this way:
++    // the tail-word margin is small, and TUBGGAUBAOCUB read 永远都不能 through four corrected keys before 应该保存.
++    const auto tail_word = phrase_iter_->second.Peek();
++    if (!enable_correction_ || !syllabifier_->IsCorrection(tail_word->code, consumed))
++      merged_tail_word = tail_word;
 +    phrase_iter_->second.PreferCodes([this, consumed](const Code& code) {
 +      return !syllabifier_->UsesDoubledLetter(code, consumed);
 +    });
@@ -2876,7 +2880,7 @@ index 99e4511..e518976 100644
  
    bool has_at_least_two_syllables = syllable_graph.edges.size() >= 2;
    DLOG(INFO) << "consumed: " << consumed
-@@ -545,8 +900,15 @@ bool ScriptTranslation::Evaluate(Dictionary* dict, UserDictionary* user_dict) {
+@@ -545,8 +913,15 @@ bool ScriptTranslation::Evaluate(Dictionary* dict, UserDictionary* user_dict) {
               << ", has_reliable_user_phrase: " << has_reliable_user_phrase
               << ", has_at_least_two_syllables: " << has_at_least_two_syllables;
    // make sentences when there is no exact-matching phrase candidate
@@ -2894,7 +2898,7 @@ index 99e4511..e518976 100644
      if (max_sentences_ > 1)
        sentences_ = MakeSentences(dict, user_dict);
      else if (max_sentences_) {
-@@ -558,6 +920,105 @@ bool ScriptTranslation::Evaluate(Dictionary* dict, UserDictionary* user_dict) {
+@@ -558,6 +933,134 @@ bool ScriptTranslation::Evaluate(Dictionary* dict, UserDictionary* user_dict) {
      }
    }
  
@@ -2947,13 +2951,40 @@ index 99e4511..e518976 100644
 +      }
 +    }
 +  }
++  // CyIME (t9/slip_whole_words, 14 keys): a key covers two letters, so a slip onto the next key still reads as a
++  // sentence of the typed letters (TAUDAJE: 太大可) and the word meant is a corrected dictionary word (太大了) that
++  // never enters the n-best, which holds typed sentences only. The best corrected word for all the keys joins the
++  // sentences as a one-word sentence, and the slip rule (t9/slip_correction_margin) weighs it against the typed
++  // choice with the word model. When the keys spell a word as typed no sentence is made and nothing changes.
++  if (t9_slip_whole_words_ && t9_sentence_rescore_ && t9_ngram_ && enable_correction_ && !sentences_.empty() &&
++      t9_slip_correction_margin_ > 0) {
++    const auto whole = dict->Lookup(syllable_graph, 0, &translator_->blacklist(), false, 0.0, 0,
++                                    translator_->complete_short_prefix(), false);
++    if (whole && whole->find(consumed) != whole->end()) {
++      DictEntryIterator& words = whole->find(consumed)->second;
++      for (size_t looked = 0; looked < 8 && !words.exhausted(); ++looked, words.Next()) {
++        const auto entry = words.Peek();
++        if (!syllabifier_->IsCorrection(entry->code, consumed)) continue;
++        const bool listed = std::any_of(sentences_.begin(), sentences_.end(),
++                                        [&](const auto& sentence) { return sentence->text() == entry->text; });
++        if (!listed) {
++          auto word = New<Sentence>(translator_->language());
++          word->Extend(*entry, consumed, poet_->WordWeight(*entry, translator_->GetPrecedingText(start_)));
++          word->Offset(start_);
++          word->set_syllabifier(syllabifier_);
++          sentences_.push_back(word);
++        }
++        break;
++      }
++    }
++  }
 +  if (t9_sentence_rescore_ && (sentences_.size() > 1 || lone_correction || (initials_choice && !sentences_.empty()))) {
 +    // cyime_rime/t9_sentence_rescore.cc
 +    const an<PhraseSyllabifier> phrase_syllabifier = syllabifier_;
 +    T9RescoreSentences(T9Query(phrase_syllabifier), t9_ngram_.get(), t9_ngram_sentence_start_, t9_rescore_keys_per_syllable_, t9_rescore_rime_weight_, t9_tail_correction_margin_, t9_slip_correction_margin_, t9_initials_choices_,
 +                       initials_choice ? t9_initials_lead_margin_ : 0.0, initials_first_, t9_near_homophone_penalty_, poet_,
 +                       t9_sentence_graph_, SentencesToMake(), sentence_cutoff_threshold_, exact_sentence_, rime_best,
-+                       &sentences_);
++                       &sentences_, t9_slip_whole_words_);
 +    initials_ranked_ = initials_choice;
 +  }
 +  // With stray initials (Syllabifier::MarkStrayInitials) the typed reading only stands through initials weighed as
@@ -2962,7 +2993,9 @@ index 99e4511..e518976 100644
 +    return syllabifier_->IsCorrection(sentence->code(), sentence->end() - start_);
 +  };
 +  // Input typed as initials only has its order from the computed score (t9/initials_choices).
-+  if (!initials_ranked_ && syllable_graph.cyime_stray_initials && rime_best && enable_correction_ && !sentences_.empty() &&
++  // Not with t9/slip_whole_words (14 keys), where a corrected sentence leads only by t9/slip_correction_margin.
++  if (!initials_ranked_ && !t9_slip_whole_words_ && syllable_graph.cyime_stray_initials && rime_best &&
++      enable_correction_ && !sentences_.empty() &&
 +      !corrected(sentences_.front()) && corrected(rime_best)) {
 +    sentences_.erase(std::remove(sentences_.begin(), sentences_.end(), rime_best), sentences_.end());
 +    sentences_.push_front(rime_best);
@@ -3000,7 +3033,7 @@ index 99e4511..e518976 100644
    return !CheckEmpty();
  }
  
-@@ -599,8 +1060,9 @@ bool ScriptTranslation::Next() {
+@@ -599,8 +1102,9 @@ bool ScriptTranslation::Next() {
      }
    } while (enable_correction_ &&
             syllabifier_->IsCorrection(candidate_->code(),
@@ -3012,7 +3045,7 @@ index 99e4511..e518976 100644
             ++correction_count_ > max_corrections_);
    if (!CheckEmpty()) {
      ++candidate_index_;
-@@ -647,11 +1109,25 @@ iter_incremented:
+@@ -647,11 +1151,25 @@ iter_incremented:
      candidate_ = nullptr;
      return false;
    }
@@ -3039,7 +3072,7 @@ index 99e4511..e518976 100644
    const size_t full_code_length = end_of_input_ - start_;
    size_t user_phrase_code_length = 0;
    if (user_phrase_ && user_phrase_iter_ != user_phrase_->rend()) {
-@@ -672,6 +1148,11 @@ iter_incremented:
+@@ -672,6 +1190,11 @@ iter_incremented:
              bool user_is_correction = syllabifier_->IsCorrection(
                  uter.Peek()->code, phrase_code_length);
              if (user_is_correction) {
@@ -3051,7 +3084,7 @@ index 99e4511..e518976 100644
                // 因對糾錯候選施加了較大懲罰, 通常結果爲 系統原文 > 用戶糾錯
                // 兩者皆糾錯時, 用戶詞的動態權重有助達成 用戶糾錯 > 系統糾錯
                return uter.Peek()->weight >= iter.Peek()->weight;
-@@ -705,7 +1186,17 @@ iter_incremented:
+@@ -705,7 +1228,17 @@ iter_incremented:
        ++phrase_iter_;
        goto iter_incremented;
      }
@@ -3070,7 +3103,7 @@ index 99e4511..e518976 100644
      DLOG(INFO) << "phrase '" << entry->text
                 << "', code length: " << phrase_code_length;
      candidate_source_ = kSysPhrase;
-@@ -725,7 +1216,7 @@ iter_incremented:
+@@ -725,7 +1258,7 @@ iter_incremented:
  }
  
  bool ScriptTranslation::CheckEmpty() {
@@ -3079,7 +3112,7 @@ index 99e4511..e518976 100644
                  (!user_phrase_ || user_phrase_iter_ == user_phrase_->rend()));
    return exhausted();
  }
-@@ -733,15 +1224,99 @@ bool ScriptTranslation::CheckEmpty() {
+@@ -733,15 +1266,99 @@ bool ScriptTranslation::CheckEmpty() {
  template <class QueryResult>
  void ScriptTranslation::EnrollEntries(
      map<int, DictEntryList>& entries_by_end_pos,
@@ -3181,7 +3214,7 @@ index 99e4511..e518976 100644
        }
      }
    }
-@@ -761,16 +1336,66 @@ static bool has_completion_edge(const SyllableGraph& graph) {
+@@ -761,16 +1378,66 @@ static bool has_completion_edge(const SyllableGraph& graph) {
  }
  
  // 九键输入特征：纯数字串（用于限定增量回退诊断日志的输出范围）
@@ -3250,7 +3283,7 @@ index 99e4511..e518976 100644
  bool ScriptTranslator::TryBeginIncremental(const string& input,
                                             UserDictionary* user_dict,
                                             size_t* old_interpreted) {
-@@ -806,7 +1431,7 @@ bool ScriptTranslator::TryBeginIncremental(const string& input,
+@@ -806,7 +1473,7 @@ bool ScriptTranslator::TryBeginIncremental(const string& input,
    if (miss) {
      // 仅诊断九键场景的回退（字母输入每键都会 miss，不打扰）；
      // glog 不进 logcat，用 android log 直出（tag 与 [TIMING] 一致）
@@ -3259,7 +3292,7 @@ index 99e4511..e518976 100644
        T9_INC_LOG("T9 incremental MISS (%s): '%s'", miss, input.c_str());
      return false;
    }
-@@ -841,6 +1466,34 @@ void ScriptTranslator::CommitIncremental(const string& input,
+@@ -841,6 +1508,34 @@ void ScriptTranslator::CommitIncremental(const string& input,
      inc->lattice.reset();
  }
  
@@ -3294,7 +3327,7 @@ index 99e4511..e518976 100644
  an<Sentence> ScriptTranslation::MakeSentence(Dictionary* dict,
                                               UserDictionary* user_dict) {
    const auto& syllable_graph = syllabifier_->syllable_graph();
-@@ -851,10 +1504,11 @@ an<Sentence> ScriptTranslation::MakeSentence(Dictionary* dict,
+@@ -851,10 +1546,11 @@ an<Sentence> ScriptTranslation::MakeSentence(Dictionary* dict,
    auto* inc = translator_->incremental_state();
    size_t old_interpreted = 0;
    const bool use_incremental =
@@ -3308,7 +3341,7 @@ index 99e4511..e518976 100644
  
    if (use_incremental) {
      DLOG(INFO) << "T9 incremental MakeSentence: " << old_interpreted
-@@ -883,6 +1537,7 @@ an<Sentence> ScriptTranslation::MakeSentence(Dictionary* dict,
+@@ -883,6 +1579,7 @@ an<Sentence> ScriptTranslation::MakeSentence(Dictionary* dict,
    }
  
    WordGraph graph = PrepareForMakingSentence(dict, user_dict);
@@ -3316,7 +3349,7 @@ index 99e4511..e518976 100644
    an<Sentence> sentence;
    if (inc) {
      if (cacheable) {
-@@ -915,10 +1570,11 @@ deque<an<Sentence>> ScriptTranslation::MakeSentences(
+@@ -915,10 +1612,11 @@ deque<an<Sentence>> ScriptTranslation::MakeSentences(
    auto* inc = translator_->incremental_state();
    size_t old_interpreted = 0;
    const bool use_incremental =
@@ -3330,7 +3363,7 @@ index 99e4511..e518976 100644
  
    if (use_incremental) {
      // 多句 Poet 算法的 states 列表没有增量接口，但它在缓存图上整体
-@@ -928,7 +1584,8 @@ deque<an<Sentence>> ScriptTranslation::MakeSentences(
+@@ -928,7 +1626,8 @@ deque<an<Sentence>> ScriptTranslation::MakeSentences(
      T9IncTimer t("stage-inc-poet-multi");
      auto sentences = poet_->MakeSentences(
          inc->graph, interpreted, preceding,
@@ -3340,7 +3373,7 @@ index 99e4511..e518976 100644
      for (auto& sentence : sentences) {
        sentence->Offset(start_);
        sentence->set_syllabifier(syllabifier_);
-@@ -939,6 +1596,7 @@ deque<an<Sentence>> ScriptTranslation::MakeSentences(
+@@ -939,6 +1638,7 @@ deque<an<Sentence>> ScriptTranslation::MakeSentences(
    }
  
    WordGraph graph = PrepareForMakingSentence(dict, user_dict);
@@ -3348,7 +3381,7 @@ index 99e4511..e518976 100644
    if (inc && cacheable)
      inc->graph = std::move(graph);
    if (inc)
-@@ -946,7 +1604,13 @@ deque<an<Sentence>> ScriptTranslation::MakeSentences(
+@@ -946,7 +1646,13 @@ deque<an<Sentence>> ScriptTranslation::MakeSentences(
                                     cacheable);
    auto sentences = poet_->MakeSentences(
        inc && cacheable ? inc->graph : graph, interpreted, preceding,
@@ -3363,7 +3396,7 @@ index 99e4511..e518976 100644
    for (auto& sentence : sentences) {
      sentence->Offset(start_);
      sentence->set_syllabifier(syllabifier_);
-@@ -1011,24 +1675,42 @@ WordGraph ScriptTranslation::PrepareForMakingSentence(
+@@ -1011,24 +1717,42 @@ WordGraph ScriptTranslation::PrepareForMakingSentence(
      UserDictionary* user_dict) {
    const int kMaxSyllablesForUserPhraseQuery = 5;
    const auto& syllable_graph = syllabifier_->syllable_graph();
