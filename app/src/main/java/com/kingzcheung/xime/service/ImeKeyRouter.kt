@@ -2071,6 +2071,9 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                                         syncCalculatorWithEditor(it)
                                 }
                         }
+                        // 数字键盘上打了字：收起候选栏里刚复制的内容（截图后才冒出来的图片也一样），和主键盘一打字就换成候选一样。
+                        // 以前只有切到数字键盘那一下清，图片晚到或在数字键盘里截图时一直占着候选栏，数字进不去（#542）。
+                        if (isNumberKeyboard && literal.isNotEmpty()) hideClipboardSuggestionsForTyping()
                         if (isNumberKeyboard) updateCalculatorCandidates()
                         // 数字键盘、常用符号面板打的 @：和主键盘一样给邮箱后缀（默认开），接着打的数字、点重新筛。
                         if (literal == "@" || literal == "＠" ||
@@ -3293,6 +3296,14 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
      * - index 0: 计算结果（如 "2"），点击直接替换为结果
      * - index 1: 带公式的结果（如 "1+1=2"），点击显示公式和结果
      */
+    /** 打字时收起候选栏里的剪贴板（文字和图片）；只是不显示，不算用过，下次弹出键盘照旧按 30 秒规则给。 */
+    private fun hideClipboardSuggestionsForTyping() {
+        val current = service.candidateState.value
+        if (!current.isShowingRecentClipboard) return
+        service.candidateState.value = current.copy(candidates = emptyList(), candidateComments = emptyList(),
+            clipboardImage = null, clipboardExtractedCount = 0, isShowingRecentClipboard = false)
+    }
+
     internal fun updateCalculatorCandidates() {
         val candidate = service.calculatorEngine.getCandidate()
         val result = service.calculatorEngine.getResult()
