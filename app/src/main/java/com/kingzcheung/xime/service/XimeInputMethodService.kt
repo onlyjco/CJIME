@@ -3742,8 +3742,10 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 return super.onKeyDown(keyCode, event)
             }
         }
+        // 按用户的翻页设置认翻页键（#549）：以前这里按默认全开算，关了「逗号和句号翻页」的 < > , . 也进这条路，
+        // 再被下面直接按全角上屏（＜），不像翻页开着时那样交给方案的标点表（< 出《〈«）。关了的键走普通符号那条路。
         val pagingKey = hardwareCandidatePageDirection(keyCode, hasInput = true,
-            modified = e.isCtrlPressed || e.isAltPressed || e.isMetaPressed) != 0
+            modified = e.isCtrlPressed || e.isAltPressed || e.isMetaPressed, options = uiState.value.hardwareOptions) != 0
         if (hasHardwareKeyboard && pagingKey) {
             val symbol = keyCodeToKey(keyCode, e.isShiftPressed)
             if (symbol != null) {
