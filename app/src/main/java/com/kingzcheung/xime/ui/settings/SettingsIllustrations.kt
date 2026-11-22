@@ -639,8 +639,8 @@ internal fun LiquidGlassStrengthChoice(
         Column {
             Text(when (current) {
                 com.kingzcheung.xime.ui.theme.LiquidGlassStrength.STANDARD -> "原来的样子：按键一道细亮边。"
-                com.kingzcheung.xime.ui.theme.LiquidGlassStrength.STRONG -> "亮边更粗更亮，边里面多一圈厚度；图片背景在边缘折射得更宽。"
-                com.kingzcheung.xime.ui.theme.LiquidGlassStrength.STRONGEST -> "亮边、厚度和图片背景的折射都再加一档。"
+                com.kingzcheung.xime.ui.theme.LiquidGlassStrength.STRONG -> "按键边缘像透镜：图片背景会弯进边里、带一点彩虹色，高光随光照渐变。"
+                com.kingzcheung.xime.ui.theme.LiquidGlassStrength.STRONGEST -> "透镜更宽、弯得更多，色散和高光更明显。"
             } + "模糊和透明度不跟着变。", style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant)
             when (current) {
