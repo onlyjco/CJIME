@@ -1,5 +1,6 @@
 package com.kingzcheung.xime.ui.keyboard
 
+import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.spring
@@ -8,6 +9,7 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
@@ -56,6 +58,12 @@ internal class SpaceVoiceLockState {
     /** 手指在根坐标里的位置：到位时按钮往手指那边吸一点。只在画的时候读，不触发重组。 */
     var finger by mutableStateOf(Offset.Unspecified)
 
+    /**
+     * 松手就锁定：锁按钮浮着（麦克风真开着）且手指到位。锁按钮画「到位」的样子、空格写「松手锁定」、
+     * 松手时真的锁定，三处都看这一个条件，动画到了就一定锁得上（用户 11-22：动画到头了松手没锁上）。
+     */
+    val lockReady: Boolean get() = holding && armed
+
     fun zoneContains(pointInRoot: Offset): Boolean =
         metrics?.let { spaceVoiceLockZoneContains(host, space, it, pointInRoot) } == true
 }
@@ -91,6 +99,16 @@ internal fun spaceVoiceLockZoneContains(host: Rect, space: Rect, m: SpaceVoiceLo
     return point.x >= c.x - reach && point.y <= c.y + reach
 }
 
+/**
+ * 这一下手指算不算在锁上：在锁定区里就算；松手那一下手指离屏时坐标常会跳一点，之前已经到位的照旧算到位，
+ * 不因为抬手那一下偏出去就锁不上。
+ */
+internal fun spaceVoiceLockArmed(inZone: Boolean, released: Boolean, wasArmed: Boolean): Boolean =
+    inZone || (released && wasArmed)
+
+/** 锁图标往上挪多少（占图标边长）：锁身在下、锁梁细，按外框居中时看着偏下，按视觉重心往上提一点。 */
+internal const val SPACE_VOICE_LOCK_ICON_LIFT = 0.06f
+
 /** 上滑取消：手指高过空格顶边一个键高（[yInKey] 是空格自己的坐标），在锁定区里时除外。 */
 internal fun spaceVoiceCancelArmed(lockArmed: Boolean, yInKey: Float, keyHeight: Float): Boolean =
     !lockArmed && yInKey < -keyHeight
@@ -119,15 +137,29 @@ internal fun SpaceVoiceLockLayer(state: SpaceVoiceLockState?, accent: Color, sur
     val shown by animateFloatAsState(if (state.holding) 1f else 0f,
         if (state.holding) spring(dampingRatio = 0.62f, stiffness = 520f) else tween(140, easing = FastOutSlowInEasing),
         label = "voiceLockShown")
-    val armed by animateFloatAsState(if (state.holding && state.armed) 1f else 0f,
+    val armedAnim by animateFloatAsState(if (state.lockReady) 1f else 0f,
         spring(dampingRatio = 0.55f, stiffness = 700f), label = "voiceLockArmed")
+    // 锁上的那一下：按钮留住半秒，外框亮一圈白边闪一下再淡出（用户 11-22：锁定的反馈不够显著）。
+    val flash = remember { Animatable(0f) }
+    var flashing by remember { mutableStateOf(false) }
+    LaunchedEffect(state.locked) {
+        if (!state.locked) { flash.snapTo(0f); flashing = false; return@LaunchedEffect }
+        flashing = true
+        try {
+            flash.snapTo(0f)
+            flash.animateTo(1f, tween(SPACE_VOICE_LOCK_FLASH_IN_MS, easing = FastOutSlowInEasing))
+            flash.animateTo(0f, tween(SPACE_VOICE_LOCK_FLASH_OUT_MS, easing = FastOutSlowInEasing))
+        } finally { flashing = false }
+    }
     val idleFill = lerp(surface.copy(alpha = 1f), accent, 0.12f)
     Box(modifier.onGloballyPositioned { state.host = it.boundsInRoot() }.drawBehind {
-        if (shown <= 0.01f) return@drawBehind
+        if (!flashing && shown <= 0.01f) return@drawBehind
         val c0 = spaceVoiceLockCenter(state.host, state.space, metrics) ?: return@drawBehind
-        val alpha = shown.coerceIn(0f, 1f)
+        val visible = if (flashing) 1f else shown
+        val alpha = visible.coerceIn(0f, 1f)
+        val armed = if (flashing) 1f else armedAnim
         val pull = spaceVoiceLockPull(c0, state.finger, 8.dp.toPx()) * armed
-        val r = metrics.radius * (0.6f + 0.4f * shown) * (1f + 0.12f * armed)
+        val r = metrics.radius * (0.6f + 0.4f * visible) * (1f + 0.12f * armed)
         // 光晕连同吸过去的那几 dp 都不出键区（键区外是别的应用，画出去会被截掉一块）。
         val glow = r * 1.25f
         val raw = c0 - state.host.topLeft + pull + Offset(0f, (1f - alpha) * 8.dp.toPx())
@@ -138,12 +170,27 @@ internal fun SpaceVoiceLockLayer(state: SpaceVoiceLockState?, accent: Color, sur
         if (armed > 0f) drawCircle(accent.copy(alpha = 0.22f * armed * alpha), glow, center)
         drawCircle(lerp(idleFill, accent, armed).copy(alpha = alpha), r, center)
         drawCircle(accent.copy(alpha = 0.55f * (1f - armed) * alpha), r, center, style = Stroke(1.5f.dp.toPx()))
+        val f = flash.value
+        if (f > 0f) {
+            // 锁上了：外框闪一下。外面一圈强调色粗边往外扩（扩到键区边为止，不被截掉），按钮边上一圈白边亮起；
+            // 浅色、深色主题都看得见（白边压在强调色上，强调色边压在键盘底色上）。
+            val room = minOf(center.x, size.width - center.x, center.y, size.height - center.y)
+            val stroke = 3.dp.toPx()
+            val ring = minOf(r + 2.dp.toPx() + 6.dp.toPx() * f, room - stroke / 2f)
+            drawCircle(accent.copy(alpha = 0.9f * f), ring, center, style = Stroke(stroke))
+            drawCircle(Color.White.copy(alpha = 0.95f * f), r - 1.5f.dp.toPx(), center, style = Stroke(2.dp.toPx()))
+            drawCircle(Color.White.copy(alpha = 0.16f * f), r, center)
+        }
         val icon = r * 0.95f
-        translate(center.x - icon / 2f, center.y - icon / 2f) {
+        translate(center.x - icon / 2f, center.y - icon / 2f - icon * SPACE_VOICE_LOCK_ICON_LIFT) {
             with(lock) { draw(Size(icon, icon), alpha = alpha, colorFilter = ColorFilter.tint(lerp(accent, Color.White, armed))) }
         }
     }) {
         // 测试用：按住说话时有这个节点。
         if (state.holding) Box(Modifier.testTag("space-voice-lock-button"))
+        if (flashing) Box(Modifier.testTag("space-voice-lock-flash"))
     }
 }
+
+private const val SPACE_VOICE_LOCK_FLASH_IN_MS = 110
+private const val SPACE_VOICE_LOCK_FLASH_OUT_MS = 380

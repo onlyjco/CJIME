@@ -68,4 +68,21 @@ class SpaceVoiceLockZoneTest {
         assertTrue("past the line", spaceVoiceCancelArmed(lockArmed = false, yInKey = -130f, keyHeight = 100f))
         assertFalse("past the line but on the lock", spaceVoiceCancelArmed(lockArmed = true, yInKey = -130f, keyHeight = 100f))
     }
+
+    @Test fun `lifting off keeps an armed lock armed, but never arms by itself`() {
+        assertTrue("in the zone", spaceVoiceLockArmed(inZone = true, released = false, wasArmed = false))
+        assertFalse("moved out while still down", spaceVoiceLockArmed(inZone = false, released = false, wasArmed = true))
+        assertTrue("lift-off jitter out of the zone", spaceVoiceLockArmed(inZone = false, released = true, wasArmed = true))
+        assertFalse("released outside, never armed", spaceVoiceLockArmed(inZone = false, released = true, wasArmed = false))
+    }
+
+    @Test fun `the button looks armed exactly when letting go would lock`() {
+        val state = SpaceVoiceLockState()
+        state.armed = true
+        assertFalse("microphone not on yet: no button, no lock", state.lockReady)
+        state.holding = true
+        assertTrue(state.lockReady)
+        state.armed = false
+        assertFalse(state.lockReady)
+    }
 }

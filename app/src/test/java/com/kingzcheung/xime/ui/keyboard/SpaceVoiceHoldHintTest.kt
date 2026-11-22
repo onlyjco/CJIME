@@ -131,13 +131,13 @@ class SpaceVoiceHoldHintTest {
     private val lock = SpaceVoiceLockState()
 
     /** 240×164dp 的「键区」，空格在最下面 64dp；锁按钮那一层铺满键区，按钮在右上角。 */
-    private fun setKeyWithBar(swipeCancel: Boolean) {
+    private fun setKeyWithBar(swipeCancel: Boolean, micStarts: Boolean = true) {
         rule.setContent {
             CompositionLocalProvider(
                 LocalKeyboardInputPreferences provides KeyboardInputPreferences(spaceHold = SpaceHoldAction.VOICE_TOGGLE,
                     cursorGesture = CursorGestureMode.KEYBOARD, voiceSwipeCancel = swipeCancel),
                 LocalKeyboardInputActions provides KeyboardInputActions(
-                    onVoiceToggle = { listening = !listening },
+                    onVoiceToggle = { if (micStarts) listening = !listening },
                     onVoiceHoldEnd = { listening = false },
                     onVoiceHoldCancel = { listening = false; cancelled = true },
                     isVoiceMode = listening, voiceSticky = listening),
@@ -167,11 +167,11 @@ class SpaceVoiceHoldHintTest {
      * 按住空格到开麦，再分几步滑到 [to]（空格自己的坐标），停稳再看。
      * 电脑上 11-21：时钟停着时一步跳过去，提示没跟上；改成先挪一点、再半路、再到位，最后放开时钟等手势和重组跑完。
      */
-    private fun holdAndSlide(to: androidx.compose.ui.test.TouchInjectionScope.() -> androidx.compose.ui.geometry.Offset) {
+    private fun holdAndSlide(expectMic: Boolean = true, to: androidx.compose.ui.test.TouchInjectionScope.() -> androidx.compose.ui.geometry.Offset) {
         rule.mainClock.autoAdvance = false
         rule.onNodeWithTag("space").performTouchInput { down(center) }
         rule.mainClock.advanceTimeBy(600L)
-        assertTrue("space hold did not start the microphone\n${state()}", listening)
+        assertTrue("space hold did not start the microphone\n${state()}", listening || !expectMic)
         for (f in listOf(0.05f, 0.5f, 1f)) {
             rule.onNodeWithTag("space").performTouchInput { moveTo(center + (to() - center) * f) }
             rule.mainClock.advanceTimeBy(50L)
@@ -185,8 +185,17 @@ class SpaceVoiceHoldHintTest {
         assertEquals(state(), listOf("松手锁定"), hint())
         // 按住说话时锁按钮浮出来，松手后收起（锁定后空格自己带锁）。
         assertEquals(state(), 1, rule.onAllNodesWithTag("space-voice-lock-button", useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertTrue("the button looks armed, so letting go must lock\n${state()}", lock.lockReady)
+        // 松手那一刻就锁上，外框闪一下（停住时钟看闪的那一下）。
+        rule.mainClock.autoAdvance = false
         rule.onNodeWithTag("space").performTouchInput { up() }
+        // 时钟停着时手势里改的状态要自己通知，下一帧才会重组（自动推进时由测试规则代办）。
+        rule.runOnUiThread { androidx.compose.runtime.snapshots.Snapshot.sendApplyNotifications() }
+        rule.mainClock.advanceTimeBy(100L)
+        assertTrue("locked the moment the finger lifted\n${state()}", listening && lock.locked)
+        assertEquals(state(), 1, rule.onAllNodesWithTag("space-voice-lock-flash", useUnmergedTree = true).fetchSemanticsNodes().size)
         settle()
+        assertEquals(state(), 0, rule.onAllNodesWithTag("space-voice-lock-flash", useUnmergedTree = true).fetchSemanticsNodes().size)
         assertTrue("letting go in the corner must not end voice\n${state()}", listening && lock.locked)
         assertEquals(state(), 0, rule.onAllNodesWithTag("space-voice-lock-button", useUnmergedTree = true).fetchSemanticsNodes().size)
         assertEquals(state(), listOf("点按结束"), hint())
@@ -215,5 +224,15 @@ class SpaceVoiceHoldHintTest {
         rule.onNodeWithTag("space").performTouchInput { up() }
         settle()
         assertTrue("straight up past the line cancels\n${state()}", cancelled && !listening && !lock.locked)
+    }
+
+    @Test fun `no lock button and no lock when the microphone did not start`() {
+        setKeyWithBar(swipeCancel = false, micStarts = false)
+        holdAndSlide(expectMic = false) { androidx.compose.ui.geometry.Offset(width - 4f, -height * 0.4f) }
+        assertEquals(state(), 0, rule.onAllNodesWithTag("space-voice-lock-button", useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertFalse(state(), lock.lockReady)
+        rule.onNodeWithTag("space").performTouchInput { up() }
+        settle()
+        assertFalse("nothing to lock\n${state()}", lock.locked || listening)
     }
 }
