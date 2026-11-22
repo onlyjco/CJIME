@@ -58,11 +58,11 @@ internal fun ClipboardHistoryLimitsSetting() {
     }
     val shown = limits ?: ClipboardHistoryLimits(ClipboardRetention.DEFAULT_COUNT, ClipboardRetention.DEFAULT_DAYS)
     SettingsSection(title = "历史记录", content = {
-        HistoryLimitChoices("数量上限", "超出时删除最早的，固定和分组的不算", ClipboardRetention.COUNT_OPTIONS,
+        HistoryLimitChoices("数量上限", "超出时删除最早的，固定的不算", ClipboardRetention.COUNT_OPTIONS,
             shown.maxCount, ClipboardRetention::countLabel, "clipboard-max-count", enabled = limits != null) {
             choose(shown.copy(maxCount = it))
         }
-        HistoryLimitChoices("保留时间", "到期自动删除，固定和分组的保留", ClipboardRetention.DAY_OPTIONS,
+        HistoryLimitChoices("保留时间", "到期自动删除，固定的保留", ClipboardRetention.DAY_OPTIONS,
             shown.keepDays, ClipboardRetention::daysLabel, "clipboard-keep-days", enabled = limits != null) {
             choose(shown.copy(keepDays = it))
         }
@@ -79,7 +79,7 @@ internal fun ClipboardHistoryLimitsSetting() {
         AlertDialog(
             onDismissRequest = { pending = null },
             title = { Text("删掉 $removed 条记录？") },
-            text = { Text("按新设置，较早的 $removed 条历史记录会被删掉，固定和分组的保留。") },
+            text = { Text("按新设置，较早的 $removed 条历史记录会被删掉，固定的保留。") },
             confirmButton = { Button(onClick = { pending = null; save(next) }) { Text("删除") } },
             dismissButton = { OutlinedButton(onClick = { pending = null }) { Text("取消") } },
         )

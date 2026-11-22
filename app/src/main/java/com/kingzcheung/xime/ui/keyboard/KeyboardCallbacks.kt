@@ -89,6 +89,8 @@ data class KeyboardCallbacks(
     val onUndoPinyinSyllable: ((com.kingzcheung.xime.rime.PinyinSyllableChoices, () -> Unit,
         (com.kingzcheung.xime.rime.PinyinSyllableChoices?) -> Unit) -> Unit)? = null,
     val onAssociationSelect: ((Int) -> Unit)? = null,
+    val canForgetAssociation: ((String) -> Boolean)? = null,
+    val onAssociationDelete: ((String) -> Unit)? = null,
     val onClearAssociation: (() -> Unit)? = null,
     val onToggleDarkMode: (() -> Unit)? = null,
     val onClipboard: (() -> Unit)? = null,

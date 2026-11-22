@@ -227,30 +227,30 @@ internal fun LongPressMenuOverlay(
         val widthCap = with(density) { 260.dp.toPx() }
         androidx.compose.ui.layout.Layout(content = {
             Surface(Modifier.testTag(tag), shape = RoundedCornerShape(12.dp), color = cardColor, shadowElevation = 4.dp) {
-                Column(Modifier.testTag(surfaceTag).verticalScroll(rememberScrollState()).padding(vertical = 6.dp)) {
+                Column(Modifier.testTag(surfaceTag).verticalScroll(rememberScrollState()).padding(vertical = 3.dp)) {
                     title?.let {
-                        Text(it, color = cardText, fontSize = 15.sp, lineHeight = 20.sp, fontWeight = FontWeight.Medium,
-                            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp))
+                        Text(it, color = cardText, fontSize = 14.sp, lineHeight = 18.sp, fontWeight = FontWeight.Medium,
+                            modifier = Modifier.padding(horizontal = 14.dp, vertical = 5.dp))
                     }
                     message?.let {
-                        Text(it, color = cardText.copy(alpha = .7f), fontSize = 13.sp, lineHeight = 18.sp,
-                            modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 8.dp))
+                        Text(it, color = cardText.copy(alpha = .7f), fontSize = 12.sp, lineHeight = 16.sp,
+                            modifier = Modifier.padding(start = 14.dp, end = 14.dp, bottom = 5.dp))
                     }
                     menuItems.forEachIndexed { index, entry ->
-                        if (index > 0 || title != null) HorizontalDivider(Modifier.padding(horizontal = 12.dp),
+                        if (index > 0 || title != null) HorizontalDivider(Modifier.padding(horizontal = 10.dp),
                             color = cardText.copy(alpha = .12f))
                         val tint = entry.tint ?: cardText
-                        Row(Modifier.fillMaxWidth().heightIn(min = 48.dp)
+                        Row(Modifier.fillMaxWidth().heightIn(min = 32.dp)
                             .then(entry.tag?.let { Modifier.testTag(it) } ?: Modifier)
                             .background(if (index == focusedIndex) cardText.copy(alpha = .12f) else Color.Transparent)
                             .clickable(enabled = entry.enabled) { onDismiss(); entry.onClick() }
-                            .padding(horizontal = 16.dp, vertical = 10.dp),
+                            .padding(horizontal = 14.dp, vertical = 5.dp),
                             verticalAlignment = Alignment.CenterVertically) {
                             entry.icon?.let {
-                                Icon(it, null, tint = tint, modifier = Modifier.size(20.dp))
-                                Spacer(Modifier.width(12.dp))
+                                Icon(it, null, tint = tint, modifier = Modifier.size(18.dp))
+                                Spacer(Modifier.width(10.dp))
                             }
-                            Text(entry.label, color = tint, fontSize = 15.sp, maxLines = 1)
+                            Text(entry.label, color = tint, fontSize = 14.sp, lineHeight = 18.sp, maxLines = 1)
                         }
                     }
                 }

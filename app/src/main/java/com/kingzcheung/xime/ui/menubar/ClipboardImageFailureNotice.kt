@@ -36,10 +36,10 @@ internal fun ClipboardImageFailureNotice(
             .testTag("images-paste-notice"), verticalAlignment = Alignment.CenterVertically) {
             FlowRow(Modifier.weight(1f, fill = false), horizontalArrangement = Arrangement.spacedBy(8.dp),
                 verticalArrangement = Arrangement.spacedBy(2.dp)) {
-                Text("未能粘贴图片", color = colors.onSurfaceVariant, fontSize = 12.sp,
-                    lineHeight = 18.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                Text("不支持直接插图，已复制到剪贴板", color = colors.onSurfaceVariant, fontSize = 12.sp,
+                    lineHeight = 18.sp, maxLines = 2, overflow = TextOverflow.Ellipsis,
                     modifier = Modifier.padding(vertical = 5.dp))
-                NoticeAction("系统粘贴", "images-system-paste", onSystemPaste)
+                NoticeAction("尝试粘贴", "images-system-paste", onSystemPaste)
                 NoticeAction("分享图片", "images-share") { onShare(failure.image, failure.packageName) }
             }
             IconButton(onClick = onDismiss, modifier = Modifier.size(32.dp).testTag("images-dismiss-failure")) {

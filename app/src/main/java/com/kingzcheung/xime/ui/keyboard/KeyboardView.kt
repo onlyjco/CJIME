@@ -119,7 +119,6 @@ import com.kingzcheung.xime.settings.InputLanguage
 import com.kingzcheung.xime.gloss.CandidateGlossary
 import com.kingzcheung.xime.ui.menubar.ClipboardView
 import com.kingzcheung.xime.ui.menubar.SchemaListView
-import com.kingzcheung.xime.ui.menubar.ToolbarCustomizeView
 import com.kingzcheung.xime.ui.theme.KeyboardThemes
 import com.kingzcheung.xime.ui.theme.keyboardBackground
 import com.kingzcheung.xime.ui.theme.cySwapFadeIn
@@ -190,7 +189,7 @@ fun KeyboardView(
     hardwareKeyboardConnected: Boolean = false,
     /** Exact fixed-mode destination supplied by the service; absent means docking is unavailable. */
     dockTarget: KeyboardDockTarget? = null,
-    onPreviewArrangePositioned: ((android.graphics.Rect) -> Unit)? = null,
+    inSettingsPreview: Boolean = false,
     previewLetterLayout: Boolean = false,
     // Older hosts can discard the separate window touch region when the lock moves into the footer.
     onFloatingLockPositioned: ((android.graphics.Rect?) -> Unit)? = null,
@@ -275,7 +274,6 @@ fun KeyboardView(
     // 键盘 ascii 同步点（attach/detach）：键盘上下文切换时，
     // 先保存离开键盘的记忆，再按进入键盘的记忆同步引擎。
     var lastAsciiContext by remember { mutableStateOf<AsciiKeyboardContext?>(null) }
-    val inSettingsPreview = onPreviewArrangePositioned != null
     LaunchedEffect(viewState, inSettingsPreview) {
         val prevContext = lastAsciiContext
         val curContext = viewState.asciiContext()
@@ -419,9 +417,6 @@ fun KeyboardView(
     LaunchedEffect(page) {
         if ((page as? KeyboardPage.Overlay)?.route != OverlayRoute.Menu && inlineEditor.active) inlineEditor.cancel()
     }
-    // 设置里「在菜单里直接编辑」关着时，菜单右上角不出编辑按钮，和以前一样；编辑中被关掉就放弃这次编辑。
-    val inlineEditingEnabled = rememberInlineQuickActionEditing()
-    LaunchedEffect(inlineEditingEnabled) { if (!inlineEditingEnabled && inlineEditor.active) inlineEditor.cancel() }
     val punctuationFull = !state.isAsciiMode && !state.inputProfile.language.typesLettersDirectly && (state.schemaSwitches.firstOrNull { it.name == "full_shape" }?.currentIndex?.let { it == 1 }
         ?: SettingsPreferences.punctuationFullWidth(androidx.compose.ui.platform.LocalContext.current, true))
     // 打开了「跟随全角半角」的字母键角标按它换写法（KeysConfigHelper.getKeyGesture）；在画键之前更新。
@@ -694,11 +689,23 @@ fun KeyboardView(
             mutableStateOf<com.kingzcheung.xime.rime.PinyinEditSession?>(null)
         }
         val strokeTable = rememberCandidateStrokeTable()
-        var strokeCode by remember(state.inputSessionId, state.currentSchemaId) { mutableStateOf("") }
+        var strokeCode by remember { mutableStateOf("") }
         var strokeWindow by remember { mutableStateOf(false) }
         var strokeDrawing by remember { mutableStateOf(false) }
+        var strokeDragActive by remember { mutableStateOf(false) }
+        var strokeDeleteTouchLocked by remember { mutableStateOf(false) }
         var strokeRevision by remember { mutableIntStateOf(0) }
         fun clearCandidateStroke() { strokeCode = ""; strokeWindow = false }
+        fun popCandidateStroke(): Boolean {
+            if (strokeDeleteTouchLocked) return true
+            if (strokeCode.isEmpty()) return false
+            strokeCode = strokeCode.dropLast(1)
+            if (strokeCode.isEmpty()) {
+                strokeWindow = false
+                strokeDeleteTouchLocked = true
+            }
+            return true
+        }
         fun addCandidateStroke(code: Char) {
             if (strokeTable == null) return
             strokeCode += code
@@ -708,12 +715,17 @@ fun KeyboardView(
         LaunchedEffect(strokeRevision, strokeDrawing) {
             if (strokeWindow && !strokeDrawing) { kotlinx.coroutines.delay(1000); strokeWindow = false }
         }
-        LaunchedEffect(candidatePageExpanded, state.inputSessionId, state.currentSchemaId) {
-            if (!candidatePageExpanded) { strokeCode = ""; strokeWindow = false }
+        var wasCandidateExpanded by remember { mutableStateOf(candidatePageExpanded) }
+        LaunchedEffect(candidatePageExpanded) {
+            if (wasCandidateExpanded && !candidatePageExpanded) { strokeCode = ""; strokeWindow = false }
+            wasCandidateExpanded = candidatePageExpanded
+        }
+        LaunchedEffect(state.inputSessionId, state.currentSchemaId) {
+            strokeCode = ""; strokeWindow = false
         }
         LaunchedEffect(state.inputSessionId) {
             snapshotFlow { candidateState.value.inputText to candidateState.value.associationCandidates }
-                .drop(1).collect { strokeCode = ""; strokeWindow = false }
+                .drop(1).collect { if (!strokeDragActive) { strokeCode = ""; strokeWindow = false } }
         }
         var sentenceEdit by remember(state.inputSessionId, state.currentSchemaId, state.isAsciiMode) {
             mutableStateOf<com.kingzcheung.xime.service.SentenceEditSession?>(null)
@@ -986,7 +998,8 @@ fun KeyboardView(
                             sentenceConfirmed = sentenceConfirmed.dropLast(1)
                             sentenceWord = previous.text + sentenceWord
                         } else {
-                            sentenceCode = if (sentenceReplaceOnType) "" else sentenceCode.dropLast(1)
+                            val next = if (sentenceReplaceOnType) "" else sentenceCode.dropLast(1)
+                            sentenceCode = if (next.endsWith('\'')) next.dropLast(1) else next
                             if (sentenceCode.isEmpty()) sentenceWord = ""
                         }
                         sentenceJustSelected = false
@@ -1093,8 +1106,7 @@ fun KeyboardView(
                     // 字幕是独立全屏页面，键盘随之收起，麦克风交给字幕页。没装「字幕」插件就不出现（排列页也不列）。
                     ToolbarButton.CAPTION -> if (com.kingzcheung.xime.ui.caption.CaptionPlugin.isActive(quickContext))
                         ({ viewModel.closeOverlay(); com.kingzcheung.xime.ui.caption.CaptionActivity.open(quickContext) }) else return null
-                    ToolbarButton.ARRANGE -> ({ viewModel.showOverlay(OverlayRoute.ToolbarCustomize) })
-                    // 布局手势开关只在适用的布局出现；排列页用同一规则（[quickAction] 为 null 即不列出）。
+                    // 布局手势开关只在适用的布局出现；编辑与菜单用同一规则（[quickAction] 为 null 即不列出）。
                     ToolbarButton.GLIDE, ToolbarButton.T9_FLICK, ToolbarButton.FOURTEEN_SWIPE,
                     ToolbarButton.KANA_HINTS, ToolbarButton.FLICK_DISC ->
                         if (item.button.appliesTo(state.inputProfile.layout.kind) &&
@@ -1193,7 +1205,7 @@ fun KeyboardView(
         val toolbarQuickActions = (if (inlineEditor.active) inlineEditor.toolbar else state.toolbarButtons).mapNotNull(::quickAction)
         val menuQuickActions = (if (inlineEditor.active) inlineEditor.menu else state.menuButtons).mapNotNull(::quickAction)
         val unusedQuickActions = if (inlineEditor.active) inlineEditor.unused.mapNotNull(::quickAction) else emptyList()
-        val startInlineEditing: (() -> Unit)? = callbacks.onUpdateQuickActions?.takeIf { inlineEditingEnabled }?.let { {
+        val startInlineEditing: (() -> Unit)? = callbacks.onUpdateQuickActions?.let { {
             toolbarFeedback()
             inlineEditor.start(QuickActionLayout(state.toolbarButtons, state.menuButtons),
                 toolbarQuickActions.map { it.item.id }, menuQuickActions.map { it.item.id },
@@ -1207,7 +1219,7 @@ fun KeyboardView(
         Column(
             modifier = Modifier
                 .fillMaxSize()
-                .then(if (onPreviewArrangePositioned != null) Modifier.clearAndSetSemantics {} else Modifier)
+                .then(if (inSettingsPreview) Modifier.clearAndSetSemantics {} else Modifier)
         ) {
             var handwritingCandidates by remember(state.inputSessionId, state.inputProfile.language) { mutableStateOf<List<String>>(emptyList()) }
             var handwritingClearSignal by remember(state.inputSessionId, state.inputProfile.language) { mutableIntStateOf(0) }
@@ -1286,11 +1298,17 @@ fun KeyboardView(
                     onRetake = { callbacks.onHideQuickSendForm?.invoke(); viewModel.showOverlay(OverlayRoute.Ocr) },
                 )
             } else if (state.showQuickSendForm) {
-                val clipboardGroups = com.kingzcheung.xime.clipboard.ClipboardGroupStore.getInstance(LocalContext.current)
-                // Opened from a group's tab: the record goes into that group and is not fixed, so the title says so.
-                val formTitle = remember(state.quickSendEditingItemId) {
-                    if (state.quickSendEditingItemId != null) "编辑剪贴板"
-                    else clipboardGroups.addTargetGroup()?.let { "新增到「${it.name}」" } ?: "新增固定"
+                val formContext = LocalContext.current
+                val favoriteStore = remember(formContext) { com.kingzcheung.xime.clipboard.ClipboardFavoriteStore.getInstance(formContext) }
+                val pendingFavorite = remember(state.quickSendEditingItemId, state.quickSendEditingItemText, state.quickSendEditingItemCode) {
+                    favoriteStore.peekPendingForm()
+                }
+                val formTitle = remember(state.quickSendEditingItemId, pendingFavorite) {
+                    when (pendingFavorite) {
+                        is com.kingzcheung.xime.clipboard.ClipboardFavoriteStore.PendingForm.Add -> "新增收藏内容"
+                        is com.kingzcheung.xime.clipboard.ClipboardFavoriteStore.PendingForm.EditText -> "编辑收藏内容"
+                        null -> if (state.quickSendEditingItemId != null) "编辑剪贴板" else "新增固定"
+                    }
                 }
                 QuickSendFormArea(
                     title = formTitle,
@@ -1304,22 +1322,43 @@ fun KeyboardView(
                     editingItemId = state.quickSendEditingItemId,
                     onClose = { text: String, code: String ->
                         android.util.Log.d("QuickSendForm", "onClose: textLen=${text.length}, editingId=${state.quickSendEditingItemId}, showForm=${state.showQuickSendForm}")
-                        val result = submitClipboardDraft(
-                            text, code, state.quickSendEditingItemId,
-                            // Added from a group's tab: the new record goes into that group (not fixed).
-                            add = { newText, newCode -> viewModel.addPinnedText(newText, newCode, clipboardGroups.takeAddTarget()) },
-                            update = viewModel::updateClipboardItem,
-                        )
+                        val favForm = favoriteStore.consumePendingForm()
+                        val result = when (favForm) {
+                            is com.kingzcheung.xime.clipboard.ClipboardFavoriteStore.PendingForm.Add -> submitClipboardDraft(
+                                text, code, editingItemId = null,
+                                add = { newText, newCode -> favoriteStore.addText(newText, newCode) },
+                                update = { _, _, _ -> false },
+                            )
+                            is com.kingzcheung.xime.clipboard.ClipboardFavoriteStore.PendingForm.EditText -> submitClipboardDraft(
+                                text, code, editingItemId = favForm.id,
+                                add = { _, _ -> },
+                                update = { id, newText, newCode -> favoriteStore.updateText(id, newText, newCode) },
+                            )
+                            null -> submitClipboardDraft(
+                                text, code, state.quickSendEditingItemId,
+                                add = { newText, newCode -> viewModel.addPinnedText(newText, newCode, null) },
+                                update = viewModel::updateClipboardItem,
+                            )
+                        }
                         if (result == ClipboardDraftSaveResult.ACCEPTED) {
+                            if (favForm is com.kingzcheung.xime.clipboard.ClipboardFavoriteStore.PendingForm.Add && !favForm.returnToFavorites) {
+                                android.widget.Toast.makeText(formContext, "已添加到收藏夹", android.widget.Toast.LENGTH_SHORT).show()
+                            }
                             callbacks.onHideQuickSendForm?.invoke()
                         } else {
+                            // 验证未通过时恢复表单目标，避免二次提交误写入普通剪贴板。
+                            when (favForm) {
+                                is com.kingzcheung.xime.clipboard.ClipboardFavoriteStore.PendingForm.Add -> favoriteStore.beginAdd(favForm.returnToFavorites)
+                                is com.kingzcheung.xime.clipboard.ClipboardFavoriteStore.PendingForm.EditText -> favoriteStore.beginEditText(favForm.id, favForm.returnToFavorites)
+                                null -> Unit
+                            }
                             QuickSendFormEditTextHolder.editText?.apply {
                                 error = result.errorMessage
                                 requestFocus()
                             }
                         }
                     },
-                    onCancel = { clipboardGroups.takeAddTarget(); callbacks.onHideQuickSendForm?.invoke() },
+                    onCancel = { favoriteStore.clearPendingForm(); callbacks.onHideQuickSendForm?.invoke() },
                     onFocusChange = { focused: Boolean ->
                         callbacks.onQuickSendFormFocusChange?.invoke(focused)
                     },
@@ -1389,8 +1428,11 @@ fun KeyboardView(
                     state.clipboardItems, callbacks, viewModel::removeClipboardItems,
                     Modifier.fillMaxWidth().height(state.clipboardSearchResultsHeight.dp),
                     showControls = !state.clipboardSearchInline)
+                val isFavoriteSearch = remember(clipboardContext, state.clipboardSearchVisible) {
+                    com.kingzcheung.xime.clipboard.ClipboardFavoriteStore.getInstance(clipboardContext).isSearchInFavorites()
+                }
                 ToolPanel(
-                    title = "搜索剪贴板",
+                    title = if (isFavoriteSearch) "搜索收藏夹" else "搜索剪贴板",
                     isFocused = true,
                     backgroundColor = Color.Transparent,
                     textColor = neutralInputTextColor,
@@ -1442,7 +1484,7 @@ fun KeyboardView(
                 candidateState.value.expandedCandidatesLoaded
 
             val cs = candidateState.value
-            val strokeActive = candidatePageExpanded && strokeCode.isNotEmpty() && strokeTable != null
+            val strokeActive = strokeCode.isNotEmpty() && strokeTable != null
             val sentenceWordIndices = sentenceWords.indices.filter {
                 !strokeActive || strokeTable!!.matches(sentenceWords[it].text, strokeCode)
             }
@@ -1466,6 +1508,9 @@ fun KeyboardView(
             } else {
                 emptyList()
             }
+            val barIndices = if (!expandedDataMode || cs.showsCalculator) {
+                cs.candidates.indices.filter { !strokeActive || strokeTable!!.matches(cs.candidates[it], strokeCode) }
+            } else emptyList()
             // 释义模式只换显示用注释；点选仍按索引回到原候选数据（九键靠其中的拼音定位）。
             val glossRevision = CandidateGlossary.revision
             val glossChinese = !state.isAsciiMode && state.inputProfile.language == InputLanguage.CHINESE
@@ -1520,8 +1565,12 @@ fun KeyboardView(
                     // 计算器结果只看候选状态自己带的标记（GitHub #289），不受展开页数据影响。
                     val calculator = cs.showsCalculator
                     val expandedBar = expandedDataMode && !calculator
-                    val barTexts = if (expandedBar) railExpanded.map { it.second.text } else cs.candidates
-                    val barComments = if (expandedBar) railExpanded.map { it.second.comment } else cs.candidateComments
+                    val barTexts = if (expandedBar) railExpanded.map { it.second.text }
+                        else if (strokeActive) barIndices.map { cs.candidates[it] }
+                        else cs.candidates
+                    val barComments = if (expandedBar) railExpanded.map { it.second.comment }
+                        else if (strokeActive) barIndices.map { cs.candidateComments.getOrElse(it) { "" } }
+                        else cs.candidateComments
                     val (shownTexts, shownComments) = when {
                         glossSwap -> CandidateGlossary.swapped(barTexts, barComments)
                         glossChinese -> barTexts to CandidateGlossary.annotate(barTexts, barComments)
@@ -1549,7 +1598,8 @@ fun KeyboardView(
                         highlightIndex = if (expandedDataMode || !cs.usesT9CandidateNavigation(state.inputProfile)) 0
                             else cs.highlightedCandidateIndex,
                         hardwareHighlightIndex = hardwareCandidateHighlight,
-                        associationHighlightIndex = cs.focusedT9AssociationIndex,
+                        associationHighlightIndex = cs.focusedT9AssociationIndex
+                            ?: if (cs.pendingEnglishText.isNotEmpty() || cs.glidedWord.isNotEmpty()) 0 else null,
                         expandAssociations = cs.pendingEnglishText.isEmpty(),
                     )
                 }
@@ -1694,6 +1744,10 @@ fun KeyboardView(
                             if (globalIndex != null) {
                                 callbacks.onGlobalCandidateSelect?.let { clearCandidateStroke(); it(globalIndex) }
                             }
+                        } else if (strokeActive) {
+                            val pageIndex = barIndices.getOrNull(index) ?: return@select
+                            clearCandidateStroke()
+                            callbacks.onCandidateSelect(pageIndex)
                         } else {
                             clearCandidateStroke()
                             callbacks.onCandidateSelect(index)
@@ -1719,6 +1773,13 @@ fun KeyboardView(
                         val railEntry = if (expandedDataMode && !showHandwritingCandidates) railExpanded.getOrNull(index) else null
                         val word = railEntry?.second?.text
                             ?: cs.candidates.getOrNull(index)
+                        val assocWord = if (!showHandwritingCandidates && cs.candidates.isEmpty()) {
+                            if (cs.pendingEnglishText.isNotEmpty() && cs.englishReplaceSupported) {
+                                (listOf(cs.pendingEnglishText) + cs.associationCandidates).getOrNull(index)
+                            } else {
+                                visibleAssociations.getOrNull(index)
+                            }
+                        } else null
                         if (showHandwritingCandidates) {
                             if (!handwritingWord.isNullOrEmpty()) deletePending = DeletePendingWord(handwritingWord,
                                 "忘掉「$handwritingWord」从手写里学到的笔迹？内置的写法和训练样本照常能认。") {
@@ -1732,6 +1793,14 @@ fun KeyboardView(
                                 } else {
                                     callbacks.onCandidateDelete?.invoke(index)
                                 }
+                            }
+                        } else if (!assocWord.isNullOrEmpty() && callbacks.canForgetAssociation?.invoke(assocWord) == true) {
+                            deletePending = DeletePendingWord(
+                                assocWord,
+                                "忘掉「$assocWord」的个人英文记忆？内置词库和细胞词库的词照常保留。"
+                            ) {
+                                if (!callbacks.isCandidateSnapshotCurrent(cs)) return@DeletePendingWord
+                                callbacks.onAssociationDelete?.invoke(assocWord)
                             }
                         }
                     },
@@ -1959,7 +2028,7 @@ fun KeyboardView(
                         choosingMergedLetter = syllableChoices?.letterGroup != null,
                         railSelectedPinyinIndex = if (sentenceEdit != null) sentenceOptions.indexOfFirst { it.selected } else railSelectedPinyinIndex,
                         railAccentColor = candidateAccentColor,
-                        enterKeyText = state.enterKeyText,
+                        enterKeyText = "回车",
                         matchT9Geometry = isT9Layout,
                         qwertyGeometry = candidateQwerty,
                         floating = state.isFloatingMode,
@@ -2092,6 +2161,60 @@ fun KeyboardView(
                 )
                 }
             }
+            val spaceStrokeController = remember(candidatePageExpanded, state.isAsciiMode, showHandwritingCandidates, strokeTable, state.inputSessionId, state.currentSchemaId) {
+                SpaceStrokeController(
+                    canTrigger = {
+                        !candidatePageExpanded && !state.isAsciiMode && !showHandwritingCandidates && strokeTable != null &&
+                            candidateState.value.let { cs ->
+                                cs.isComposing || cs.candidates.isNotEmpty() || cs.associationCandidates.isNotEmpty()
+                            }
+                    },
+                    onDrawingChanged = { strokeDrawing = it },
+                    onInkPoint = ::updateCandidateStrokeInk,
+                    onStrokeTriggered = { ch ->
+                        addCandidateStroke(ch)
+                        if (!candidatePageExpanded && sentenceEdit == null && candidateState.value.candidates.isNotEmpty()) {
+                            callbacks.onExtendCandidateStrip?.invoke()
+                        }
+                    },
+                )
+            }
+            val parentDeleteDrag = LocalDeleteDrag.current
+            val underlayDeleteDrag: (() -> DeleteDragSession)? = remember(parentDeleteDrag, state.inputSessionId, state.currentSchemaId) {
+                parentDeleteDrag?.let { upstreamFactory ->
+                    {
+                        val initialStrokes = strokeCode
+                        if (initialStrokes.isEmpty() && !strokeDeleteTouchLocked) {
+                            upstreamFactory()
+                        } else {
+                            // 只要起手时存在笔画（或本轮删除已锁定），整次滑动只能删/清笔画，抬手并重新按下前绝不删编码。
+                            strokeDragActive = true
+                            var forwardDir = false
+                            DeleteDragSession(
+                                move = { signed ->
+                                    if (signed < 0) forwardDir = true
+                                    if (!forwardDir && initialStrokes.isNotEmpty()) {
+                                        val count = kotlin.math.abs(signed)
+                                        val nextStrokes = initialStrokes.dropLast(count.coerceAtMost(initialStrokes.length))
+                                        strokeCode = nextStrokes
+                                        strokeWindow = nextStrokes.isNotEmpty()
+                                    }
+                                },
+                                finish = {
+                                    strokeDragActive = false
+                                    strokeDeleteTouchLocked = false
+                                },
+                            )
+                        }
+                    }
+                }
+            }
+            androidx.compose.runtime.CompositionLocalProvider(
+                LocalSpaceStrokeController provides spaceStrokeController,
+                LocalStrokeFilterBackspace provides ::popCandidateStroke,
+                LocalStrokeDeleteRelease provides { strokeDeleteTouchLocked = false },
+                LocalDeleteDrag provides underlayDeleteDrag,
+            ) {
             Box(Modifier.weight(1f).fillMaxWidth().testTag("keyboard-underlay")) {
             val clipboardPanel = LocalClipboardPanelExpansion.current
             val stableUnderlayState = if (clipboardPanel != null) {
@@ -2226,6 +2349,17 @@ fun KeyboardView(
                             is KeyboardLayoutState.T9Pinyin -> t9OnKeyPress
                             is KeyboardLayoutState.Symbol -> symbolOnKeyPress
                         }
+                        val handleKeyboardKeyPress: (String) -> Unit = { key ->
+                            when {
+                                key == "delete" && popCandidateStroke() -> Unit
+                                (key == "clear_composition" || key == "clear_all") && strokeCode.isNotEmpty() -> {
+                                    clearCandidateStroke()
+                                    strokeDeleteTouchLocked = true
+                                }
+                                (key == "clear_composition" || key == "clear_all") && strokeDeleteTouchLocked -> Unit
+                                else -> currentOnKeyPress(key)
+                            }
+                        }
                         CompositionLocalProvider(
                             LocalSuppressCursorMove provides suppressCursorMove,
                         ) {
@@ -2236,7 +2370,7 @@ fun KeyboardView(
                                 viewModel = viewModel,
                                 callbacks = if (previewLetterLayout) remember { KeyboardCallbacks(onKeyPress = { _, _ -> }, onCandidateSelect = {}) }
                                     else callbacks,
-                                onKeyPress = currentOnKeyPress,
+                                onKeyPress = handleKeyboardKeyPress,
                                 modifier = Modifier.weight(1f).then(cursorMod),
                                 t9Controller = t9Controller,
                             )
@@ -2461,6 +2595,7 @@ fun KeyboardView(
                 }
             }
             }
+            }
 
             val configuration = LocalConfiguration.current
             val isLandscapeBottom = configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
@@ -2671,26 +2806,6 @@ fun KeyboardView(
                         onOpenSearch = callbacks.onClipboardSearchOpen,
                         onTranslateText = callbacks.onClipboardTranslate?.takeIf { callbacks.clipboardTranslateAvailable() },
                     )
-                    is OverlayRoute.ToolbarCustomize -> ToolbarCustomizeView(
-                        toolbarButtons = state.toolbarButtons,
-                        menuButtons = state.menuButtons,
-                        // 排列页只列当前键盘工具栏／菜单里真会出现的入口，与菜单一致。
-                        isShown = { quickAction(it) != null },
-                        pluginButtons = state.toolbarPluginButtons,
-                        keyTextColor = keyTextColor,
-                        backgroundColor = keyboardBgColor,
-                        accentColor = accentColor,
-                        keyBgColor = keyBgColor,
-                        onUpdateQuickActions = callbacks.onUpdateQuickActions,
-                        onDismiss = { viewModel.closeOverlay() },
-                        bottomPaddingDp = 0,
-                        modifier = panelMaterial.fillMaxWidth().fillMaxHeight().then(if (onPreviewArrangePositioned == null)
-                            Modifier else Modifier.onGloballyPositioned {
-                                val r = it.boundsInWindow()
-                                onPreviewArrangePositioned(android.graphics.Rect(r.left.toInt(), r.top.toInt(),
-                                    kotlin.math.ceil(r.right).toInt(), kotlin.math.ceil(r.bottom).toInt()))
-                            })
-                    )
                     is OverlayRoute.Edit -> {
                         val editAction: (String) -> Unit = { action ->
                             if (action != "select_reset") callbacks.onKeyPressDown?.invoke(action)
@@ -2778,6 +2893,10 @@ fun KeyboardView(
                         onBack = { viewModel.popOverlay() },
                         onNavigateToQuickSend = { viewModel.pushOverlay(OverlayRoute.Clipboard(1)) },
                         onConfirmText = { text -> callbacks.onCommitText?.invoke(text) },
+                        onConfirmClose = {
+                            if (com.kingzcheung.xime.ui.menubar.clipboardClosesAfterPaste(keyboardContext)) viewModel.leaveClipboard()
+                            else viewModel.popOverlay()
+                        },
                         bottomPaddingDp = 0,
                         modifier = panelMaterial.fillMaxWidth().fillMaxHeight()
                     )

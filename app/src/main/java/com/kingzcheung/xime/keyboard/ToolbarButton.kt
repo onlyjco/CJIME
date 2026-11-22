@@ -61,17 +61,16 @@ enum class ToolbarButton(
     T9_FLICK("t9_flick", "九键拂动", Icons.TwoTone.SwipeRight),
     FOURTEEN_SWIPE("fourteen_swipe", "14键滑选", Icons.TwoTone.SwipeRight),
     KANA_HINTS("kana_hints", "假名提示", Icons.TwoTone.Translate),
-    FLICK_DISC("flick_disc", "拂动圆盘", Icons.TwoTone.Explore),
-    ARRANGE("arrange", "排列", Icons.TwoTone.Padding);
+    FLICK_DISC("flick_disc", "拂动圆盘", Icons.TwoTone.Explore);
 
     companion object {
         // 仅在用户还没有保存工具栏偏好时使用，保留已有选择及顺序。
         val DEFAULT_VISIBLE = linkedSetOf(SCHEMA, EMOJI, EDIT, CLIPBOARD, HANDWRITING_LOOKUP, VOICE)
 
-        /** 菜单默认一页 8 项（另加末尾的“排列”）：只放打字时会临时调整的入口，其余可在“排列”中加入。 */
+        /** 菜单默认入口：只放打字时会临时调整的入口，其余可在菜单内拖拽加入。 */
         // 字幕不在这份清单里：它是「字幕」插件的按钮，插件装上并启用时才放进菜单（CaptionPlugin）。
-        val DEFAULT_MENU = listOf(SETTINGS, FLOAT, OCR, SOUND, GLASS, INCOGNITO, FULL_SHAPE, ARRANGE)
-        /** 布局手势开关：默认排在菜单的“排列”之前（见 QuickActionLayout.defaultMenu），每个布局只显示适用的一两个。 */
+        val DEFAULT_MENU = listOf(SETTINGS, FLOAT, OCR, SOUND, GLASS, INCOGNITO, FULL_SHAPE)
+        /** 布局手势开关：每个布局只显示适用的一两个。 */
         val LAYOUT_GESTURES = listOf(GLIDE, T9_FLICK, FOURTEEN_SWIPE, KANA_HINTS, FLICK_DISC)
         /** 开关类入口：菜单中显示开/关状态，工具栏中开启时高亮。 */
         val TOGGLES = setOf(SOUND, FLOATING, GLASS, INCOGNITO, FULL_SHAPE, TRADITIONAL) + LAYOUT_GESTURES
@@ -80,6 +79,8 @@ enum class ToolbarButton(
 
         /** 已移除的旧版“固定内容”（quick_phrase）并入剪贴板。 */
         private const val LEGACY_QUICK_PHRASE = "quick_phrase"
+        /** 已移除的旧版“排列”按钮，老用户偏好中的残留 ID 直接过滤。 */
+        private const val LEGACY_ARRANGE = "arrange"
 
         /**
          * 已移除的全选、复制、粘贴、段首、段尾入口（用户 2026-10-31：编辑面板里都有）：
@@ -88,7 +89,14 @@ enum class ToolbarButton(
         private val LEGACY_EDITING = setOf("select_all", "copy", "paste", "home", "end")
 
         fun normalizeIds(ids: List<String>): List<String> =
-            ids.map { when (it) { LEGACY_QUICK_PHRASE -> CLIPBOARD.id; in LEGACY_EDITING -> EDIT.id; else -> it } }.distinct()
+            ids.mapNotNull {
+                when (it) {
+                    LEGACY_QUICK_PHRASE -> CLIPBOARD.id
+                    in LEGACY_EDITING -> EDIT.id
+                    LEGACY_ARRANGE -> null
+                    else -> it
+                }
+            }.distinct()
 
         fun fromId(id: String): ToolbarButton? =
             entries.find { it.id == id }

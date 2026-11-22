@@ -217,6 +217,13 @@ class TrieAssociationEngine {
     }
     
     fun isInitialized(): Boolean = isInitialized
+
+    fun containsWord(word: String): Boolean {
+        val trie = nodes ?: return false
+        if (!isInitialized || word.isEmpty()) return false
+        val idx = findNode(word.lowercase())
+        return idx >= 0 && trie[idx].word != null
+    }
     
     fun release() {
         nodes = null

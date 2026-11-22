@@ -416,7 +416,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     private val previewCandidates = CandidateState(inputText = "shili", preeditText = "shi li",
         isComposing = true, candidates = listOf("示例", "实例", "实力", "事例"))
     private var settingsResizeBounds: android.graphics.Rect? = null
-    private var settingsArrangeBounds: android.graphics.Rect? = null
 
     private fun allowSettingsPreviewTouch(event: android.view.MotionEvent): Boolean {
         if (!settingsPreviewEditor) return true
@@ -426,11 +425,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         val y = (origin[1] + event.y).toInt()
         val bounds = when {
             settingsPreviewPanel == KeyboardPanelLaunch.Panel.RESIZE && uiState.value.showKeyboardResize -> settingsResizeBounds
-            settingsPreviewPanel == KeyboardPanelLaunch.Panel.ARRANGE &&
-                (keyboardViewModel.page.value as? KeyboardPage.Overlay)?.route == OverlayRoute.ToolbarCustomize -> settingsArrangeBounds
             else -> null
         } ?: run {
-            // 只读预览被点：请设置页打开试打框，焦点换到真实输入框后这副键盘就能直接打字。调节／排列面板打开时不算。
+            // 只读预览被点：请设置页打开试打框，焦点换到真实输入框后这副键盘就能直接打字。调节面板打开时不算。
             if (settingsPreviewPanel == null && event.actionMasked == android.view.MotionEvent.ACTION_DOWN)
                 KeyboardPanelLaunch.typingRequested = true
             return false
@@ -1858,7 +1855,15 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     internal fun closeClipboardSearch(openBoard: Boolean, keepQuery: Boolean = false) {
         if (!uiState.value.clipboardSearchVisible) return
         stopVoiceForClosedEditor(ToolPanelEditTextHolder.editText)
-        if (!keepQuery) clipboardManager.boardQuery.value = ""
+        val favoriteStore = com.kingzcheung.xime.clipboard.ClipboardFavoriteStore.getInstance(this)
+        if (!keepQuery) {
+            clipboardManager.boardQuery.value = ""
+            favoriteStore.setSearchInFavorites(false)
+        }
+        if (!openBoard) {
+            favoriteStore.setSearchInFavorites(false)
+            favoriteStore.setReturnToFavorites(false)
+        }
         if (candidateState.value.isComposing) {
             keyRouter.postRimeJob { keyRouter.endQueuedComposition(); withContext(Dispatchers.Main) { updateUI() } }
         }
@@ -2431,9 +2436,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                         val totalDp = if (handwritingExpanded || state.showKeyboardResize || state.isCompact || state.voiceCollapsed || state.isFloatingMode) effectiveScreenH
                             else contentHeight + contentBottomPaddingDp + activeBottomDp
                         SideEffect {
-                            val editingPreview = (settingsPreviewPanel == KeyboardPanelLaunch.Panel.RESIZE && state.showKeyboardResize) ||
-                                (settingsPreviewPanel == KeyboardPanelLaunch.Panel.ARRANGE &&
-                                    (page as? KeyboardPage.Overlay)?.route == OverlayRoute.ToolbarCustomize)
+                            val editingPreview = settingsPreviewPanel == KeyboardPanelLaunch.Panel.RESIZE && state.showKeyboardResize
                             keyboardContainer.importantForAccessibility = if (settingsPreviewEditor && !editingPreview)
                                 View.IMPORTANT_FOR_ACCESSIBILITY_NO_HIDE_DESCENDANTS else View.IMPORTANT_FOR_ACCESSIBILITY_AUTO
                             currentResolvedKeyboardSize = protectedSize
@@ -2995,7 +2998,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                             } else null
                             KeyboardView(
                                 previewLetterLayout = sampleLayout != null,
-                                onPreviewArrangePositioned = if (!settingsPreviewEditor) null else { r -> settingsArrangeBounds = r },
+                                inSettingsPreview = settingsPreviewEditor,
                                 hardwareKeyboardConnected = hasHardwareKeyboard,
                                 hardwareCandidateHighlight = if (hasHardwareKeyboard) keyRouter.hardwareCandidateSelection(
                                     candidateState.value, state.isAsciiMode || state.inputProfile.typesLettersDirectly,
@@ -3925,8 +3928,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         val preview = KeyboardPanelLaunch.isPreview(attribute, packageName)
         val requestedTool = if (preview) KeyboardPanelLaunch.editorPanel(attribute) else null
         if ((preview || settingsPreviewEditor) && requestedTool != KeyboardPanelLaunch.Panel.RESIZE) cancelKeyboardResize()
-        if ((preview || settingsPreviewEditor) && requestedTool != KeyboardPanelLaunch.Panel.ARRANGE &&
-            (keyboardViewModel.page.value as? KeyboardPage.Overlay)?.route == OverlayRoute.ToolbarCustomize) keyboardViewModel.closeOverlay()
         settingsPreviewEditor = preview
         settingsPreviewPanel = requestedTool
         settingsExample = KeyboardPanelLaunch.Example.entries.firstOrNull { preview && it.option == attribute?.privateImeOptions }
@@ -3934,7 +3935,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         KeyboardPanelLaunch.previewVisible = settingsPreviewEditor && isInputViewShown
         if (!restarting) {
             settingsResizeBounds = null
-            settingsArrangeBounds = null
         }
         // 宿主在打拼音时重启了同一个输入框（QQ 留言板等每改一次字就重设文字）：编码原样还在就接着打。
         val resumingAfterLock = lockCompositionSuspended
@@ -4706,6 +4706,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         runtimeObserver?.stop()
         com.kingzcheung.xime.stats.TypingStats.flush()
         com.kingzcheung.xime.association.AssociationManager.flushLearning()
+        predictionManager.flushEnglishLearning()
         // App 收起键盘（点了别处）：听写结束，不再自己弹悬浮条；只有收起按钮才出悬浮条（voiceKeepsListeningAfter）。
         voiceKeptAlive = !finishingInput && voiceKeepsAliveOnHide()
         if (!voiceKeptAlive) noteVoicePillInterrupted(VoiceSessionEnd.FOCUS_LEAVES)
@@ -4828,8 +4829,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             if (!settingsPreviewEditor || !KeyboardPanelLaunch.previewVisible || settingsPreviewPanel != panel) return@post
             when (panel) {
                 KeyboardPanelLaunch.Panel.RESIZE -> if (!uiState.value.showKeyboardResize) keyboardCallbacks?.onKeyboardResize?.invoke()
-                KeyboardPanelLaunch.Panel.ARRANGE -> if ((keyboardViewModel.page.value as? KeyboardPage.Overlay)?.route != OverlayRoute.ToolbarCustomize)
-                    keyboardViewModel.showOverlay(OverlayRoute.ToolbarCustomize)
             }
         }
     }
@@ -5345,6 +5344,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         hardwareInputManager.unregisterInputDeviceListener(hardwareInputListener)
         inputStallWatchdog?.stop()
         com.kingzcheung.xime.association.AssociationManager.flushLearning()
+        com.kingzcheung.xime.settings.EnglishWordMemory.flush(com.kingzcheung.xime.settings.SchemaManager.getRimeDir(this))
         runtimeObserver?.stop()
         stopVoicePillResume()
         inputReadiness.close()

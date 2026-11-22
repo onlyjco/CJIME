@@ -28,11 +28,10 @@ class MenuSettingsLinksTest {
         for (b in noSetting) assertNull(b.id, menuSettingsEntry(ToolbarButtonItem.Builtin(b)))
     }
 
-    @Test fun sizeFloatingAndArrangeOpenTheKeyboardPanelPages() {
+    @Test fun sizeAndFloatingOpenTheKeyboardPanelPages() {
         fun target(b: ToolbarButton) = menuSettingsEntry(ToolbarButtonItem.Builtin(b))?.target
         assertEquals(SettingsRoutes.KeyboardResize, target(ToolbarButton.FLOAT))
         assertEquals(SettingsRoutes.KeyboardResize, target(ToolbarButton.FLOATING))
-        assertEquals(SettingsRoutes.ToolbarArrange, target(ToolbarButton.ARRANGE))
         assertEquals(SettingsRoutes.ClipboardPanel, target(ToolbarButton.CLIPBOARD))
         assertEquals(SettingsRoutes.SmartPrediction, target(ToolbarButton.INCOGNITO))
         assertEquals("无痕模式", menuSettingsEntry(ToolbarButtonItem.Builtin(ToolbarButton.INCOGNITO))?.anchor)

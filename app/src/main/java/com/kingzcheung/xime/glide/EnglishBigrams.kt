@@ -44,8 +44,8 @@ class EnglishBigrams(vocabulary: List<String>, lines: Sequence<String>) {
     fun cost(word: String): Float = ids[word]?.let { unigram[it] } ?: UNKNOWN
 
     /** [previous] 后面接 [word] 的代价 -ln P(word|previous)，单位 nat；前词为空或不认识时只看这个词本身。 */
-    fun cost(previous: String?, word: String): Float {
-        val b = ids[word] ?: return UNKNOWN
+    fun cost(previous: String?, word: String, fallback: Float = UNKNOWN): Float {
+        val b = ids[word] ?: return fallback
         val a = previous?.let { ids[it] } ?: return unigram[b]
         val index = keys.binarySearch(key(a, b))
         return if (index >= 0) (scores[index].toInt() and 0xff) / 10f else unigram[b] + UNSEEN_COST
@@ -77,15 +77,21 @@ fun rankGlideChoices(
     before: String?,
     previous: List<GlideCandidate>?,
     current: List<GlideCandidate>,
+    extraCost: ((String) -> Float?)? = null,
 ): List<GlideChoice> {
+    fun wordCost(prev: String?, w: String): Float {
+        val lower = w.lowercase()
+        val extra = extraCost?.invoke(lower)
+        return if (extra != null) lm.cost(prev, lower, extra) else lm.cost(prev, lower)
+    }
     val words = current.take(PAIR_TOP)
     if (previous.isNullOrEmpty()) return words.map { word ->
-        GlideChoice(null, word.word, word.shape * SHAPE_SCALE + lm.cost(before?.lowercase(), word.word.lowercase()))
+        GlideChoice(null, word.word, word.shape * SHAPE_SCALE + wordCost(before?.lowercase(), word.word))
     }.sortedBy { it.cost }
     return previous.take(PAIR_TOP).flatMap { prior ->
         val head = prior.word.lowercase()
-        val priorCost = prior.shape * SHAPE_SCALE + lm.cost(before?.lowercase(), head)
-        words.map { word -> GlideChoice(prior.word, word.word, priorCost + word.shape * SHAPE_SCALE + lm.cost(head, word.word.lowercase())) }
+        val priorCost = prior.shape * SHAPE_SCALE + wordCost(before?.lowercase(), prior.word)
+        words.map { word -> GlideChoice(prior.word, word.word, priorCost + word.shape * SHAPE_SCALE + wordCost(head, word.word)) }
     }.sortedBy { it.cost }
 }
 

@@ -41,7 +41,7 @@ class KeyboardModeNavigationTest {
             PanelType.entries.map { KeyboardPage.Panel(it, MainType.HANDWRITING) }
         val routes = listOf(OverlayRoute.Menu, OverlayRoute.SchemaList, OverlayRoute.Clipboard(),
             OverlayRoute.Emoji, OverlayRoute.Symbol, OverlayRoute.Edit, OverlayRoute.SplitWords("文字"),
-            OverlayRoute.ToolbarCustomize, OverlayRoute.ToolPanel)
+            OverlayRoute.ToolPanel)
         for (surface in surfaces) {
             assertSame(surface, surface.underlyingPage())
             for (route in routes) {

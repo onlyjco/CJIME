@@ -39,12 +39,10 @@ object SettingsRoutes {
     const val GlideContribute = "glide_contribute"
     const val Handwriting = "handwriting_settings"
     const val ClipboardSync = "clipboard_sync"
-    const val ClipboardGroups = "clipboard_groups"
     const val ClipboardPanel = "clipboard_panel"
     const val Backup = "backup"
     const val RimeFileBrowser = "rime_file_browser"
     const val KeyboardResize = "keyboard_resize"
-    const val ToolbarArrange = "toolbar_arrange"
     const val TypingStats = "typing_stats"
     const val Other = "other_settings"
 }

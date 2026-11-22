@@ -320,18 +320,11 @@ fun SettingsScreen(
         composable(SettingsRoutes.ClipboardPanel) {
             ClipboardPanelSettingsContent(
                 onBack = { navController.popBackStack() },
-                onNavigateToGroups = { navController.navigate(SettingsRoutes.ClipboardGroups) },
                 onNavigateToSync = { navController.navigate(SettingsRoutes.ClipboardSync) },
             )
         }
-        composable(SettingsRoutes.ClipboardGroups) {
-            ClipboardGroupSettingsContent(onBack = { navController.popBackStack() })
-        }
         composable(SettingsRoutes.KeyboardResize) {
             KeyboardPanelSettingsContent(com.kingzcheung.xime.keyboard.KeyboardPanelLaunch.Panel.RESIZE) { navController.popBackStack() }
-        }
-        composable(SettingsRoutes.ToolbarArrange) {
-            KeyboardPanelSettingsContent(com.kingzcheung.xime.keyboard.KeyboardPanelLaunch.Panel.ARRANGE) { navController.popBackStack() }
         }
         composable(SettingsRoutes.Other) {
             OtherSettingsContent(onBack = { navController.popBackStack() }, onNavigateToRoute = { navController.navigate(it) })

@@ -810,9 +810,14 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
             val after = runCatching { ic.getTextAfterCursor(1, 0) }.getOrNull()
             if (!EnglishAutoSpace.spacesAfterPunctuation(key, before, after)) return@withEditor false
             if (!service.commitTextAndPredict("$key ", isPaste = false, allowPrediction = false).accepted) return@withEditor false
+            val finishedWord = candidates.pendingEnglishText
+            val wasAutoCapped = directEnglishAutoCapped
+            val wasGlided = candidates.glidedWord.isNotEmpty()
+            directEnglishAutoCapped = false
             service.candidateState.value = service.candidateState.value.copy(
-                pendingEnglishText = "", associationCandidates = emptyList())
+                pendingEnglishText = "", associationCandidates = emptyList(), glidedWord = "")
             englishAutoSpace.arm(key)
+            if (!wasGlided) recordFinishedDirectEnglishWord(finishedWord, wasAutoCapped, picked = false)
             true
         }
     }
@@ -822,6 +827,22 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
 
     /** 英文单词方案这一轮组字的首字母是「首字母大写」自动打成大写的（回车记词时还原，见 [spellingWithoutAutoCap]）。按键线程读写。 */
     private var wordsAutoCapped = false
+
+    /** 英文直输模式下当前词首字母是否由「句首自动大写」触发（自动大写时还原为小写记词，手按 Shift 保留大写）。 */
+    private var directEnglishAutoCapped = false
+
+    private fun shouldLearnDirectEnglish(): Boolean {
+        val ui = service.uiState.value
+        return ui.isAsciiMode && !ui.inputTarget.isInternal &&
+            !com.kingzcheung.xime.settings.IncognitoState.active && !service.isSecretEditor()
+    }
+
+    private fun recordFinishedDirectEnglishWord(rawWord: String, wasAutoCapped: Boolean, picked: Boolean = false) {
+        if (rawWord.isEmpty() || !shouldLearnDirectEnglish()) return
+        val word = if (wasAutoCapped) spellingWithoutAutoCap(rawWord) else rawWord
+        if (!com.kingzcheung.xime.settings.EnglishWordMemory.isObservable(word)) return
+        service.predictionManager.recordDirectEnglishWord(word, picked)
+    }
 
     /** 英文单词方案选词后自动加空格（同「选词后自动加空格」开关，默认关，#311）：只在应用的输入框里、只跟在词后面。 */
     private fun wordsAutoSpaceAfter(text: String): Boolean {
@@ -874,7 +895,8 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 fun planFor(previous: com.kingzcheung.xime.glide.PreviousGlide?) = com.kingzcheung.xime.glide.planGlideCommit(
                     candidates, wordCase, previous,
                     com.kingzcheung.xime.glide.glideContextWord(if (previous != null) textBefore.dropLast(previous.text.length) else textBefore),
-                    com.kingzcheung.xime.glide.GlideLexicon.loadedBigrams(), com.kingzcheung.xime.glide.GlideLexicon.loadedContractions())
+                    com.kingzcheung.xime.glide.GlideLexicon.loadedBigrams(), com.kingzcheung.xime.glide.GlideLexicon.loadedContractions(),
+                    com.kingzcheung.xime.glide.GlideLexicon::extraEnglishCost, com.kingzcheung.xime.glide.GlideLexicon::displayEnglishWord)
                 var plan = planFor(previous)
                 // Replacing an earlier word requires the temporary composition to be
                 // removed first; the ordinary case can commit straight over it.
@@ -926,7 +948,8 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         val sentenceStart = previous == null && capitalizeEnglishHere()
         return { candidates, case ->
             val plan = com.kingzcheung.xime.glide.planGlideCommit(candidates, glideCase(case, sentenceStart), previous, before,
-                com.kingzcheung.xime.glide.GlideLexicon.loadedBigrams(), com.kingzcheung.xime.glide.GlideLexicon.loadedContractions())
+                com.kingzcheung.xime.glide.GlideLexicon.loadedBigrams(), com.kingzcheung.xime.glide.GlideLexicon.loadedContractions(),
+                com.kingzcheung.xime.glide.GlideLexicon::extraEnglishCost, com.kingzcheung.xime.glide.GlideLexicon::displayEnglishWord)
             com.kingzcheung.xime.ui.keyboard.GlideEnglishPreview(
                 if (plan.replacePrevious != null) plan.preview
                 else com.kingzcheung.xime.glide.glideCommitText(plan.word, textBefore.lastOrNull()),
@@ -1454,6 +1477,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                     val fullWidthLetter = service.textCommit.isJapaneseProfile() && service.textCommit.isFullWidthPunctuation()
                     // 西、德、法、意、俄语键盘和英文同一个「首字母大写」开关（以前只有英文会自动大写）；韩文没有大小写。
                     val autoCaps = hardwareEvent == null && !isShifted && capitalizeEnglishHere()
+                    if (current.pendingEnglishText.isEmpty() || afterGlide) directEnglishAutoCapped = autoCaps
                     // 越南语 Telex：这个字母给光标前的词加声调或变音（vieet → viêt），换掉光标前的词；只是追加字母时照常往下走。
                     if (letterLanguage == com.kingzcheung.xime.settings.LetterLanguage.VIETNAMESE && !afterGlide && !fullWidthLetter) {
                         val typed = if (isShifted || autoCaps) key.uppercase().takeIf { it.length == 1 } ?: key else key.lowercase()
@@ -1781,6 +1805,13 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                         withEditor { service.endComposingInputBox() }
                         needsUIUpdate = true
                     } else {
+                        val pendingWord = candState.pendingEnglishText
+                        val wasAutoCapped = directEnglishAutoCapped
+                        val wasGlided = candState.glidedWord.isNotEmpty()
+                        directEnglishAutoCapped = false
+                        if (pendingWord.isNotEmpty() && !wasGlided) {
+                            recordFinishedDirectEnglishWord(pendingWord, wasAutoCapped, picked = false)
+                        }
                         service.rimeEngine.clearComposition()
                         withEditor {
                             if (state.showQuickSendForm) service.submitText("\n") else performIdleEnter()
@@ -1820,14 +1851,19 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                     val pendingEnglish = candState.pendingEnglishText
 
                     if (pendingEnglish.isNotEmpty()) {
+                        val wasAutoCapped = directEnglishAutoCapped
+                        val wasGlided = candState.glidedWord.isNotEmpty()
+                        directEnglishAutoCapped = false
                         // 直接上屏模式：词已逐字落盘，此处只提交空格并结束本轮英文输入。
                         withEditor {
                             service.commitText(" ")
                             service.candidateState.value = service.candidateState.value.copy(
                                 pendingEnglishText = "",
+                                glidedWord = "",
                                 associationCandidates = emptyList()
                             )
                         }
+                        if (!wasGlided) recordFinishedDirectEnglishWord(pendingEnglish, wasAutoCapped, picked = false)
                     } else if (candState.isComposing) {
                         if (candState.candidates.isNotEmpty()) {
                             val index = candState.spaceCandidateIndex(state.inputProfile)
@@ -2030,13 +2066,20 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                     // 直接上屏，不进入 Rime 引擎与 pendingEnglish 累积（上滑字符即输即上）。
                     if ((state.isAsciiMode || pendingEnglish.isNotEmpty()) && !key.matches(Regex("[a-zA-Z]"))) {
                         val finalKey = key
+                        val wasAutoCapped = directEnglishAutoCapped
+                        val wasGlided = candState.glidedWord.isNotEmpty()
+                        directEnglishAutoCapped = false
                         withEditor {
                             // 直接上屏模式：pendingEnglish 对应字符已逐字落盘，只提交增量键值。
                             service.commitText(finalKey)
                             service.candidateState.value = service.candidateState.value.copy(
                                 pendingEnglishText = "",
+                                glidedWord = "",
                                 associationCandidates = emptyList()
                             )
+                        }
+                        if (pendingEnglish.isNotEmpty() && !wasGlided) {
+                            recordFinishedDirectEnglishWord(pendingEnglish, wasAutoCapped, picked = false)
                         }
                     } else {
                         val isChinese = !state.isAsciiMode
@@ -2552,10 +2595,18 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
             },
             suffix = if (autoSpace) " " else "")
         if (!accepted) return false
+        val pickedEnglish = if (state.pendingEnglishText.isNotEmpty() && !emailSuffix && !state.isDigitPhraseList) {
+            associationWordAt(state, index)
+        } else null
+        val wasAutoCapped = directEnglishAutoCapped
+        directEnglishAutoCapped = false
+        if (pickedEnglish != null) {
+            recordFinishedDirectEnglishWord(pickedEnglish, wasAutoCapped && index == 0, picked = true)
+        }
         associationWordAt(state, index)?.let(com.kingzcheung.xime.stats.TypingStats::onAssociationPicked)
         if (autoSpace) associationWordAt(state, index)?.let(englishAutoSpace::arm)
         service.candidateState.value = service.candidateState.value.copy(
-            pendingEnglishText = "", associationCandidates = emptyList())
+            pendingEnglishText = "", glidedWord = "", associationCandidates = emptyList())
         hardwareNavigation.clear()
         publishHardwareCandidateSelection()
         return true
@@ -2744,6 +2795,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                     }
                     if (next != null) requestEnglishCompletions(next)
                 } else {
+                    directEnglishAutoCapped = false
                     withEditor {
                         if (owner != service.uiState.value.inputSessionId) return@withEditor
                         englishCompletionSequence.incrementAndGet()
@@ -3149,6 +3201,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
      * 输入框模式清 composing 区；T9 方案重置左侧候选区（其他键盘无左栏，跳过）。
      */
     private suspend fun clearInputStateForKeys(keepInlineText: Boolean = false) {
+        directEnglishAutoCapped = false
         discardPreviousAssociations()
         service.predictionManager.invalidatePendingPredictions()
         service.calculatorEngine.clear()
@@ -3509,6 +3562,22 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                     android.widget.Toast.makeText(service, "「$text」不能固定", android.widget.Toast.LENGTH_SHORT).show()
                 }
             }
+        }
+    }
+
+    /** 英文直输候选栏长按遗忘个人英文记忆/观察词：删除后立即从当前候选移除并同步更新滑行词表。 */
+    internal fun deleteEnglishAssociation(text: String) {
+        postRimeJob {
+            val rimeDir = com.kingzcheung.xime.settings.SchemaManager.getRimeDir(service)
+            if (!com.kingzcheung.xime.settings.EnglishWordMemory.forget(rimeDir, text)) return@postRimeJob
+            englishCompletionCache.clear()
+            withEditor {
+                val current = service.candidateState.value
+                service.candidateState.value = current.copy(
+                    associationCandidates = current.associationCandidates.filterNot { it.equals(text, ignoreCase = true) }
+                )
+            }
+            showForgetResult(text, 3)
         }
     }
 

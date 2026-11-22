@@ -130,4 +130,30 @@ class GlidePairCorrectionTest {
         println("glide pairs: independent $independent/$total, paired $paired/$total")
         assertTrue("paired $paired independent $independent", paired > independent)
     }
+
+    @Test fun learnedPersonalWordsCanBeGlidedWithPreservedCasing() {
+        val personal = listOf("antigravity", "gemini")
+        val personalSet = personal.toSet()
+        val display = mapOf("gemini" to "Gemini")
+        val extendedVocab = vocabulary.subList(0, 500) + personal + vocabulary.subList(500, vocabulary.size)
+        val extendedDecoder = GlideDecoder(
+            GlideLexicon.keyboard(keys),
+            extendedVocab.filter { it.length >= 2 && it.all { c -> c in 'a'..'z' } }
+        )
+        val random = Random(42)
+        for (target in personal) {
+            val candidates = trace(target.map(::center), random).let { (xs, ys) -> extendedDecoder.decode(xs, ys) }
+            val plan = planGlideCommit(
+                candidates,
+                { it },
+                null,
+                null,
+                lm,
+                contractions,
+                extraCost = { w -> if (w in personalSet) 10.5f else null },
+                displayWord = { w -> display[w] ?: w }
+            )
+            assertEquals(display[target] ?: target, plan.word)
+        }
+    }
 }

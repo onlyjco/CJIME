@@ -59,7 +59,7 @@ class Merged14CaretEditTest {
         val editor = File(root, "app/src/main/java/com/kingzcheung/xime/service/ImePreeditEditor.kt").readText()
         assertTrue(editor.contains("?: keys?.takeIf { it.length == text.length } ?: text"))
         assertTrue(editor.contains("keys = keys?.removeRange(caret - 1, caret)"))
-        val view = File(root, "app/src/main/java/com/kingzcheung/xime/ui/keyboard/KeyboardView.kt").readText()
+        val view = File(root, "app/src/main/java/com/kingzcheung/xime/ui/keyboard/KeyboardView.kt").readText().replace("\r\n", "\n")
         assertTrue(view.contains("com.kingzcheung.xime.rime.MergedLetterInput.isGroup(key,\n" +
             "                        state.inputProfile.layout == com.kingzcheung.xime.settings.InputLayout.MERGED14"))
     }

@@ -234,11 +234,8 @@ internal fun ClipboardExportSetting() {
                     val now = System.currentTimeMillis()
                     val items = com.kingzcheung.xime.clipboard.ClipboardExport.order(
                         com.kingzcheung.xime.clipboard.ClipboardManager.getInstance(context).exportItems(), includePinned)
-                    val groups = com.kingzcheung.xime.clipboard.ClipboardGroupStore.getInstance(context).state.value
                     context.contentResolver.openOutputStream(uri, "wt")!!.bufferedWriter().use {
-                        com.kingzcheung.xime.clipboard.ClipboardExport.write(items, chosen, it, now) { item ->
-                            groups.groupOf("text:${item.id}")?.name
-                        }
+                        com.kingzcheung.xime.clipboard.ClipboardExport.write(items, chosen, it, now)
                     }
                     items.size
                 }

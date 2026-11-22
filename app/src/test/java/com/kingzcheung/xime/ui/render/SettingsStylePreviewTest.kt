@@ -86,14 +86,15 @@ class SettingsStylePreviewTest {
         assertEquals(0, received)
     }
 
-    @Test fun aPreviousPageCannotOpenOrCancelTheNewPagesTool() {
+    @Test fun aPreviousPageCannotCancelAnotherPagesRequest() {
         val old = Any()
         val active = Any()
         KeyboardPanelLaunch.request(KeyboardPanelLaunch.Panel.RESIZE, old)
-        KeyboardPanelLaunch.request(KeyboardPanelLaunch.Panel.ARRANGE, active)
         KeyboardPanelLaunch.cancel(old)
-        assertNull(KeyboardPanelLaunch.take(KeyboardPanelLaunch.Panel.RESIZE))
-        assertEquals(KeyboardPanelLaunch.Panel.ARRANGE, KeyboardPanelLaunch.take(KeyboardPanelLaunch.Panel.ARRANGE))
+        assertNull(KeyboardPanelLaunch.take())
+        KeyboardPanelLaunch.request(KeyboardPanelLaunch.Panel.RESIZE, active)
+        KeyboardPanelLaunch.cancel(old)
+        assertEquals(KeyboardPanelLaunch.Panel.RESIZE, KeyboardPanelLaunch.take(KeyboardPanelLaunch.Panel.RESIZE))
         assertNull(KeyboardPanelLaunch.take())
     }
 
@@ -280,14 +281,14 @@ class SettingsStylePreviewTest {
         rule.setContent {
             XimeTheme { key(page) {
                 when (page) {
-                    "arrange" -> KeyboardPanelSettingsContent(KeyboardPanelLaunch.Panel.ARRANGE) {}
+                    "resize" -> KeyboardPanelSettingsContent(KeyboardPanelLaunch.Panel.RESIZE) {}
                     "hardware" -> HardwareKeyboardSettingsContent {}
                     else -> LayoutDisplaySettingsContent(onBack = {}, initialPage = page.takeUnless { it == "layout" })
                 }
             } }
         }
         val root = rule.activity.window.decorView as ViewGroup
-        listOf("layout", "key_tips", "candidates", "hardware", "arrange").forEach { target ->
+        listOf("layout", "key_tips", "candidates", "hardware", "resize").forEach { target ->
             rule.runOnIdle { page = target }
             rule.runOnIdle {
                 val editor = root.descendants.filterIsInstance<StylePreviewEditor>().single()
@@ -296,8 +297,8 @@ class SettingsStylePreviewTest {
                 assertNull(KeyboardPanelLaunch.take())
             }
         }
-        rule.onNodeWithText("编辑排列").performClick()
-        rule.runOnIdle { assertEquals(KeyboardPanelLaunch.Panel.ARRANGE, KeyboardPanelLaunch.take()) }
+        rule.onNodeWithText("调整尺寸").performClick()
+        rule.runOnIdle { assertEquals(KeyboardPanelLaunch.Panel.RESIZE, KeyboardPanelLaunch.take()) }
     }
 
     private fun save(name: String) {

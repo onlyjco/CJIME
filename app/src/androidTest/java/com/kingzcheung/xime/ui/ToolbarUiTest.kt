@@ -46,7 +46,6 @@ import com.kingzcheung.xime.ui.keyboard.CandidateBar
 import com.kingzcheung.xime.ui.keyboard.CandidateBarCallbacks
 import com.kingzcheung.xime.ui.keyboard.CandidateBarState
 import com.kingzcheung.xime.ui.keyboard.CandidateBarVisuals
-import com.kingzcheung.xime.ui.menubar.ToolbarCustomizeView
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
@@ -254,42 +253,6 @@ class ToolbarUiTest {
         }
         // 拖动不算点选。
         rule.runOnIdle { assertEquals(listOf(0, 1), pasted) }
-    }
-
-    @Test
-    fun shortCustomizePanelScrollsToCompleteLabelsAndKeepsTheExistingSelection() {
-        val plugin = ToolbarButtonItem.Plugin(
-            id = "test.long_label",
-            label = "长名称插件功能入口",
-            icon = PluginIcon(text = "测"),
-            pluginId = "test",
-            action = "open_panel",
-        )
-        var saved = listOf(ToolbarButton.CLIPBOARD.id)
-        rule.setContent {
-            MaterialTheme {
-                var selected by remember { mutableStateOf(saved) }
-                ToolbarCustomizeView(
-                    toolbarButtons = selected,
-                    pluginButtons = listOf(plugin),
-                    keyTextColor = Color.Black,
-                    backgroundColor = Color.White,
-                    accentColor = Color.Blue,
-                    keyBgColor = Color.LightGray,
-                    onUpdateQuickActions = { selected = it.toolbar; saved = it.toolbar },
-                    onDismiss = {},
-                    modifier = Modifier.size(width = 320.dp, height = 160.dp),
-                )
-            }
-        }
-        rule.onNode(hasScrollToIndexAction()).performScrollToNode(hasTestTag("quick-action:${plugin.id}"))
-        val label = rule.onNodeWithText(plugin.label, useUnmergedTree = true)
-        label.assertIsDisplayed()
-        val textLayouts = mutableListOf<TextLayoutResult>()
-        label.performSemanticsAction(SemanticsActions.GetTextLayoutResult) { it(textLayouts) }
-        assertFalse(textLayouts.single().hasVisualOverflow)
-        // Arranging never changes the saved toolbar until something is dragged.
-        rule.runOnIdle { assertEquals(listOf(ToolbarButton.CLIPBOARD.id), saved) }
     }
 
     @Test fun voiceKeepsAllToolbarButtonsAndHighlightsOnlyMicrophone() {

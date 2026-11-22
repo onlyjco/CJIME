@@ -28,11 +28,17 @@ fun planGlideCommit(
     before: String?,
     lm: EnglishBigrams?,
     contractions: EnglishContractions?,
+    extraCost: ((String) -> Float?)? = null,
+    displayWord: ((String) -> String)? = null,
 ): GlideCommitPlan {
-    fun shown(word: String, case: (String) -> String) = case(contractions?.display(word) ?: word)
+    fun shown(word: String, case: (String) -> String): String {
+        val contracted = contractions?.display(word)?.takeIf { it != word }
+        val base = contracted ?: displayWord?.invoke(word) ?: word
+        return case(base)
+    }
     fun offer(word: String, case: (String) -> String) = contractions?.offer(word)?.let(case)
     if (previous != null && lm != null && previous.candidates.isNotEmpty()) {
-        val choices = rankGlideChoices(lm, before, previous.candidates, candidates)
+        val choices = rankGlideChoices(lm, before, previous.candidates, candidates, extraCost)
         val best = choices.first()
         val head = shown(best.previous!!, previous.case)
         val word = shown(best.word, case)
@@ -43,7 +49,7 @@ fun planGlideCommit(
         return GlideCommitPlan(head.takeIf { it != previous.text }, word, pairs.take(MAX_ALTERNATIVES), pair = true)
     }
     val ranked = if (lm == null) candidates.map { it.word }
-        else rankGlideChoices(lm, before, null, candidates).map { it.word } + candidates.drop(PAIR_TOP).map { it.word }
+        else rankGlideChoices(lm, before, null, candidates, extraCost).map { it.word } + candidates.drop(PAIR_TOP).map { it.word }
     val word = shown(ranked.first(), case)
     val alternatives = LinkedHashSet<String>()
     offer(ranked.first(), case)?.let(alternatives::add)

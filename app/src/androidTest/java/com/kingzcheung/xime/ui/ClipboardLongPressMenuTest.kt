@@ -34,7 +34,7 @@ import org.junit.Test
 class ClipboardLongPressMenuTest {
     @get:Rule val rule = createComposeRule()
 
-    private val menuLabels = listOf("拆词", "快捷", "多选", "删除")
+    private val menuLabels = listOf("拆字", "快捷", "多选", "删除")
 
     @Test fun shortPanelKeepsEveryMenuItemInsidePanel() = assertMenuInsidePanel(panelHeightDp = 120)
 

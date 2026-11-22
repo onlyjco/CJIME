@@ -96,7 +96,7 @@ class ClipboardBoardContextMenuTest {
             kotlin.math.abs(menu.left - record.right) <= 12f || kotlin.math.abs(record.left - menu.right) <= 12f)
         assertEquals(toolbar, bounds("clipboard-more"))
         assertEquals(record, bounds("clipboard-card:text:12"))
-        rule.onNodeWithText("分词").performScrollTo().performClick()
+        rule.onNodeWithText("拆字").performScrollTo().performClick()
         rule.runOnIdle { assertEquals(text.text to text.id, split) }
         rule.onNodeWithTag("clipboard-item-menu").assertDoesNotExist()
         open("text:12")
@@ -112,7 +112,7 @@ class ClipboardBoardContextMenuTest {
         val record = bounds("clipboard-card:$key")
         open(key)
         assertEquals(record, bounds("clipboard-card:$key"))
-        for (label in listOf("分词", "快捷", "编辑")) rule.onNodeWithText(label).assertDoesNotExist()
+        for (label in listOf("拆字", "快捷", "编辑")) rule.onNodeWithText(label).assertDoesNotExist()
         rule.onNodeWithText("固定").performScrollTo().performClick()
         rule.runOnIdle { assertEquals(setOf(key), pins.value) }
         open(key)
@@ -130,7 +130,7 @@ class ClipboardBoardContextMenuTest {
         val record = bounds("clipboard-card:text:12")
         open("text:12")
         val board = bounds("clipboard-board")
-        for (label in listOf("固定", "分词", "编辑", "多选", "删除")) {
+        for (label in listOf("固定", "拆字", "编辑", "多选", "删除")) {
             val row = rule.onNodeWithText(label).performScrollTo().assertIsDisplayed().fetchSemanticsNode().boundsInRoot
             assertInside(board, row, label)
             assertEquals(record, bounds("clipboard-card:text:12"))
@@ -148,7 +148,7 @@ class ClipboardBoardContextMenuTest {
         open("text:12")
         val menu = bounds("clipboard-item-menu")
         assertEquals(record, bounds("clipboard-card:text:12"))
-        for (label in listOf("取消固定", "分词", "编辑", "多选", "删除")) {
+        for (label in listOf("取消固定", "拆字", "编辑", "多选", "删除")) {
             val row = rule.onNodeWithText(label).performScrollTo().assertIsDisplayed().fetchSemanticsNode().boundsInRoot
             assertInside(menu, row, label)
         }

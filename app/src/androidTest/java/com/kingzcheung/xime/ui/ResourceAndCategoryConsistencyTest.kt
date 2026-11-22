@@ -92,37 +92,6 @@ class ResourceAndCategoryConsistencyTest {
         }
         rule.runOnIdle { assertEquals(listOf("!", "2", "2", "!"), commits) }
     }
-    @Test fun quickActionEditorShowsOneClipboardAndDragsAcrossTheMenuDivider() {
-        val layout = mutableStateOf(com.kingzcheung.xime.keyboard.QuickActionLayout(
-            listOf("clipboard", "copy", "voice"), listOf("settings", "sound")))
-        rule.setContent { CompositionLocalProvider(LocalDensity provides Density(1f)) {
-            MaterialTheme(darkColorScheme()) {
-                Box(Modifier.requiredSize(360.dp, 520.dp).testTag("toolbar-customize")) {
-                    com.kingzcheung.xime.ui.menubar.ToolbarCustomizeView(layout.value.toolbar, layout.value.menu,
-                        keyTextColor = Color.White, backgroundColor = Color(0xFF202028),
-                        accentColor = Color(0xFFCEC0FF), keyBgColor = Color(0xFF303038),
-                        onUpdateQuickActions = { layout.value = it }, onDismiss = {})
-                }
-            }
-        } }
-        rule.onNodeWithText("固定内容").assertDoesNotExist()
-        rule.onNodeWithText("剪贴板").assertIsDisplayed()
-        // Sections read top to bottom: toolbar entries, the menu divider, menu entries, then unused entries.
-        val y = { tag: String -> rule.onNodeWithTag(tag).fetchSemanticsNode().boundsInRoot.top }
-        val menuHeader = rule.onNodeWithText("菜单").fetchSemanticsNode().boundsInRoot.top
-        assertTrue(y("quick-action:voice") < menuHeader && menuHeader < y("quick-action:settings"))
-        saveUiEvidence("quick-action-editor", rule.onNodeWithTag("toolbar-customize"))
-        // Long-press the last toolbar entry and drag it past the menu divider.
-        rule.onNodeWithTag("quick-action:voice").performTouchInput {
-            down(center); advanceEventTime(800)
-            repeat(10) { moveBy(androidx.compose.ui.geometry.Offset(0f, 8f)); advanceEventTime(16) }
-            up()
-        }
-        rule.runOnIdle {
-            assertEquals(listOf("clipboard", "copy"), layout.value.toolbar)
-            assertEquals("voice", layout.value.menu.first())
-        }
-    }
 
     @Test fun fourteenPreviewShowsSingleLettersAsFullKeys() {
         val context = androidx.test.platform.app.InstrumentationRegistry.getInstrumentation().targetContext

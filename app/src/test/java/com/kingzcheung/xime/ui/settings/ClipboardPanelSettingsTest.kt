@@ -35,8 +35,8 @@ class ClipboardPanelSettingsTest {
 
     @Test fun everyClipboardSettingIsOnThePageAndWritesThePanelsValue() {
         prefs.edit().clear().commit()
-        rule.setContent { XimeTheme(darkTheme = false) { ClipboardPanelSettingsContent(onBack = {}, onNavigateToGroups = {}) } }
-        listOf("剪贴板分组", "卡片显示行数", "最近截图", "上屏后自动关闭剪贴板", "历史记录", "数量上限", "保留时间").forEach {
+        rule.setContent { XimeTheme(darkTheme = false) { ClipboardPanelSettingsContent(onBack = {}) } }
+        listOf("卡片显示行数", "最近截图", "上屏后自动关闭剪贴板", "历史记录", "数量上限", "保留时间").forEach {
             rule.onNodeWithText(it).performScrollTo()
         }
         rule.onNodeWithTag("clipboard-card-lines:8").performScrollTo().performClick()
@@ -45,7 +45,7 @@ class ClipboardPanelSettingsTest {
         assertEquals(8, prefs.getInt(CLIPBOARD_CARD_MAX_LINES_KEY, 4))
         assertFalse(prefs.getBoolean(CLIPBOARD_CLOSE_AFTER_PASTE_KEY, true))
         System.getenv("CYIME_RENDER_OUT")?.takeIf { it.isNotEmpty() }?.let { out ->
-            rule.onNodeWithText("剪贴板分组").performScrollTo()
+            rule.onNodeWithText("卡片显示行数").performScrollTo()
             rule.waitForIdle()
             val root = rule.activity.window.decorView
             val bitmap = Bitmap.createBitmap(root.width, root.height, Bitmap.Config.ARGB_8888)
@@ -60,7 +60,7 @@ class ClipboardPanelSettingsTest {
         var syncOpened = 0
         rule.setContent {
             XimeTheme(darkTheme = false) {
-                ClipboardPanelSettingsContent(onBack = {}, onNavigateToGroups = {}, onNavigateToSync = { syncOpened++ })
+                ClipboardPanelSettingsContent(onBack = {}, onNavigateToSync = { syncOpened++ })
             }
         }
         listOf("新短信验证码自动复制", "记录密码等敏感内容", "导出剪贴板", "导入剪贴板").forEach {

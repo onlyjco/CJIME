@@ -466,18 +466,6 @@ class ClipboardManager private constructor(private val context: Context) {
                 ClipboardImportRow.EXISTING -> existing++
                 else -> { notSaved++; continue }
             }
-            clip.group?.let { joins.getOrPut(it) { mutableListOf() }.add("text:${row.id}") }
-        }
-        val groups = ClipboardGroupStore.getInstance(context)
-        for ((name, keys) in joins) {
-            val id = groups.idForName(name) ?: continue
-            // A record already in a group stays where the user put it.
-            val members = groups.state.value.members
-            val joining = keys.filter { it !in members }
-            groups.assign(joining, id)
-            // Marked at once, so the history limits below leave them alone.
-            joining.mapNotNull { it.removePrefix("text:").toLongOrNull() }.takeIf { it.isNotEmpty() }
-                ?.chunked(500)?.forEach { dao.setGrouped(it, true) }
         }
         return ClipboardImportResult(added, pinned, existing, notSaved, trimmed = trimHistory())
     }
@@ -570,13 +558,8 @@ class ClipboardManager private constructor(private val context: Context) {
             } finally {
                 clipboardPinsReady.complete(Unit)
             }
-            // Before anything clears or expires history: records in a group are marked as kept.
-            val groups = ClipboardGroupStore.getInstance(context)
-            syncGroupedRecords(groups.state.value, boardPrefs)
-            scope.launch {
-                // Sorting or hiding tabs leaves membership intact, so the history needs no database write.
-                groups.state.distinctUntilChangedBy { it.members }.collect { syncGroupedRecords(it, boardPrefs) }
-            }
+            // 剪贴板分组已摘除：清空旧库残留的分组标记，恢复普通历史记录的正常清理统计。
+            runCatching { dao.syncGrouped(emptyList()) }
             // Duplicates saved before copies were merged (user 10-30): removed once; new copies merge as they come.
             if (!prefs.getBoolean(KEY_HISTORY_DEDUPED, false)) {
                 runCatching { dao.deleteDuplicateHistory() }
@@ -609,33 +592,6 @@ class ClipboardManager private constructor(private val context: Context) {
             }
         }
         startListening()
-    }
-
-    /**
-     * Records in a group are marked in the database (the groups themselves are board preferences) so
-     * clearing history, the received-copies room and the password expiry leave them alone and the board
-     * always loads them, without fixing them. A member whose record is gone leaves its group. Records
-     * fixed only because they went into a group (before 11-02) are unfixed once, text and images.
-     */
-    private suspend fun syncGroupedRecords(state: ClipboardGroupState, boardPrefs: android.content.SharedPreferences) {
-        val ids = state.members.keys.mapNotNull { key -> key.removePrefix("text:").takeIf { it != key }?.toLongOrNull() }
-        try {
-            dao.syncGrouped(ids)
-            if (!prefs.getBoolean(KEY_GROUPS_UNPINNED, false)) {
-                dao.unpinGrouped()
-                val images = state.members.keys.filterTo(mutableSetOf()) { it.startsWith("image:") }
-                if (images.isNotEmpty()) synchronized(boardPrefs) {
-                    val pins = boardPrefs.getStringSet("pins", emptySet()).orEmpty()
-                    check(boardPrefs.edit().putStringSet("pins", pins - images).commit())
-                }
-                prefs.edit().putBoolean(KEY_GROUPS_UNPINNED, true).apply()
-            }
-            val present = ids.chunked(500).flatMap { dao.existingIds(it) }.toSet()
-            val gone = ids.filterNot { it in present }
-            if (gone.isNotEmpty()) ClipboardGroupStore.getInstance(context).assign(gone.map { "text:$it" }, null)
-        } catch (error: Exception) {
-            Log.e(TAG, "Could not mark grouped clipboard records", error)
-        }
     }
 
     /**
@@ -897,16 +853,14 @@ class ClipboardManager private constructor(private val context: Context) {
      * [groupId]: added from that group's tab, the record goes into the group and is not fixed (a group
      * keeps its records without moving them to the top); otherwise it is a fixed record.
      */
-    fun addPinnedText(text: String, code: String = "", groupId: String? = null) {
+    fun addPinnedText(text: String, code: String = "", @Suppress("UNUSED_PARAMETER") groupId: String? = null) {
         if (text.isBlank() || !ClipboardCapacity.fitsRow(text)) return
         scope.launch {
             clipboardPinsReady.await()
             val key = searchKey(text)
-            // Text already saved is fixed (or grouped) in place and needs no room.
+            // Text already saved is fixed in place and needs no room.
             if (dao.findSameText(text) == null && !hasRoomFor(text, key)) return@launch
-            val now = System.currentTimeMillis()
-            if (groupId == null) dao.addPinned(text, code.trim(), now, key)
-            else ClipboardGroupStore.getInstance(context).assign(setOf("text:${dao.addToGroup(text, code.trim(), now, key)}"), groupId)
+            dao.addPinned(text, code.trim(), System.currentTimeMillis(), key)
         }
     }
 
@@ -937,7 +891,9 @@ class ClipboardManager private constructor(private val context: Context) {
     }
 
     fun copyImageUriToSystemClipboard(image: ClipboardImage) {
-        androidClipboardManager.setPrimaryClip(ClipData(INTERNAL_IMAGE_CLIP_LABEL, arrayOf(image.mimeType), ClipData.Item(Uri.parse(image.uri))))
+        androidClipboardManager.setPrimaryClip(
+            ClipData.newUri(context.contentResolver, INTERNAL_IMAGE_CLIP_LABEL, Uri.parse(image.uri))
+        )
     }
 
     fun getCurrentClipboardText(): String? {

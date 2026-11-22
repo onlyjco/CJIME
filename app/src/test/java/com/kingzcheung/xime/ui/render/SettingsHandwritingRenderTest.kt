@@ -60,14 +60,12 @@ class SettingsHandwritingRenderTest {
         "handwriting" -> HandwritingSettingsContent(onBack = {}, devTools = true)
         "gestures" -> com.kingzcheung.xime.ui.settings.LayoutDisplaySettingsContent(onBack = {}, initialPage = "gestures")
         "clipboard" -> com.kingzcheung.xime.ui.settings.ClipboardSyncSettingsContent(onBack = {}, onNavigateToPlugins = {})
-        "clipboard-groups" -> com.kingzcheung.xime.ui.settings.ClipboardGroupSettingsContent(onBack = {})
-        "clipboard-panel" -> com.kingzcheung.xime.ui.settings.ClipboardPanelSettingsContent(onBack = {}, onNavigateToGroups = {})
+        "clipboard-panel" -> com.kingzcheung.xime.ui.settings.ClipboardPanelSettingsContent(onBack = {})
         "plugins" -> com.kingzcheung.xime.ui.settings.PluginsSettingsContent(onBack = {})
         "extension-plugins" -> com.kingzcheung.xime.ui.settings.MarketHubContent(onBack = {}, initialTab = 2)
         "speech" -> com.kingzcheung.xime.ui.settings.SpeechToTextSettingsContent(onBack = {})
         "layout" -> com.kingzcheung.xime.ui.settings.LayoutDisplaySettingsContent(onBack = {})
         "resize" -> com.kingzcheung.xime.ui.settings.KeyboardPanelSettingsContent(com.kingzcheung.xime.keyboard.KeyboardPanelLaunch.Panel.RESIZE) {}
-        "arrange" -> com.kingzcheung.xime.ui.settings.KeyboardPanelSettingsContent(com.kingzcheung.xime.keyboard.KeyboardPanelLaunch.Panel.ARRANGE) {}
         "smart" -> com.kingzcheung.xime.ui.settings.SmartPredictionSettingsContent(onBack = {})
         else -> KeyEffectSettingsContent(onBack = {})
     }
@@ -83,11 +81,6 @@ class SettingsHandwritingRenderTest {
         // 剪贴板页一打开就列同步插件，要先有插件框架（应用启动时初始化）。
         if (pages.any { it in setOf("clipboard", "plugins", "extension-plugins", "speech") })
             com.kingzcheung.xime.plugin.core.runtime.PluginManager.initialize(context as android.app.Application)
-        // 剪贴板分组页：先建两个示例分组，并关掉一个自带分类。
-        if ("clipboard-groups" in pages || "clipboard-panel" in pages) com.kingzcheung.xime.clipboard.ClipboardGroupStore.getInstance(context).apply {
-            add("常用语"); add("工作")
-            setHidden(com.kingzcheung.xime.clipboard.ClipboardFilter.EMAIL, true)
-        }
         val frames = pages.flatMap { p -> listOf(false, true).map { p to it } }
         val shown = mutableIntStateOf(0)
         rule.setContent {

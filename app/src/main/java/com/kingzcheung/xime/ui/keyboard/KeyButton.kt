@@ -1143,6 +1143,7 @@ fun SwipeableIconKeyButton(
     val currentSwipeText by rememberUpdatedState(swipeText)
     val currentSwipeUpLabel by rememberUpdatedState(swipeUpLabel)
     val currentSwipeDownLabel by rememberUpdatedState(swipeDownLabel)
+    val strokeDeleteRelease by rememberUpdatedState(if (deleteKey) LocalStrokeDeleteRelease.current else null)
     // 删除键另有「删除键单独反向」，实际方向见 deleteSwipeReversed；其他键只跟「反转上下滑方向」。
     val swapVertical by rememberUpdatedState(followSymbolSwipeDirection &&
         !LocalKeyboardInputPreferences.current.let { if (deleteKey) it.deleteSwipeReversed else it.reverseSymbolSwipe })
@@ -1207,7 +1208,7 @@ fun SwipeableIconKeyButton(
                     RepeatingKeyActions(
                         onTap = { currentOnClick() },
                         onPress = { isPressed = true; currentOnPress?.invoke() },
-                        onRelease = { isPressed = false; currentOnRelease?.invoke() },
+                        onRelease = { isPressed = false; strokeDeleteRelease?.invoke(); currentOnRelease?.invoke() },
                         onRepeat = currentOnLongClick?.let { { currentOnLongClick?.invoke(); Unit } },
                         onUp = (currentOnSwipeUp ?: currentOnSwipe)?.let {
                             { (currentOnSwipeUp ?: currentOnSwipe)?.invoke(); Unit }

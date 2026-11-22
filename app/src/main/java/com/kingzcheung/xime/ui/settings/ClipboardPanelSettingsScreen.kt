@@ -41,7 +41,6 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
-import com.kingzcheung.xime.clipboard.ClipboardGroupStore
 import com.kingzcheung.xime.clipboard.ClipboardImages
 import com.kingzcheung.xime.clipboard.ImageAccessActivity
 import com.kingzcheung.xime.settings.PerformanceCosts
@@ -66,7 +65,7 @@ import com.kingzcheung.xime.ui.menubar.clipboardClosesAfterPaste
  */
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun ClipboardPanelSettingsContent(onBack: () -> Unit, onNavigateToGroups: () -> Unit, onNavigateToSync: () -> Unit = {}) {
+fun ClipboardPanelSettingsContent(onBack: () -> Unit, onNavigateToSync: () -> Unit = {}) {
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
@@ -88,7 +87,7 @@ fun ClipboardPanelSettingsContent(onBack: () -> Unit, onNavigateToGroups: () -> 
             modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp).settingsVerticalScroll(),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
-            ClipboardPanelDisplaySettings(onNavigateToGroups)
+            ClipboardPanelDisplaySettings()
             ClipboardPasteSettings()
             ClipboardHistoryLimitsSetting()
             // 下面几项原来在「剪贴板与同步」页，原样挪来。
@@ -111,26 +110,17 @@ fun ClipboardPanelSettingsContent(onBack: () -> Unit, onNavigateToGroups: () -> 
 }
 
 @Composable
-private fun ClipboardPanelDisplaySettings(onNavigateToGroups: () -> Unit) {
+private fun ClipboardPanelDisplaySettings() {
     val context = LocalContext.current
     val prefs = remember(context) { context.getSharedPreferences("clipboard_board", Context.MODE_PRIVATE) }
     var lines by remember { mutableStateOf(clipboardCardMaxLines(prefs.getInt(CLIPBOARD_CARD_MAX_LINES_KEY, 4))) }
     var imageHeight by remember { mutableStateOf(clipboardImageHeight(prefs.getString(CLIPBOARD_IMAGE_HEIGHT_KEY, null))) }
     var imageCount by remember { mutableStateOf(clipboardRecentImageCount(prefs.getInt(CLIPBOARD_RECENT_IMAGE_COUNT_KEY, 4))) }
-    val groups by remember(context) { ClipboardGroupStore.getInstance(context) }.state.collectAsState()
     val images = remember(context) { ClipboardImages.getInstance(context) }
     // Same value as 启用/关闭最近截图 in the clipboard's ⋯ menu; the permission answer comes back on resume.
     val screenshotsOn by images.photoAccess.collectAsState()
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { images.refresh() }
     SettingsSection(title = "显示", content = {
-        SettingsItem(
-            icon = Icons.TwoTone.Folder,
-            title = "剪贴板分组",
-            subtitle = "分类和自建分组",
-            onClick = onNavigateToGroups,
-            showArrow = true,
-            status = groups.groups.size.takeIf { it > 0 }?.let { "$it 个" },
-        )
         Column(Modifier.settingsSearchAnchor("卡片显示行数").fillMaxWidth().padding(16.dp)) {
             Text("卡片显示行数", style = MaterialTheme.typography.titleSmall)
             Text("每条记录最多显示几行文字", style = MaterialTheme.typography.bodySmall,

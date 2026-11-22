@@ -3,10 +3,10 @@ package com.kingzcheung.xime.ui.keyboard
 import com.kingzcheung.xime.keyboard.KeyboardPage
 import com.kingzcheung.xime.keyboard.OverlayRoute
 
-/** 剪贴板及其拆词页、工具栏排列页共用同一套面板高度。 */
+/** 剪贴板及其拆词页共用同一套面板高度。 */
 internal fun clipboardPanelCanExpand(page: KeyboardPage, resizing: Boolean, compact: Boolean): Boolean =
     !resizing && !compact && (page as? KeyboardPage.Overlay)?.route.let {
-        it is OverlayRoute.Clipboard || it is OverlayRoute.SplitWords || it is OverlayRoute.ToolbarCustomize
+        it is OverlayRoute.Clipboard || it is OverlayRoute.SplitWords
     }
 
 internal data class ClipboardPanelBounds(val collapsed: Int, val expanded: Int) {

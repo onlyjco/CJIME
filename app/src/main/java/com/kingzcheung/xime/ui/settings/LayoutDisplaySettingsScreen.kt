@@ -210,10 +210,6 @@ private fun LayoutDisplayPage(
                     HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                     SettingsItem(Icons.TwoTone.VerticalAlignBottom, "底部留白校准", "调整键盘底排的高度",
                         onClick = { openPage("bottom_gap") }, showArrow = true)
-                    HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-                    SettingsItem(Icons.TwoTone.Reorder, keyboardPanelTitle(com.kingzcheung.xime.keyboard.KeyboardPanelLaunch.Panel.ARRANGE),
-                        "工具栏和菜单里放什么、怎么排",
-                        onClick = { onOpenLayout(SettingsRoutes.ToolbarArrange) }, showArrow = true)
                 })
             }
             if (page == null) item {

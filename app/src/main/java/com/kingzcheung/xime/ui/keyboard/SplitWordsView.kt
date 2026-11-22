@@ -31,9 +31,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.ui.platform.LocalContext
-import kotlinx.coroutines.CancellationException
 import com.kingzcheung.xime.settings.ClipboardWordSegmenter
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.getValue
@@ -67,23 +64,15 @@ fun SplitWordsView(
     onBack: () -> Unit,
     onNavigateToQuickSend: (() -> Unit)? = null,
     onConfirmText: (String) -> Unit,
+    onConfirmClose: () -> Unit = onBack,
     bottomPaddingDp: Int = 0,
     modifier: Modifier = Modifier
 ) {
     val textColor = MaterialTheme.colorScheme.onSurface
     val accentColor = MaterialTheme.colorScheme.primary
     val chipBgColor = MaterialTheme.colorScheme.surfaceContainerLow
-    val context = LocalContext.current
-    var splitParts by remember(text) { mutableStateOf<List<String>>(emptyList()) }
-    var loading by remember(text) { mutableStateOf(true) }
-    var error by remember(text) { mutableStateOf<String?>(null) }
+    val splitParts = remember(text) { ClipboardWordSegmenter.split(text) }
     val selectedIndices = remember(text) { mutableStateListOf<Int>() }
-    LaunchedEffect(text) {
-        try { splitParts = ClipboardWordSegmenter.split(context, text) }
-        catch (e: CancellationException) { throw e }
-        catch (e: Exception) { error = "分词失败：${e.message}" }
-        finally { loading = false }
-    }
     val selectedText = selectedIndices.joinToString("") { splitParts[it] }
 
     fun addSelected(index: Int) {
@@ -125,12 +114,12 @@ fun SplitWordsView(
 
             Row(
                 modifier = if (panel == null) Modifier else Modifier
-                    .clickable(onClickLabel = if (expanded) "收起拆词面板" else "拉高拆词面板") {
+                    .clickable(onClickLabel = if (expanded) "收起拆字面板" else "拉高拆字面板") {
                         panel.setExpanded(!expanded)
                     }.heightIn(min = 48.dp),
                 verticalAlignment = Alignment.CenterVertically
             ) {
-                Text("拆词", style = MaterialTheme.typography.titleMedium,
+                Text("拆字", style = MaterialTheme.typography.titleMedium,
                     fontWeight = FontWeight.SemiBold, color = textColor)
                 if (panel != null) Icon(
                     if (expanded) Icons.Default.KeyboardArrowDown else Icons.Default.KeyboardArrowUp,
@@ -160,7 +149,7 @@ fun SplitWordsView(
             }
             TextButton(enabled = selectedText.isNotEmpty(), onClick = {
                 onConfirmText(selectedText)
-                onBack()
+                onConfirmClose()
             }) { Text("确定", fontWeight = FontWeight.Bold) }
         }
 
@@ -185,9 +174,7 @@ fun SplitWordsView(
                         .padding(8.dp)
                 ) {
 
-                    if (loading) Text("正在按词库拆词…", color = textColor)
-                    error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-                    // 拆词结果（支持点击 + 滑动选词）
+                    // 逐字拆词结果（支持点击 + 双向滑动选字）
                     val chipBounds = remember(splitParts) { mutableMapOf<Int, Rect>() }
                     var containerRootPos by remember { mutableStateOf(Offset.Zero) }
 
@@ -211,7 +198,8 @@ fun SplitWordsView(
                                 awaitEachGesture {
                                     val down = awaitFirstDown(requireUnconsumed = false)
                                     val firstChip = findChipAt(down.position)
-                                    val isRemoveMode = firstChip != null && firstChip in selectedIndices
+                                    val initialSelection = selectedIndices.toSet()
+                                    val isRemoveMode = firstChip != null && firstChip in initialSelection
                                     var mode = SplitGesture.PENDING
                                     while (true) {
                                         // Main 先于外层滚动：连选时先消费，滚动就不会接手。
@@ -232,11 +220,15 @@ fun SplitWordsView(
                                         if (mode != SplitGesture.SELECT) continue
                                         change.consume()
                                         val chipIndex = findChipAt(change.position) ?: continue
-                                        val from = minOf(firstChip!!, chipIndex)
-                                        val to = maxOf(firstChip, chipIndex)
-                                        for (i in from..to) {
-                                            if (isRemoveMode) selectedIndices.remove(i)
-                                            else if (i !in selectedIndices) addSelected(i)
+                                        val updated = computeSplitDragSelection(
+                                            initialSelection = initialSelection,
+                                            firstChip = firstChip!!,
+                                            currentChip = chipIndex,
+                                            removeMode = isRemoveMode,
+                                        )
+                                        if (selectedIndices.toList() != updated) {
+                                            selectedIndices.clear()
+                                            selectedIndices.addAll(updated)
                                         }
                                     }
                                 }
@@ -287,6 +279,22 @@ internal fun splitGestureMode(onChip: Boolean, dx: Float, dy: Float, canScroll: 
     !onChip -> SplitGesture.SCROLL
     canScroll && kotlin.math.abs(dy) >= kotlin.math.abs(dx) -> SplitGesture.SCROLL
     else -> SplitGesture.SELECT
+}
+
+/**
+ * 基于按下瞬间的初始选区 [initialSelection]，按起点 [firstChip] 与当前悬停位置 [currentChip]
+ * 重新计算整段受影响区间，使未抬手时的回滑能够立即撤销中间已划过字块的选中/取消状态。
+ */
+internal fun computeSplitDragSelection(
+    initialSelection: Set<Int>,
+    firstChip: Int,
+    currentChip: Int,
+    removeMode: Boolean,
+): List<Int> {
+    val from = minOf(firstChip, currentChip)
+    val to = maxOf(firstChip, currentChip)
+    val updated = if (removeMode) initialSelection - (from..to) else initialSelection + (from..to)
+    return updated.sorted()
 }
 
 private val NO_BREAK_SPACE = Char(0x00A0)

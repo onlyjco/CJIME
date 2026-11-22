@@ -42,6 +42,9 @@ class CellDictionaryStore(val directory: File) {
     companion object {
         private val lock = Any()
         @Volatile private var englishIndex: Pair<File, List<String>>? = null
+        private val englishRevisionCounter = java.util.concurrent.atomic.AtomicLong(0L)
+
+        fun englishRevision(): Long = englishRevisionCounter.get()
         private val json = Json { ignoreUnknownKeys = true; prettyPrint = true }
         internal fun digest(bytes: ByteArray): String = MessageDigest.getInstance("SHA-256")
             .digest(bytes).joinToString("") { "%02x".format(it) }
@@ -87,6 +90,7 @@ class CellDictionaryStore(val directory: File) {
     private fun save(state: CellDictionaryState) {
         writeAtomic(File(directory, "state.json"), json.encodeToString(state))
         if (englishIndex?.first == directory) englishIndex = null
+        englishRevisionCounter.incrementAndGet()
     }
 
     private fun updateFile(revision: Int) = File(directory, "word-updates-$revision.json")
@@ -130,10 +134,9 @@ class CellDictionaryStore(val directory: File) {
     fun englishWords(id: String): List<String> = englishFile(id).takeIf { it.isFile }?.readLines()
         ?.filter { it.isNotBlank() }.orEmpty()
 
-    /** Only applied dictionaries feed the independent English keyboard. Sort once, then binary-search per key. */
-    fun englishCompletions(prefix: String, limit: Int): List<String> {
-        if (prefix.isEmpty() || limit <= 0) return emptyList()
-        val words = englishIndex?.takeIf { it.first == directory }?.second ?: synchronized(lock) {
+    /** 当前已应用且开启“应用英文词”时的细胞英文词表（已去重、按不区分大小写排序）。 */
+    fun activeEnglishWords(): List<String> =
+        englishIndex?.takeIf { it.first == directory }?.second ?: synchronized(lock) {
             englishIndex?.takeIf { it.first == directory }?.second ?: read().let { state ->
                 val active = if (state.appliedEnglish) state.applied.sorted().flatMap(::englishWords)
                     .distinctBy { it.lowercase() }.sortedWith(String.CASE_INSENSITIVE_ORDER) else emptyList()
@@ -141,6 +144,11 @@ class CellDictionaryStore(val directory: File) {
                 active
             }
         }
+
+    /** Only applied dictionaries feed the independent English keyboard. Sort once, then binary-search per key. */
+    fun englishCompletions(prefix: String, limit: Int): List<String> {
+        if (prefix.isEmpty() || limit <= 0) return emptyList()
+        val words = activeEnglishWords()
         val index = words.binarySearch(prefix, String.CASE_INSENSITIVE_ORDER)
         val first = if (index < 0) -index - 1 else index
         val result = ArrayList<String>()

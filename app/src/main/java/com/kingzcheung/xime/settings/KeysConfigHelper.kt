@@ -1509,15 +1509,28 @@ object KeysConfigHelper {
     private fun parseSectionButtonLayouts(
         context: Context,
         sections: Collection<String>,
+    ): Pair<Map<String, ButtonLayout>, Map<String, ButtonLayout>> =
+        parseSectionButtonLayoutsFromYamlTexts(readAssetText(context, XIME_CONFIG_FILE), readCustomText(context), sections)
+
+    internal fun parseSectionButtonLayoutsFromYamlTexts(
+        defaultText: String?,
+        customText: String?,
+        sections: Collection<String>,
     ): Pair<Map<String, ButtonLayout>, Map<String, ButtonLayout>> {
-        val defaultText = readAssetText(context, XIME_CONFIG_FILE)
-        val customText = readCustomText(context)
         val effective = mutableMapOf<String, ButtonLayout>()
         val customOverrides = mutableMapOf<String, ButtonLayout>()
+        val customQwertyLayout = customText?.let { parseButtonLayoutYamlText(it, "qwerty") }
         for (section in sections.distinct()) {
             if (section in SHARED_BUILTIN_SECTIONS) continue
             val builtIn = defaultText?.let { parseButtonLayoutYamlText(it, section) }
-            val custom = customText?.let { parseButtonLayoutYamlText(it, section) }
+            val rawCustom = customText?.let { parseButtonLayoutYamlText(it, section) }
+            // 与导入包隔离逻辑一致：用户在 xime.custom.yaml 的 qwerty 下写了 compact，
+            // 若自定义合并键分节残留了模板的 standard，按 compact 生效。
+            val custom = if (builtIn == null && rawCustom == ButtonLayout.STANDARD && customQwertyLayout == ButtonLayout.COMPACT) {
+                ButtonLayout.COMPACT
+            } else {
+                rawCustom
+            }
             if (custom != null) customOverrides[section] = custom
             (custom ?: builtIn)?.let { effective[section] = it }
         }

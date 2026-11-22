@@ -24,7 +24,19 @@ object GlideLexicon {
     private class T9Codes(val index: LinkedHashMap<String, Int>) {
         val lines: Map<String, List<String>> by lazy { T9Glide.lines(index.keys) }
     }
+    private data class ExtraEnglishLexicon(
+        val key: Pair<Long, Long>,
+        val personalWords: List<String>,
+        val cellWords: List<String>,
+        val displayForms: Map<String, String>,
+        val personalSet: Set<String>,
+        val cellSet: Set<String>,
+    )
+
     @Volatile private var words: List<String>? = null
+    @Volatile private var baseVocabulary: List<String>? = null
+    @Volatile private var extraLexicon: ExtraEnglishLexicon? = null
+    @Volatile private var mergedWords: Pair<Pair<Long, Long>, List<String>>? = null
     @Volatile private var pinyin: List<List<String>>? = null
     private const val CONTRACTIONS_FILE = "english_contractions.txt"
     private const val BIGRAMS_FILE = "english_bigrams.txt"
@@ -34,14 +46,91 @@ object GlideLexicon {
     /** 英文、全拼、双拼各留一份；双拼换方案（或改了键位）时按方案内容重建。 */
     private val cached = HashMap<String, Pair<Any?, GlideDecoder>>()
 
-    fun words(context: Context): List<String> = words ?: synchronized(this) {
+    private fun baseWords(context: Context): List<String> = words ?: synchronized(this) {
         words ?: vocabulary(context).filter { it.length >= 2 && it.all { char -> char in 'a'..'z' } }.also { words = it }
     }
 
+    private fun extraRevisionKey(context: Context): Pair<Long, Long> =
+        com.kingzcheung.xime.settings.EnglishWordMemory.revision() to
+            com.kingzcheung.xime.settings.CellDictionaryStore.englishRevision()
+
+    private fun extraEnglishLexicon(context: Context, key: Pair<Long, Long>): ExtraEnglishLexicon {
+        extraLexicon?.takeIf { it.key == key }?.let { return it }
+        return synchronized(this) {
+            extraLexicon?.takeIf { it.key == key }?.let { return@synchronized it }
+            val base = baseWords(context)
+            val baseSet = base.toHashSet()
+            val display = HashMap<String, String>()
+            val personalList = ArrayList<String>()
+            val personalSet = HashSet<String>()
+            val cellList = ArrayList<String>()
+            val cellSet = HashSet<String>()
+
+            fun isGlidable(lower: String): Boolean =
+                lower.length in 2..GlideDecoder.MAX_WORD && lower.all { it in 'a'..'z' }
+
+            runCatching {
+                val rimeDir = com.kingzcheung.xime.settings.SchemaManager.getRimeDir(context)
+                com.kingzcheung.xime.settings.EnglishWordMemory.promotedWords(rimeDir)
+            }.getOrDefault(emptyList()).forEach { raw ->
+                val lower = raw.lowercase()
+                if (!isGlidable(lower)) return@forEach
+                if (raw != lower) display.putIfAbsent(lower, raw)
+                if (lower !in baseSet && personalSet.add(lower)) personalList.add(lower)
+            }
+
+            runCatching {
+                com.kingzcheung.xime.settings.CellDictionaryManager.store(context).activeEnglishWords()
+            }.getOrDefault(emptyList()).forEach { raw ->
+                val lower = raw.lowercase()
+                if (!isGlidable(lower)) return@forEach
+                if (raw != lower) display.putIfAbsent(lower, raw)
+                if (lower !in baseSet && lower !in personalSet && cellSet.add(lower)) cellList.add(lower)
+            }
+
+            ExtraEnglishLexicon(key, personalList, cellList, display, personalSet, cellSet).also { extraLexicon = it }
+        }
+    }
+
+    fun words(context: Context): List<String> {
+        val key = extraRevisionKey(context)
+        mergedWords?.takeIf { it.first == key }?.let { return it.second }
+        return synchronized(this) {
+            mergedWords?.takeIf { it.first == key }?.let { return@synchronized it.second }
+            val base = baseWords(context)
+            val extra = extraEnglishLexicon(context, key)
+            val combined = if (extra.personalWords.isEmpty() && extra.cellWords.isEmpty()) base else {
+                val insertAt = minOf(500, base.size)
+                ArrayList<String>(base.size + extra.personalWords.size + extra.cellWords.size).apply {
+                    addAll(base.subList(0, insertAt))
+                    addAll(extra.personalWords)
+                    addAll(base.subList(insertAt, base.size))
+                    addAll(extra.cellWords)
+                }
+            }
+            mergedWords = key to combined
+            combined
+        }
+    }
+
+    fun displayEnglishWord(word: String): String = extraLexicon?.displayForms?.get(word) ?: word
+
+    fun extraEnglishCost(word: String): Float? {
+        val extra = extraLexicon ?: return null
+        return when (word) {
+            in extra.personalSet -> 10.5f
+            in extra.cellSet -> 12.5f
+            else -> null
+        }
+    }
+
     /** english.txt 加上插进去的缩写写法（didnt、youre）和滑行补充词（fuck、alright），滑行词表和双词表共用这一个排名。 */
-    private fun vocabulary(context: Context): List<String> = contractions(context).vocabulary(
-        context.applicationContext.assets.open(FILE).bufferedReader().useLines { it.toList() },
-        context.applicationContext.assets.open(EXTRA_FILE).bufferedReader().useLines { glideExtraWords(it) })
+    private fun vocabulary(context: Context): List<String> = baseVocabulary ?: synchronized(this) {
+        baseVocabulary ?: contractions(context).vocabulary(
+            context.applicationContext.assets.open(FILE).bufferedReader().useLines { it.toList() },
+            context.applicationContext.assets.open(EXTRA_FILE).bufferedReader().useLines { glideExtraWords(it) }
+        ).also { baseVocabulary = it }
+    }
 
     fun contractions(context: Context): EnglishContractions = contractions ?: synchronized(this) {
         contractions ?: context.applicationContext.assets.open(CONTRACTIONS_FILE).bufferedReader()
@@ -74,8 +163,9 @@ object GlideLexicon {
             .useLines { lines -> lines.map { it.trim() }.toList() }.also { pinyinWords = it }
     }
 
-    /** 布局变化（尺寸、错位、分体）时重建模板；同一布局复用。须在后台线程调用。 */
-    fun decoder(context: Context, keyboard: GlideKeyboard): GlideDecoder = cachedDecoder("en", null, keyboard) { words(context) }
+    /** 布局或个人/细胞英文词变化时重建单份模板；其余情况复用。须在后台线程调用。 */
+    fun decoder(context: Context, keyboard: GlideKeyboard): GlideDecoder =
+        cachedDecoder("en", extraRevisionKey(context), keyboard) { words(context) }
 
     /**
      * 中文滑行：[doublePinyin] 为空时按全拼，否则按该双拼方案的编码。词表里没有的连划另按音节逐键认（#294）。

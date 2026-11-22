@@ -64,7 +64,7 @@ class PanelLayoutAuditTest {
         rule.waitForIdle()
         val issues = mutableListOf<String>()
         val routes = listOf(OverlayRoute.Menu, OverlayRoute.SchemaList, OverlayRoute.Edit, OverlayRoute.Emoji,
-            OverlayRoute.Clipboard(0), OverlayRoute.Clipboard(1), OverlayRoute.ToolbarCustomize,
+            OverlayRoute.Clipboard(0), OverlayRoute.Clipboard(1),
             OverlayRoute.SplitWords("这是一个拆词测试，包含标点与多个可以选择的文字。"), OverlayRoute.Symbol, OverlayRoute.ToolPanel)
         routes.forEachIndexed { index, route ->
             rule.runOnIdle { vm.closeOverlay(); vm.showOverlay(route) }
@@ -73,7 +73,6 @@ class PanelLayoutAuditTest {
             val panel = rule.onNodeWithTag("keyboard-overlay").fetchSemanticsNode().boundsInRoot
             if (panel.top < toolbar.bottom || panel.bottom > keyboard.bottom) issues += "$route 面板越过工具栏或底边"
             val exitLabel = when (route) {
-                OverlayRoute.ToolbarCustomize -> "确定"
                 OverlayRoute.ToolPanel -> "关闭"
                 OverlayRoute.Symbol -> "返回键盘"
                 else -> "返回"

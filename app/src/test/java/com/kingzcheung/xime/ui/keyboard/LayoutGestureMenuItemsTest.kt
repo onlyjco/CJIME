@@ -54,10 +54,9 @@ class LayoutGestureMenuItemsTest {
         assertTrue(ToolbarButton.T9_FLICK.gestureOn(glide.copy(t9GlideTyping = false)))
     }
 
-    @Test fun arrangeableTogglesInDefaultMenuBeforeArrange() {
+    @Test fun arrangeableTogglesAtEndOfDefaultMenu() {
         assertTrue(ToolbarButton.LAYOUT_GESTURES.all { it in ToolbarButton.CUSTOMIZABLE && it in ToolbarButton.TOGGLES })
         val menu = QuickActionLayout.defaultMenu(emptyList())
-        assertEquals(ToolbarButton.ARRANGE.id, menu.last())
-        assertEquals(ToolbarButton.LAYOUT_GESTURES.map { it.id }, menu.dropLast(1).takeLast(5))
+        assertEquals(ToolbarButton.LAYOUT_GESTURES.map { it.id }, menu.takeLast(5))
     }
 }

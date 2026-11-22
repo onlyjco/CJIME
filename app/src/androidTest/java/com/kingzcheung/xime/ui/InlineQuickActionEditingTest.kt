@@ -28,18 +28,6 @@ import org.junit.Test
 
 class InlineQuickActionEditingTest {
     @get:Rule val rule = createComposeRule()
-    private var previousInlineEditing = false
-
-    // 菜单内编辑默认关，这里先打开，测完还原设备上的原值。
-    @Before fun enableInlineEditing() {
-        val app = ApplicationProvider.getApplicationContext<Application>()
-        previousInlineEditing = SettingsPreferences.inlineQuickActionEditing(app)
-        SettingsPreferences.setInlineQuickActionEditing(app, true)
-    }
-
-    @After fun restoreInlineEditing() {
-        SettingsPreferences.setInlineQuickActionEditing(ApplicationProvider.getApplicationContext<Application>(), previousInlineEditing)
-    }
 
     @Test fun menuEditMovesToolbarButtonAndSavesOnlyWhenConfirmed() {
         val vm = KeyboardViewModel(ApplicationProvider.getApplicationContext<Application>())

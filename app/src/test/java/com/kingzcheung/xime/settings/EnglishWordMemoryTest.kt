@@ -69,4 +69,64 @@ class EnglishWordMemoryTest {
         assertTrue(BackupManager.isRimePersonalFile(EnglishWordMemory.FILE_NAME))
         assertTrue(BackupManager.isRimePersonalFile(EnglishWordMemory.DEMOTED_FILE_NAME))
     }
+
+    @Test
+    fun observationPoolSupportsCompletionAndPromotesOnSecondType() {
+        val dir = tempDir.root
+        val rev0 = EnglishWordMemory.revision()
+        assertEquals(
+            EnglishWordMemory.RecordOutcome.OBSERVED,
+            EnglishWordMemory.recordTypedWord(dir, "antigravity", builtinKnown = false)
+        )
+        assertEquals(rev0, EnglishWordMemory.revision())
+        assertEquals(listOf("antigravity"), EnglishWordMemory.completions(dir, "anti", 5))
+        assertTrue(EnglishWordMemory.promotedWords(dir).isEmpty())
+        assertTrue(EnglishWordMemory.contains(dir, "antigravity"))
+
+        assertEquals(
+            EnglishWordMemory.RecordOutcome.PROMOTED,
+            EnglishWordMemory.recordTypedWord(dir, "antigravity", builtinKnown = false)
+        )
+        assertTrue(EnglishWordMemory.revision() > rev0)
+        assertEquals(listOf("antigravity"), EnglishWordMemory.promotedWords(dir))
+        assertEquals(listOf("antigravity"), words(dir))
+    }
+
+    @Test
+    fun pickingObservedWordPromotesImmediatelyAndKeepsIntentionalCase() {
+        val dir = tempDir.root
+        assertEquals(
+            EnglishWordMemory.RecordOutcome.OBSERVED,
+            EnglishWordMemory.recordTypedWord(dir, "Gemini", builtinKnown = false)
+        )
+        assertEquals(listOf("Gemini"), EnglishWordMemory.completions(dir, "ge", 5))
+        assertEquals(
+            EnglishWordMemory.RecordOutcome.PROMOTED,
+            EnglishWordMemory.recordPickedWord(dir, "Gemini", builtinKnown = false)
+        )
+        assertEquals(listOf("Gemini"), EnglishWordMemory.promotedWords(dir))
+
+        // Typing lowercase later preserves existing capitalized spelling.
+        assertEquals(
+            EnglishWordMemory.RecordOutcome.REFRESHED,
+            EnglishWordMemory.recordTypedWord(dir, "gemini", builtinKnown = false)
+        )
+        assertEquals(listOf("Gemini"), EnglishWordMemory.promotedWords(dir))
+        assertEquals(listOf("GEMINI"), EnglishWordMemory.completions(dir, "GE", 5))
+    }
+
+    @Test
+    fun builtinLowercaseWordsSkipObservationAndForgetClearsBothStores() {
+        val dir = tempDir.root
+        assertEquals(
+            EnglishWordMemory.RecordOutcome.IGNORED,
+            EnglishWordMemory.recordTypedWord(dir, "hello", builtinKnown = true)
+        )
+        assertTrue(EnglishWordMemory.completions(dir, "he", 5).isEmpty())
+
+        EnglishWordMemory.recordTypedWord(dir, "antigravity", builtinKnown = false)
+        assertTrue(EnglishWordMemory.forget(dir, "antigravity"))
+        assertFalse(EnglishWordMemory.contains(dir, "antigravity"))
+        assertTrue(EnglishWordMemory.completions(dir, "anti", 5).isEmpty())
+    }
 }

@@ -87,23 +87,20 @@ object BackupManager {
      * 「包含剪贴板历史」时带。记下的密码（敏感）一律不带；图片不带（存在缓存目录，系统随时可能清）。
      */
     internal fun clipboardBackupItems(items: List<com.kingzcheung.xime.clipboard.ClipboardItem>, includeHistory: Boolean,
-        inGroup: (com.kingzcheung.xime.clipboard.ClipboardItem) -> Boolean): List<com.kingzcheung.xime.clipboard.ClipboardItem> =
+        inGroup: (com.kingzcheung.xime.clipboard.ClipboardItem) -> Boolean = { false }): List<com.kingzcheung.xime.clipboard.ClipboardItem> =
         com.kingzcheung.xime.clipboard.ClipboardExport.order(
             items.filter { !it.sensitive && (includeHistory || it.isPinned || inGroup(it)) }, includePinned = true)
 
     /** 本机要备份的剪贴板记录，写成 JSON；没有可带的或读不到时为 null（不影响其余备份）。 */
     private fun clipboardBackupJson(context: Context, includeHistory: Boolean): String? = runCatching {
-        val groups = com.kingzcheung.xime.clipboard.ClipboardGroupStore.getInstance(context).state.value
         val all = kotlinx.coroutines.runBlocking {
             com.kingzcheung.xime.clipboard.ClipboardManager.getInstance(context).exportItems()
         }
-        val items = clipboardBackupItems(all, includeHistory) { groups.groupOf("text:${it.id}") != null }
+        val items = clipboardBackupItems(all, includeHistory)
         if (items.isEmpty()) return@runCatching null
         java.io.StringWriter().also { out ->
             com.kingzcheung.xime.clipboard.ClipboardExport.write(items,
-                com.kingzcheung.xime.clipboard.ClipboardExportFormat.JSON, out, System.currentTimeMillis()) { item ->
-                groups.groupOf("text:${item.id}")?.name
-            }
+                com.kingzcheung.xime.clipboard.ClipboardExportFormat.JSON, out, System.currentTimeMillis())
         }.toString()
     }.onFailure { Log.w(TAG, "clipboard backup skipped", it) }.getOrNull()
 

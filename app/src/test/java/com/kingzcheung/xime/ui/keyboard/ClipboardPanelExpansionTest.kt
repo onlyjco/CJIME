@@ -17,9 +17,8 @@ class ClipboardPanelExpansionTest {
     private val main = KeyboardPage.Main(MainType.FULL)
     private fun overlay(route: OverlayRoute) = KeyboardPage.Overlay(route, emptyList(), main)
 
-    @Test fun clipboardTabsSplitWordsAndArrangeAcceptExpansion() {
-        val routes = (0..2).map { OverlayRoute.Clipboard(it) } +
-            listOf(OverlayRoute.SplitWords("文字"), OverlayRoute.ToolbarCustomize)
+    @Test fun clipboardTabsAndSplitWordsAcceptExpansion() {
+        val routes = (0..2).map { OverlayRoute.Clipboard(it) } + listOf(OverlayRoute.SplitWords("文字"))
         for (route in routes) {
             val page = overlay(route)
             assertTrue(clipboardPanelCanExpand(page, false, false))

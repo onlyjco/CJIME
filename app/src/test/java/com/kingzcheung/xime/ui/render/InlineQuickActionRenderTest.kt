@@ -48,11 +48,6 @@ import java.io.File
 class InlineQuickActionRenderTest {
     @get:Rule val rule = createAndroidComposeRule<ComponentActivity>()
 
-    // 菜单内编辑默认关，这组测试测的是打开后的行为。
-    @Before fun enableInlineEditing() {
-        SettingsPreferences.setInlineQuickActionEditing(ApplicationProvider.getApplicationContext<Application>(), true)
-    }
-
     @Test fun emptyMenuStillAllowsEditingAndRestoringHiddenItems() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         KeysConfigHelper.loadConfig(app)

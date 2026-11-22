@@ -186,6 +186,14 @@ internal fun rememberImeKeyboardCallbacks(
                 service.feedbackManager.performKeyPressEffect(view = view)
                 service.keyRouter.selectAssociation(index)
             },
+            canForgetAssociation = { word ->
+                com.kingzcheung.xime.settings.EnglishWordMemory.contains(
+                    com.kingzcheung.xime.settings.SchemaManager.getRimeDir(service), word
+                )
+            },
+            onAssociationDelete = { word ->
+                service.keyRouter.deleteEnglishAssociation(word)
+            },
             onClearAssociation = {
                 service.predictionManager.invalidatePendingPredictions()
                 // 清空英文联想候选，并结束英文输入态：pendingEnglish 清空后，
@@ -219,7 +227,12 @@ internal fun rememberImeKeyboardCallbacks(
                         when (service.textCommit.pasteClipboardImage(image)) {
                             false -> service.keyboardViewModel.showOverlay(OverlayRoute.Clipboard(2))
                             null -> android.widget.Toast.makeText(service, "请先选中支持图片的输入框", android.widget.Toast.LENGTH_SHORT).show()
-                            true -> service.clipboardManager.images.clearPasteFailure()
+                            true -> {
+                                service.clipboardManager.images.clearPasteFailure()
+                                if (com.kingzcheung.xime.ui.menubar.clipboardClosesAfterPaste(service)) {
+                                    service.keyboardViewModel.leaveClipboard()
+                                }
+                            }
                         }
                     } catch (_: Exception) {
                         android.widget.Toast.makeText(service, "图片无法读取，请重新选择（最大 32 MiB）", android.widget.Toast.LENGTH_SHORT).show()
@@ -235,11 +248,35 @@ internal fun rememberImeKeyboardCallbacks(
             },
             onClipboardImageSystemPaste = {
                 val failure = service.clipboardManager.images.pasteFailure.value
-                if (failure?.packageName == service.currentInputEditorInfo?.packageName) {
-                    service.dismissPredictionsForPaste()
-                    val pasted = runCatching { service.currentInputConnection?.performContextMenuAction(android.R.id.paste) == true }.getOrDefault(false)
-                    if (pasted) service.clipboardManager.images.clearPasteFailure()
-                    if (!pasted) android.widget.Toast.makeText(service, "此输入框不支持系统图片粘贴，请使用分享图片", android.widget.Toast.LENGTH_SHORT).show()
+                val editor = service.currentInputEditorInfo
+                val connection = service.currentInputConnection
+                if (failure != null) {
+                    val uri = android.net.Uri.parse(failure.image.uri)
+                    if (!editor?.packageName.isNullOrBlank()) {
+                        runCatching {
+                            service.grantUriPermission(
+                                editor!!.packageName,
+                                uri,
+                                android.content.Intent.FLAG_GRANT_READ_URI_PERMISSION,
+                            )
+                        }
+                    }
+                    service.clipboardManager.copyImageUriToSystemClipboard(failure.image)
+                }
+                service.dismissPredictionsForPaste()
+                val pasted = connection != null &&
+                    runCatching { connection.performContextMenuAction(android.R.id.paste) }.getOrDefault(false)
+                if (pasted) {
+                    service.clipboardManager.images.clearPasteFailure()
+                    if (com.kingzcheung.xime.ui.menubar.clipboardClosesAfterPaste(service)) {
+                        service.keyboardViewModel.leaveClipboard()
+                    }
+                } else {
+                    android.widget.Toast.makeText(
+                        service,
+                        "当前输入框不支持自动粘贴图片；图片已复制，请长按输入框粘贴或点击「分享图片」",
+                        android.widget.Toast.LENGTH_SHORT,
+                    ).show()
                 }
             },
             onClipboardImageShare = { image, targetPackage ->

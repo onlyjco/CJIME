@@ -12,11 +12,11 @@ import com.kingzcheung.xime.settings.InputScheme
 import com.kingzcheung.xime.settings.LayoutKind
 
 /**
- * 设置页「键盘尺寸与位置」「工具栏与菜单排列」打开的是键盘菜单里同一个调节／排列面板：
+ * 设置页「键盘尺寸与位置」打开键盘调节面板：
  * 页面登记一次请求，由同一页面的只读预览连接取走；收起或离页时取消请求。
  */
 object KeyboardPanelLaunch {
-    enum class Panel { RESIZE, ARRANGE }
+    enum class Panel { RESIZE }
 
     private const val EXPIRE_MS = 5_000L
 

@@ -23,7 +23,7 @@ class KeyboardSurfaceConsistencyTest {
         "ui/keyboard/EditKeyboardLayout.kt", "ui/keyboard/SplitWordsView.kt", "ui/keyboard/InfoPanel.kt",
         "ui/keyboard/HandwritingKeyboardLayout.kt", "ui/keyboard/MenuBar.kt", "ui/keyboard/CandidatePage.kt",
         "ui/keyboard/QuickSendFormArea.kt", "ui/menubar/ClipboardBoardView.kt",
-        "ui/menubar/SchemaListView.kt", "ui/menubar/ToolbarCustomizeView.kt",
+        "ui/menubar/SchemaListView.kt",
     )
 
     @Test fun everyPanelPaintsItsBackgroundWithTheThemeAndGlass() {

@@ -677,7 +677,10 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
     fun leaveClipboard() {
         val current = _page.value
         val editIndex = (current as? KeyboardPage.Overlay)?.backStack?.lastIndexOf(OverlayRoute.Edit) ?: -1
-        if (current is KeyboardPage.Overlay && current.route is OverlayRoute.Clipboard && editIndex >= 0) {
+        if (current is KeyboardPage.Overlay &&
+            (current.route is OverlayRoute.Clipboard || current.route is OverlayRoute.SplitWords) &&
+            editIndex >= 0
+        ) {
             _page.value = current.copy(route = OverlayRoute.Edit, backStack = current.backStack.take(editIndex))
             _syncViewState()
         } else closeOverlay()

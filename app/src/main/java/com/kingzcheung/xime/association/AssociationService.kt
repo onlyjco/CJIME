@@ -83,11 +83,16 @@ object AssociationService {
             val table = contractions ?: return emptyList()
             return EnglishContractionCompletion.withApostrophe(prefix, table.forms(), topK)
         }
-        val bundled = if (initialize(context)) trieEngine?.predict(prefix, topK).orEmpty().map { it.text }
+        val queryCount = topK + 1
+        val bundled = if (initialize(context)) trieEngine?.predict(prefix, queryCount).orEmpty().map { it.text }
             else emptyList()
-        val imported = withContext(Dispatchers.IO) {
-            try {
-                com.kingzcheung.xime.settings.CellDictionaryManager.store(context).englishCompletions(prefix, topK)
+        val (personal, imported) = withContext(Dispatchers.IO) {
+            val personalWords = runCatching {
+                val rimeDir = com.kingzcheung.xime.settings.SchemaManager.getRimeDir(context)
+                com.kingzcheung.xime.settings.EnglishWordMemory.completions(rimeDir, prefix, queryCount)
+            }.getOrDefault(emptyList())
+            val importedWords = try {
+                com.kingzcheung.xime.settings.CellDictionaryManager.store(context).englishCompletions(prefix, queryCount)
             } catch (e: java.io.IOException) {
                 Log.w(TAG, "Cannot read imported English words", e)
                 emptyList()
@@ -95,13 +100,14 @@ object AssociationService {
                 Log.w(TAG, "Invalid imported dictionary state", e)
                 emptyList()
             }
+            personalWords to importedWords
         }
-        val words = if (imported.isEmpty()) bundled else
-            (bundled.take(1) + imported + bundled.drop(1)).distinctBy { it.lowercase() }.take(topK)
-        val table = contractions ?: return words
-        return EnglishContractionCompletion.apply(prefix, words, topK) { word ->
+        val words = if (personal.isEmpty() && imported.isEmpty()) bundled else
+            (bundled.take(1) + personal + imported + bundled.drop(1)).distinctBy { it.lowercase() }.take(queryCount)
+        val table = contractions ?: return words.filter { it != prefix }.take(topK)
+        return EnglishContractionCompletion.apply(prefix, words, queryCount) { word ->
             table.display(word).takeIf { it != word } ?: table.offer(word)
-        }
+        }.filter { it != prefix }.take(topK)
     }
     
     private suspend fun getChineseAssociations(
@@ -130,6 +136,8 @@ object AssociationService {
     }
     
     fun isInitialized(): Boolean = isInitialized
+
+    fun isBuiltinEnglishWord(word: String): Boolean = trieEngine?.containsWord(word) == true
     
     fun isTrieInitialized(): Boolean = trieEngine?.isInitialized() ?: false
     

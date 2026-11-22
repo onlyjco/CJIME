@@ -18,25 +18,28 @@ import org.junit.Test
 
 class ClipboardSplitWordsTest {
     @get:Rule val rule = createComposeRule()
-    @Test fun installedDictionaryAndSelectionOnlyCommitOnConfirmation() {
+    @Test fun characterSelectionOnlyCommitsOnConfirmation() {
         val app = ApplicationProvider.getApplicationContext<Application>()
         val committed = mutableListOf<String>()
         var closed = false
         rule.setContent { XimeTheme {
-            SplitWordsView("今天天气不错", Color.Black, KeyboardViewModel(app),
+            SplitWordsView("今天不错", Color.Black, KeyboardViewModel(app),
                 onBack = { closed = true }, onConfirmText = { committed.add(it) },
                 modifier = Modifier.size(360.dp, 260.dp))
         } }
-        rule.waitUntil(30000) { rule.onAllNodesWithText("今天").fetchSemanticsNodes().isNotEmpty() }
-        rule.onNodeWithText("今天").performTouchInput { click() }
+        rule.onNodeWithText("今").assertIsDisplayed()
+        rule.onNodeWithText("今").performTouchInput { click() }
+        rule.onNodeWithText("天").performTouchInput { click() }
         rule.runOnIdle { assertTrue(committed.isEmpty()) }
         java.io.File(app.filesDir, "clipboard-split-test.png").outputStream().use {
             rule.onRoot().captureToImage().asAndroidBitmap().compress(android.graphics.Bitmap.CompressFormat.PNG, 100, it)
         }
-        rule.onNodeWithText("今天").performTouchInput { click() }
+        rule.onNodeWithText("今").performTouchInput { click() }
+        rule.onNodeWithText("天").performTouchInput { click() }
         rule.runOnIdle { assertTrue(committed.isEmpty()) }
         rule.onNodeWithText("确定").assertIsNotEnabled()
-        rule.onNodeWithText("今天").performTouchInput { click() }
+        rule.onNodeWithText("今").performTouchInput { click() }
+        rule.onNodeWithText("天").performTouchInput { click() }
         rule.onNodeWithText("确定").performClick()
         rule.runOnIdle { assertEquals(listOf("今天"), committed); assertTrue(closed) }
     }

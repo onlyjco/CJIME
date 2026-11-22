@@ -136,8 +136,10 @@ fun T9KeyboardLayout(
     val configuration = LocalConfiguration.current
     val isLandscape = !isFloatingMode && configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
 
+    val strokeBackspace by rememberUpdatedState(LocalStrokeFilterBackspace.current)
     fun handleDelete() {
         if (callbacks.onPreeditKeyInput?.invoke("delete") == true) return
+        if (strokeBackspace?.invoke() == true) return
         // onDeleted 在后台队列中处理（flush 不阻塞 UI），结果通过回调返回（Main 线程）。
         controller.onDeleted { result ->
             when (result) {

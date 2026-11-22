@@ -199,4 +199,28 @@ class PackageButtonLayoutIsolationTest {
         assertEquals(ButtonLayout.COMPACT, layouts["wanxiang"])
         assertEquals(null, layouts["rime_ice"])
     }
+
+    @Test fun customSectionQwertyCompactIsNotShadowedByBoilerplateSectionStandard() {
+        val customYaml = """
+            keyboard:
+              qwerty:
+                button_layout: compact
+              qwerty_lxsq17:
+                schemas: [lxsq17, lx17_雾凇]
+                button_layout: standard
+                layout:
+                  rows:
+                    - [h, s, z, b, x, m]
+                    - [l, d, y, w, j, n]
+                    - [c, q, g, f, t]
+        """.trimIndent()
+
+        val (effective, customOverrides) = KeysConfigHelper.parseSectionButtonLayoutsFromYamlTexts(
+            defaultText = null,
+            customText = customYaml,
+            sections = listOf("qwerty_lxsq17")
+        )
+        assertEquals(ButtonLayout.COMPACT, effective["qwerty_lxsq17"])
+        assertEquals(ButtonLayout.COMPACT, customOverrides["qwerty_lxsq17"])
+    }
 }

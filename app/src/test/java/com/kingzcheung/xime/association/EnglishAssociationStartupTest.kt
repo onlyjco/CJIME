@@ -55,6 +55,7 @@ class EnglishAssociationStartupTest {
         // its 本身是词：候选栏第一个仍是打的 its，缩写排第二，补全里不再重复 its。
         assertEquals("it's", words("its").first())
         assertFalse("its" in words("its"))
+        assertFalse("hello" in words("hello"))
         assertEquals("help", words("hel").first())
     }
 

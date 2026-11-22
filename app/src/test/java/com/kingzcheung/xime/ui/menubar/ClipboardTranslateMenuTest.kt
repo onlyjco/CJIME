@@ -58,7 +58,7 @@ class ClipboardTranslateMenuTest {
         show(null)
         rule.waitForIdle()
         longPress("text:1")
-        rule.onNodeWithText("分词").assertExists()
+        rule.onNodeWithText("拆字").assertExists()
         rule.onAllNodesWithTag("clipboard-item-translate").assertCountEquals(0)
     }
 

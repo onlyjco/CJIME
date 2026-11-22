@@ -210,6 +210,28 @@ class PredictionManager(
         }
     }
 
+    /** 英文直输手打结束或点选英文补全候选：进观察池或直接转正进常驻英文词库与滑行词表。 */
+    fun recordDirectEnglishWord(word: String, picked: Boolean) {
+        if (com.kingzcheung.xime.settings.IncognitoState.active) return
+        val rimeDir = com.kingzcheung.xime.settings.SchemaManager.getRimeDir(context)
+        serviceScope.launch(learningLane) {
+            AssociationService.initialize(context)
+            val builtinKnown = AssociationService.isBuiltinEnglishWord(word)
+            if (picked) {
+                com.kingzcheung.xime.settings.EnglishWordMemory.recordPickedWord(rimeDir, word, builtinKnown)
+            } else {
+                com.kingzcheung.xime.settings.EnglishWordMemory.recordTypedWord(rimeDir, word, builtinKnown)
+            }
+        }
+    }
+
+    fun flushEnglishLearning() {
+        val rimeDir = com.kingzcheung.xime.settings.SchemaManager.getRimeDir(context)
+        serviceScope.launch(learningLane) {
+            com.kingzcheung.xime.settings.EnglishWordMemory.flush(rimeDir)
+        }
+    }
+
     /** 学习记录一律存简体，切回简体后繁体时打的也能联想出来。 */
     private fun learn(text: String) {
         val bridge = traditionalBridge()

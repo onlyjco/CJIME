@@ -14,7 +14,6 @@ internal val MenuSettingsTitles: Map<ToolbarButton, String> = mapOf(
     ToolbarButton.OCR to "已安装的模型",
     ToolbarButton.FLOAT to "键盘尺寸与位置",
     ToolbarButton.FLOATING to "键盘尺寸与位置",
-    ToolbarButton.ARRANGE to "工具栏与菜单排列",
     ToolbarButton.HANDWRITING_LOOKUP to "手写",
     ToolbarButton.VOICE to "语音转文本",
     ToolbarButton.CAPTION to "字幕",

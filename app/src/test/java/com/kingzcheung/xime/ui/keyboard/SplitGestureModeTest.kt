@@ -23,4 +23,36 @@ class SplitGestureModeTest {
     @Test fun aDragStartedBetweenWordsOnlyScrolls() {
         assertEquals(SplitGesture.SCROLL, splitGestureMode(onChip = false, dx = 40f, dy = 0f, canScroll = true))
     }
+
+    @Test fun draggingBackInAddModeCancelsRetractedChipsAndPreservesInitialSelection() {
+        val initial = setOf(0, 5)
+        assertEquals(
+            listOf(0, 1, 2, 3, 5),
+            computeSplitDragSelection(initial, firstChip = 1, currentChip = 3, removeMode = false),
+        )
+        assertEquals(
+            listOf(0, 1, 2, 5),
+            computeSplitDragSelection(initial, firstChip = 1, currentChip = 2, removeMode = false),
+        )
+        assertEquals(
+            listOf(0, 1, 5),
+            computeSplitDragSelection(initial, firstChip = 1, currentChip = 0, removeMode = false),
+        )
+    }
+
+    @Test fun draggingBackInRemoveModeRestoresRetractedChips() {
+        val initial = setOf(0, 1, 2, 3, 4)
+        assertEquals(
+            listOf(0, 4),
+            computeSplitDragSelection(initial, firstChip = 1, currentChip = 3, removeMode = true),
+        )
+        assertEquals(
+            listOf(0, 3, 4),
+            computeSplitDragSelection(initial, firstChip = 1, currentChip = 2, removeMode = true),
+        )
+        assertEquals(
+            listOf(0, 2, 3, 4),
+            computeSplitDragSelection(initial, firstChip = 1, currentChip = 1, removeMode = true),
+        )
+    }
 }

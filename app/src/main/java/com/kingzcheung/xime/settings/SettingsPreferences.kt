@@ -311,9 +311,7 @@ object SettingsPreferences {
         if (raw != null && id !in toolbar) {
             val menu = raw.split(",").filter { it.isNotEmpty() }
             if (id !in menu) {
-                val arrange = com.kingzcheung.xime.keyboard.ToolbarButton.ARRANGE.id
-                val at = menu.indexOf(arrange).takeIf { it >= 0 } ?: menu.size
-                editor.putString(KEY_MENU_BUTTONS, (menu.take(at) + id + menu.drop(at)).joinToString(","))
+                editor.putString(KEY_MENU_BUTTONS, (menu + id).joinToString(","))
             }
         }
         editor.apply()
@@ -322,7 +320,7 @@ object SettingsPreferences {
 
     /**
      * A new built-in entry joins an already saved menu once, right after [after] when that is in
-     * the menu, otherwise before 排列; removing it later is kept.
+     * the menu, otherwise at the end; removing it later is kept.
      */
     private fun insertMenuItemOnce(context: Context, toolbar: List<String>, id: String, flagKey: String, after: String? = null) {
         val prefs = getPrefs(context)
@@ -332,9 +330,7 @@ object SettingsPreferences {
         if (raw != null && id !in toolbar) {
             val menu = raw.split(",").filter { it.isNotEmpty() }
             if (id !in menu) {
-                val arrange = com.kingzcheung.xime.keyboard.ToolbarButton.ARRANGE.id
-                val at = after?.let { menu.indexOf(it) }?.takeIf { it >= 0 }?.plus(1)
-                    ?: menu.indexOf(arrange).takeIf { it >= 0 } ?: menu.size
+                val at = after?.let { menu.indexOf(it) }?.takeIf { it >= 0 }?.plus(1) ?: menu.size
                 editor.putString(KEY_MENU_BUTTONS, (menu.take(at) + id + menu.drop(at)).joinToString(","))
             }
         }
@@ -1466,12 +1462,6 @@ object SettingsPreferences {
     // ── 悬浮键盘设置 ──
 
     private const val KEY_FLOATING_MODE = "floating_mode"
-    /** 展开菜单里直接编辑快捷入口（PR #232）；默认关，关着时菜单和以前一样，排列在「排列」面板里改。 */
-    internal const val KEY_INLINE_QUICK_ACTION_EDITING = "inline_quick_action_editing"
-    fun inlineQuickActionEditing(context: Context): Boolean = getPrefs(context).getBoolean(KEY_INLINE_QUICK_ACTION_EDITING, false)
-    fun setInlineQuickActionEditing(context: Context, enabled: Boolean) {
-        getPrefs(context).edit().putBoolean(KEY_INLINE_QUICK_ACTION_EDITING, enabled).apply()
-    }
 
     internal const val KEY_FLOATING_GEOMETRY_LOCKED = "floating_geometry_locked"
     fun floatingGeometryLocked(context: Context): Boolean = getPrefs(context).getBoolean(KEY_FLOATING_GEOMETRY_LOCKED, false)
