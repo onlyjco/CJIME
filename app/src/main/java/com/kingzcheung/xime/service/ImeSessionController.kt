@@ -624,6 +624,8 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
                 !(neighbor && com.kingzcheung.xime.settings.SpellingPatches.typo(service, com.kingzcheung.xime.settings.SpellingPatches.Typo.EXTRA)))
             add("_cyime_pause_swap_off" to
                 !(neighbor && com.kingzcheung.xime.settings.SpellingPatches.typo(service, com.kingzcheung.xime.settings.SpellingPatches.Typo.TRANSPOSITION)))
+            // 14 键打字时的邻键纠错（固定键位表，见 pinyin_14jian 的 cyime_merged_key_neighbors）跟「邻键纠错」走。
+            add("_cyime_merged_neighbor_off" to !neighbor)
         }
         var changed = false
         for ((name, value) in options) {

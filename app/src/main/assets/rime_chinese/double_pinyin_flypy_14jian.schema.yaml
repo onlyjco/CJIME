@@ -139,6 +139,12 @@ translator:
   sentence_cutoff_threshold: 100
   dictionary: rime_ice
   prism: double_pinyin_flypy_14jian
+  # 邻键纠错（2026-11-22「太大了打成太大可，纠错没有纠错能力」）：按偏到旁边的键（l 打成 jk）和 26 键一样当场纠，
+  # 纠出的整句按 26 键的规则排（多半在第二位）。14 键没有量出来的键位，用固定的键位表：同一排左右相邻、
+  # 第一二排上下相邻（第三排和第二排错开，不算）。「邻键纠错」关着时 App 设 _cyime_merged_neighbor_off，不纠。
+  enable_correction: true
+  cyime_neighbor_correction: true
+  cyime_merged_key_neighbors: "Q:EA;E:QTD;T:EUG;U:TOJ;O:Ul;A:DQ;D:AGE;G:DJT;J:GlU;l:JO;Z:C;C:ZB;B:Cm;m:B"
   spelling_hints: 8
   always_show_comments: true
   preedit_format:

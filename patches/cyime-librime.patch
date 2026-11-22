@@ -582,12 +582,17 @@ index 85cac5ce..54befbf7 100644
  #include <rime/schema.h>
  #include <rime/service.h>
  #include <rime/ticket.h>
-@@ -243,13 +246,71 @@ bool EditDistanceCorrector::Build(const Syllabary& syllabary,
+@@ -243,13 +246,78 @@ bool EditDistanceCorrector::Build(const Syllabary& syllabary,
  EditDistanceCorrector::EditDistanceCorrector(const path& file_path)
      : Prism(file_path) {}
  
 +void NearSearchCorrector::RefreshNeighbors() {
-+  const auto geometry = engine_->context()->get_property("cyime_neighbors");
++  auto geometry = engine_->context()->get_property("cyime_neighbors");
++  // A merged-key keyboard (14 keys: QETUOADGJZCB, l and m alone) has no measured letter layout; its keys sit in a
++  // fixed grid, given by the schema. The keyboard's 邻键纠错 switch reaches it as a session option.
++  if (geometry.empty() && !merged_neighbors_.empty() &&
++      !engine_->context()->get_option("_cyime_merged_neighbor_off"))
++    geometry = merged_neighbors_;
 +  if (geometry == geometry_) return;
 +  geometry_ = geometry;
 +  neighbors_.clear();
@@ -596,9 +601,11 @@ index 85cac5ce..54befbf7 100644
 +  std::istringstream entries(geometry);
 +  string entry;
 +  while (std::getline(entries, entry, ';')) {
-+    if (entry.size() < 2 || entry[1] != ':' || entry[0] < 'a' || entry[0] > 'z') continue;
++    // Letters a-z (measured layouts) and merged keys A-Z (merged_neighbors_).
++    auto key = [](char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z'); };
++    if (entry.size() < 2 || entry[1] != ':' || !key(entry[0])) continue;
 +    for (size_t i = 2; i < entry.size() && i < 8; ++i) {
-+      if (entry[i] >= 'a' && entry[i] <= 'z' && entry[i] != entry[0])
++      if (key(entry[i]) && entry[i] != entry[0])
 +        neighbors_[entry[0]].insert(entry[i]);
 +    }
 +  }
@@ -656,7 +663,7 @@ index 85cac5ce..54befbf7 100644
    using record = struct {
      size_t node_pos;
      size_t idx;
-@@ -258,17 +319,42 @@ void NearSearchCorrector::ToleranceSearch(const Prism& prism,
+@@ -258,17 +326,42 @@ void NearSearchCorrector::ToleranceSearch(const Prism& prism,
    };
  
    std::queue<record> queue;
@@ -702,7 +709,7 @@ index 85cac5ce..54befbf7 100644
      std::swap(ch, exchange);
  
      if (val == -2)
-@@ -279,9 +365,10 @@ void NearSearchCorrector::ToleranceSearch(const Prism& prism,
+@@ -279,9 +372,10 @@ void NearSearchCorrector::ToleranceSearch(const Prism& prism,
      if (rec.idx < key.size()) {
        queue.push({rec.node_pos, rec.idx, rec.distance, key[rec.idx]});
        if (rec.distance < threshold) {
@@ -714,7 +721,7 @@ index 85cac5ce..54befbf7 100644
        }
      }
    }
-@@ -299,6 +386,22 @@ CorrectorComponent::CorrectorComponent()
+@@ -299,6 +393,24 @@ CorrectorComponent::CorrectorComponent()
            {"corrector", "", ".correction.bin"})) {}
  
  Corrector* CorrectorComponent::Create(const Ticket& ticket) noexcept {
@@ -731,8 +738,10 @@ index 85cac5ce..54befbf7 100644
 +    ticket.schema->config()->GetBool(ticket.name_space + "/cyime_stray_initial_correction", &stray_initials);
 +    bool final_g = false;
 +    ticket.schema->config()->GetBool(ticket.name_space + "/cyime_final_g_correction", &final_g);
++    string merged_neighbors;
++    ticket.schema->config()->GetString(ticket.name_space + "/cyime_merged_key_neighbors", &merged_neighbors);
 +    return new NearSearchCorrector(ticket.engine, doubled_letters, extra_letters, transpositions, stray_initials,
-+                                   final_g);
++                                   final_g, merged_neighbors);
 +  }
    // Don't use edit distance based correction for now.
  #if 0
@@ -772,7 +781,7 @@ index f363419f..8ac86f8d 100644
  };
  
  class CorrectorComponent : public Corrector::Component {
-@@ -115,11 +132,35 @@ class EditDistanceCorrector : public Corrector, public Prism {
+@@ -115,11 +132,40 @@ class EditDistanceCorrector : public Corrector, public Prism {
  class RIME_DLL NearSearchCorrector : public Corrector {
   public:
    NearSearchCorrector() = default;
@@ -780,9 +789,11 @@ index f363419f..8ac86f8d 100644
 +  // in double pinyin a swapped pair is usually another valid syllable.
 +  explicit NearSearchCorrector(Engine* engine, bool doubled_letters = false,
 +                               bool extra_letters = false, bool transpositions = false,
-+                               bool stray_initials = false, bool final_g = false)
++                               bool stray_initials = false, bool final_g = false,
++                               const string& merged_neighbors = string())
 +      : engine_(engine), doubled_letters_(doubled_letters), extra_letters_(extra_letters),
-+        transpositions_(transpositions), stray_initials_(stray_initials), final_g_(final_g) {}
++        transpositions_(transpositions), stray_initials_(stray_initials), final_g_(final_g),
++        merged_neighbors_(merged_neighbors) {}
 +  bool CorrectsDoubledLetters() const override { return doubled_letters_; }
 +  bool CorrectsExtraLetters() const override { return extra_letters_; }
 +  bool CorrectsStrayInitials() const override { return stray_initials_; }
@@ -802,6 +813,9 @@ index f363419f..8ac86f8d 100644
 +  bool stray_initials_ = false;
 +  bool final_g_ = false;
 +  void RefreshNeighbors();
++  // CyIME: fixed key adjacency of a merged-key keyboard (14 keys, translator/cyime_merged_key_neighbors), used when
++  // the keyboard sends no measured layout; the session option _cyime_merged_neighbor_off (邻键纠错 off) turns it off.
++  string merged_neighbors_;
 +  string geometry_;
 +  bool unreadable_only_ = false;
 +  hash_map<char, hash_set<char>> neighbors_;
