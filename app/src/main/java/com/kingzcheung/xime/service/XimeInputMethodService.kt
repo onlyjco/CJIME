@@ -2688,6 +2688,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                 onDispose { voicePillOnScreen = false; voicePillMoving = false; voicePillReserveTop = null }
                             }
                             val pillPrefs = com.kingzcheung.xime.ui.keyboard.rememberKeyboardInputPreferences(isDark)
+                            val pillContinuous = androidx.compose.runtime.remember {
+                                androidx.compose.runtime.mutableStateOf(SettingsPreferences.isSttPillResume(this@XimeInputMethodService))
+                            }
                             val glass = pillPrefs.frostedGlass
                             val pillEnglish = state.isAsciiMode || state.inputProfile.language == com.kingzcheung.xime.settings.InputLanguage.ENGLISH
                             com.kingzcheung.xime.ui.keyboard.VoiceCollapsedPill(
@@ -2711,6 +2714,12 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                 onBackspacePress = { keyboardCallbacks?.onKeyPressDown?.invoke("delete") },
                                 onBackspaceRelease = { keyboardCallbacks?.onKeyRelease?.invoke("delete") },
                                 backspaceRepeatMs = pillPrefs.deleteRepeatSpeed.intervalMs,
+                                // 连续语音开关（设置 › 语音转文本里同一项，键不变）：用户 11-22 要在浮窗里直接开关。
+                                continuous = pillContinuous.value,
+                                onContinuousChange = { on ->
+                                    pillContinuous.value = on
+                                    SettingsPreferences.setSttPillResume(this@XimeInputMethodService, on)
+                                },
                                 onMic = {
                                     // 在悬浮条上点麦克风停下：用户自己停的，之后不再自动续听。
                                     // 收尾期间焦点离开也不能再记成“被打断”。
