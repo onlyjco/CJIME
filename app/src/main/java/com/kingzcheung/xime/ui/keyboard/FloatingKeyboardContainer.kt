@@ -9,6 +9,9 @@ import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.gestures.drag
 import androidx.compose.foundation.layout.Box
+import androidx.compose.ui.platform.LocalLayoutDirection
+import androidx.compose.foundation.layout.displayCutout
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Column
@@ -241,6 +244,17 @@ internal fun FloatingKeyboardContainer(
                 val shift = fixedOffsetX.toFloat().coerceIn(-travel, travel)
                 val touchesLeft = shift <= -travel + 0.5f
                 val touchesRight = shift >= travel - 0.5f
+                // 横屏时前置摄像头的挖孔在左右两边（输入法窗口画进挖孔区，背景才铺满）：
+                // 卡片压到挖孔那一条时按键、候选往里让开，那一条只铺键盘底色（#556 Redmi K50 横屏 Q 和第一个候选被挡）。
+                // 竖屏挖孔在顶上，左右为 0，不变。
+                val cutout = WindowInsets.displayCutout
+                val direction = LocalLayoutDirection.current
+                val cardLeft = travel + shift
+                val cutoutStart = fixedCardCutoutOverlapDp(
+                    with(density) { cutout.getLeft(density, direction).toDp() }.value, cardLeft).dp
+                val cutoutEnd = fixedCardCutoutOverlapDp(
+                    with(density) { cutout.getRight(density, direction).toDp() }.value,
+                    maxWidth.value - cardLeft - width.value).dp
                 val undockPull = remember { UndockPullState() }
                 val outerClip = if (clipboardExpansion != null && roundedBottom) {
                     if (!sidesFilled) FixedKeyboardBottomRoundedShape
@@ -272,8 +286,11 @@ internal fun FloatingKeyboardContainer(
                                     (pos.x + coords.size.width).roundToInt(), (pos.y + coords.size.height).roundToInt())
                             }
                         }) {
-                        CompositionLocalProvider(LocalKeyboardCardTopCorner provides cardTopCorner(touchesLeft, touchesRight)) {
-                            LanguageMenuPanel { keyboardContent() }
+                        if (cutoutStart > 0.dp || cutoutEnd > 0.dp) Box(Modifier.fillMaxSize().keyboardPanelBackground(backgroundColor))
+                        Box(Modifier.fillMaxSize().padding(start = cutoutStart, end = cutoutEnd)) {
+                            CompositionLocalProvider(LocalKeyboardCardTopCorner provides cardTopCorner(touchesLeft, touchesRight)) {
+                                LanguageMenuPanel { keyboardContent() }
+                            }
                         }
                         if (onUndock != null) UndockHandle(Modifier.align(Alignment.TopCenter), undockPull,
                             dragIndicatorColor, highlightColor)
@@ -921,3 +938,7 @@ private fun DragBar(
             },
     )
 }
+
+/** 挖孔那一条（从屏幕边量起 [cutoutDp] 宽）压进固定卡片多少：卡片左边离屏幕边 [cardEdgeDp]，没压到为 0。 */
+internal fun fixedCardCutoutOverlapDp(cutoutDp: Float, cardEdgeDp: Float): Float =
+    (cutoutDp - cardEdgeDp.coerceAtLeast(0f)).coerceAtLeast(0f)
