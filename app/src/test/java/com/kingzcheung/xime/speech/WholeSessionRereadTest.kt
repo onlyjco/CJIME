@@ -144,4 +144,45 @@ class WholeSessionRereadTest {
         assertFalse(successor.isAlive)
         assertNotEquals("迟到", result); assertFalse(output.contains("迟到"))
     }
+
+    /** Silero never opens a region on some short phrases on the tablet (2026-11-22): loud enough still counts. */
+    private class DeafEngine(val answer: String) : Engine() {
+        override fun detector(): SpeechDetector = object : SpeechDetector {
+            override fun speech(frame: FloatArray) = false
+            override fun reset() { }
+        }
+        override fun refinePunctuated(samples: FloatArray): String { reread.add(samples.size); return answer }
+    }
+    private val floor = 30    // about -61 dBFS: the room
+    private val phrase = 1500 // about -27 dBFS: 34 dB over the room
+
+    @Test fun `a short phrase the VAD missed is still read when it is clearly louder than the room`() {
+        val engine = DeafEngine("等着。")
+        val s = LocalSpeechSession(engine, {}, {}, wholeSentence = true)
+        s.acceptPcm(pcm(32000, floor)); s.acceptPcm(pcm(8000, phrase)); s.acceptPcm(pcm(16000, floor))
+        assertEquals("等着。", s.finish())
+        assertEquals(56000, engine.reread.single())
+    }
+
+    @Test fun `room noise alone without a VAD region is not read`() {
+        val engine = DeafEngine("我。")
+        val s = LocalSpeechSession(engine, {}, {}, wholeSentence = true)
+        s.acceptPcm(pcm(32000, floor)); s.acceptPcm(pcm(8000, floor * 3)); s.acceptPcm(pcm(16000, floor))
+        assertEquals("", s.finish())
+        assertTrue(engine.reread.isEmpty())
+    }
+
+    @Test fun `one character read from a loud sound without a VAD region is dropped`() {
+        val engine = DeafEngine("我。")
+        val s = LocalSpeechSession(engine, {}, {}, wholeSentence = true)
+        s.acceptPcm(pcm(32000, floor)); s.acceptPcm(pcm(8000, phrase)); s.acceptPcm(pcm(16000, floor))
+        assertEquals("", s.finish())
+    }
+
+    @Test fun `speech lift measures the loudest third of a second over the floor`() {
+        val lift = SpeechLift()
+        lift.accept(FloatArray(32000) { .001f }); lift.accept(FloatArray(8000) { .05f }); lift.accept(FloatArray(16000) { .001f })
+        assertEquals(34f, lift.liftDb(), .5f)
+        assertEquals(0f, SpeechLift().apply { accept(FloatArray(4000) { .05f }) }.liftDb(), 0f)
+    }
 }

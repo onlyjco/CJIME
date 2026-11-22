@@ -125,8 +125,10 @@ internal class LocalSpeechSession(
     private var sessionSamples = 0
     private var sessionOverflow = false
     private val sessionPauses = mutableListOf<Int>()
-    /** VAD 至少打开过一段。一段都没有就是没说话：整段重识别不跑，SenseVoice 在近乎静音上会编出「我。」。 */
+    /** VAD 至少打开过一段。一段都没有时多半没说话：SenseVoice 在近乎静音上会编出「我。」。 */
     @Volatile private var heardSpeech = false
+    /** VAD 没开段时的后备：整次输入够响才整段重识别（[SpeechLift]，平板上的短句 VAD 会漏）。 */
+    private val lift = SpeechLift()
     // The re-read runs on the finishing thread after both workers stop: a successor must wait for
     // it (awaitIdle) before resetting or reusing the engine. Released by finish or cancel.
     private val wholeLock = Any()
@@ -193,7 +195,7 @@ internal class LocalSpeechSession(
                     if (!abandoned.get() && !failed.get()) try {
                         if (wholeSentenceActive && !sessionOverflow) {
                             if (sessionSamples + samples.size > WHOLE_SESSION_MAX_SAMPLES) { sessionOverflow = true; sessionAudio.clear() }
-                            else { sessionAudio.add(samples); sessionSamples += samples.size }
+                            else { sessionAudio.add(samples); sessionSamples += samples.size; lift.accept(samples) }
                         }
                         segmenter.accept(samples)
                         previewLatestAudio()
@@ -273,7 +275,9 @@ internal class LocalSpeechSession(
      * 完成后运行（同一线程独占识别器）；被取消、超出预算、出现外文字或识别为空时返回 null，保留原文。
      */
     private fun wholeSessionText(deadline: Long): String? = synchronized(wholeLock) {
-        if (abandoned.get() || sessionOverflow || sessionSamples == 0 || !heardSpeech) return null
+        // VAD 一段都没开：整次够响（像说了一句短话）才整段重识别，否则当作没说话。
+        val loudWithoutVad = !heardSpeech && lift.liftDb() >= SPEECH_LIFT_DB
+        if (abandoned.get() || sessionOverflow || sessionSamples == 0 || !heardSpeech && !loudWithoutVad) return null
         val pcm = FloatArray(sessionSamples)
         var offset = 0
         sessionAudio.forEach { it.copyInto(pcm, offset); offset += it.size }
@@ -291,7 +295,10 @@ internal class LocalSpeechSession(
         val merged = guarded(first, whole.text())
         // 整段重识别的字数不到已显示的一半（噪音里常见）：保留按停顿定稿和预览的文字。
         if (secondPassLostText(shown, merged)) return null
-        return merged.ifEmpty { null }
+        if (merged.isEmpty()) return null
+        // VAD 没听到、只靠响度放行时，只认出一个字（敲桌、咳嗽上编出的「我。」）不算数。
+        if (loudWithoutVad && spokenUnits(merged) < 2) return null
+        return merged
     }
 
     /** Drains actual audio, then waits only for outstanding work; no artificial stop delay. */
