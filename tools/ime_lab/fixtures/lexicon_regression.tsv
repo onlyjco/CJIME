@@ -1288,3 +1288,46 @@ lex1122-neg-hesuan	26	hesuan	核算	1	反例	2026-11-22	核酸 只到第三，�
 lex1122-neg-sixin	26	sixin	私心	1	反例	2026-11-22	私信 不抢 私心
 lex1122-neg-muji	26	mujixiadanle	母鸡下蛋了	1	反例	2026-11-22	下单 提到第一后整句仍要出 下蛋
 lex1122-neg-weibo	26	weibodeshouru	微薄的收入	1	反例	2026-11-22	微博 提到第一后整句仍要出 微薄
+lex1122b-zhifu	26	zhifu	支付	1	lexicon-1122	2026-11-22	原 22289，聊天混合后排第二
+lex1122b-youhui	26	youhui	优惠	1	lexicon-1122	2026-11-22	原 18194，聊天混合后排第二
+lex1122b-kuandai	26	kuandai	宽带	1	lexicon-1122	2026-11-22	原 13335，聊天混合后排第二
+lex1122b-zhuxiao	26	zhuxiao	注销	1	lexicon-1122	2026-11-22	原 11213，聊天混合后排第二
+lex1122b-zhongjie	26	zhongjie	中介	1	lexicon-1122	2026-11-22	原 15420，聊天混合后排第二
+lex1122b-fahuo	26	fahuo	发货	1	lexicon-1122	2026-11-22	原 13713，聊天混合后排第二
+lex1122b-zhekou	26	zhekou	折扣	1	lexicon-1122	2026-11-22	原 17993，聊天混合后排第二
+lex1122b-zhishu	26	zhishu	指数	1	lexicon-1122	2026-11-22	原 18195，聊天混合后排第二
+lex1122b-buwei	26	buwei	部位	1	lexicon-1122	2026-11-22	原 17614，聊天混合后排第二
+lex1122b-tuxing	26	tuxing	图形	1	lexicon-1122	2026-11-22	原 16307，聊天混合后排第二
+lex1122b-danji	26	danji	单击	1	lexicon-1122	2026-11-22	原 16270，聊天混合后排第二
+lex1122b-fudu	26	fudu	幅度	1	lexicon-1122	2026-11-22	原 12444，聊天混合后排第二
+lex1122b-gujia	26	gujia	股价	1	lexicon-1122	2026-11-22	原 12312，聊天混合后排第二
+lex1122b-quantao	26	quantao	全套	1	lexicon-1122	2026-11-22	原 11009，聊天混合后排第二
+lex1122b-jingdu	26	jingdu	精度	1	lexicon-1122	2026-11-22	原 32780，聊天混合后排第二
+lex1122b-pingzheng	26	pingzheng	凭证	1	lexicon-1122	2026-11-22	原 13610，聊天混合后排第二
+lex1122b-yuanma	26	yuanma	源码	1	lexicon-1122	2026-11-22	原 9144，聊天混合后排第二
+lex1122b-edu	26	edu	额度	1	lexicon-1122	2026-11-22	原 8274，聊天混合后排第二
+lex1122b-koufu	26	koufu	口服	1	lexicon-1122	2026-11-22	原 9324，聊天混合后排第二
+lex1122b-buban	26	buban	补办	1	lexicon-1122	2026-11-22	原 4048，聊天混合后排第二
+lex1122b-daozhang	26	daozhang	到账	1	lexicon-1122	2026-11-22	原 4251，聊天混合后排第二
+lex1122b-xianxue	26	xianxue	献血	1	lexicon-1122	2026-11-22	原 3784，聊天混合后排第二
+lex1122b-shangyue	26	shangyue	上月	1	lexicon-1122	2026-11-22	原 6782，聊天混合后排第二
+lex1122b-yanke	26	yanke	眼科	1	lexicon-1122	2026-11-22	原 4408，聊天混合后排第二
+lex1122b-geshui	26	geshui	个税	1	lexicon-1122	2026-11-22	原 3148，聊天混合后排第二
+lex1122b-jianshui	26	jianshui	减税	1	lexicon-1122	2026-11-22	原 3027，聊天混合后排第二
+lex1122b-chouqian	26	chouqian	抽签	1	lexicon-1122	2026-11-22	原 3374，聊天混合后排第二
+lex1122b-jieqing	26	jieqing	结清	1	lexicon-1122	2026-11-22	原 2672，聊天混合后排第二
+lex1122b-xieshang	26	xieshang	协商	1	lexicon-1122	2026-11-22	原 28827，聊天混合后排第二
+lex1122b-neg-youhui	26	tayouhuilaide	他又会来的	1	反例	2026-11-22	优惠 提到第一后整句不能变
+lex1122b-neg-buwei	26	buweisuodong	不为所动	1	反例	2026-11-22	第二批提权后整句不能变
+lex1122b-neg-fahuo	26	tafahuole	他发火了	1	反例	2026-11-22	第二批提权后整句不能变
+lex1122b-neg-zhekou	26	yanbuxiazhekouqi	咽不下这口气	1	反例	2026-11-22	第二批提权后整句不能变
+lex1122b-neg-fudu	26	woxiangfudu	我想复读	1	反例	2026-11-22	第二批提权后整句不能变
+lex1122b-neg-zhuxiao	26	tazaizhuxiao	他在住校	1	反例	2026-11-22	第二批提权后整句不能变
+lex1122b-neg-quantao	26	zhongletadequantao	中了他的圈套	1	反例	2026-11-22	第二批提权后整句不能变
+lex1122b-neg-yuanma	26	lizheliyuanma	离这里远吗	1	反例	2026-11-22	第二批提权后整句不能变
+lex1122b-neg-xianxue	26	woxianxuezhege	我先学这个	1	反例	2026-11-22	第二批提权后整句不能变
+lex1122b-neg-shangyue	26	zhongqiujieshangyue	中秋节赏月	1	反例	2026-11-22	第二批提权后整句不能变
+lex1122b-neg-xieshang	26	xieshangmingzi	写上名字	1	反例	2026-11-22	第二批提权后整句不能变
+lex1122b-neg-zhifu	26	chuanzhezhifu	穿着制服	1	反例	2026-11-22	第二批提权后整句不能变
+lex1122b-neg-zhongjie	26	zhongjiezhezhanzheng	终结这场战争	1	反例	2026-11-22	第二批提权后整句不能变
+lex1122b-neg-daozhang	26	zhangdaozhang	张道长	1	反例	2026-11-22	第二批提权后整句不能变
