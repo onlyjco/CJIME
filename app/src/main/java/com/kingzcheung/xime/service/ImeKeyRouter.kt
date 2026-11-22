@@ -2179,6 +2179,8 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                             // 大写字母（Shift、Caps Lock 或 Shift 拖线中途在字母区松手）在雾凇系 26 键方案里
                             // 参与组字：字母表含 A–Z，大写串进当前输入（zuogeDNAjiance → 做个DNA检测，
                             // Transformer、KFC 由英文词库和自动大写给出），已打的拼音不被顶上屏。
+                            // 实体键盘的 Caps Lock 键本身不一样：按下那一下先把已打的拼音原样上屏（照电脑上的习惯，
+                            // 见 onKeyDown），之后锁着大写打的字母才从这里进组字。
                             val capitalsInRime = isShiftedChinese && !mergedKey && service.t9PartialSegments.isEmpty() &&
                                 (typesEnglishCapitals(state.currentSchemaId) || externalCapitalInRime(char[0]))
                             // 其他方案（双拼、14 键合并键等）没有大写字母编码：已打的字母按原样连同大写字母上屏，

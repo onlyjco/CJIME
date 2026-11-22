@@ -2525,6 +2525,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                             // 候选只在实体键盘浮条这里读；放在外层会让每次候选变化都重组整个键盘。
                             val cand = if (hardwareExample) previewCandidates else candidateState.value
                             val hardwareWindow = if (hardwareExample) 0 else keyRouter.hardwareWindowStart(cand)
+                            // 只打了大写字母（N、AGENTS）时数字原样接在后面上屏（#528），按了选不中，就不画编号。
+                            val hardwareNumbers = !hardwareEnglish && !compositionIsAllCapitals(cand.inputText)
                             com.kingzcheung.xime.gloss.CandidateGlossary.revision // 词典加载完成后重组
                             val hardwareGlosses = !hardwareEnglish &&
                                 state.inputProfile.language == com.kingzcheung.xime.settings.InputLanguage.CHINESE &&
@@ -2608,7 +2610,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                     onNext = nextHardwareCandidate.takeUnless { hardwareCandidates.association },
                                     onCandidateSelect = selectHardwareCandidate,
                                     bottomDocked = bottomDocked,
-                                    showNumberLabels = true,
+                                    // 英文直接输入的补全不编号：数字、空格照字面打（hello123），按了选不中（#526），和工具条一样。
+                                    showNumberLabels = hardwareNumbers,
                                     surface = hardwareSurface,
                                     onPreeditBoundsChanged = { updateHardwarePreeditBounds(it) },
                                     onBoundsChanged = { updateHardwareSurfaceBounds(toolbar = false, it) },
@@ -2661,7 +2664,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                         selectHardwareCandidate,
                                         previousHardwareCandidate.takeUnless { hardwareCandidates.association },
                                         nextHardwareCandidate.takeUnless { hardwareCandidates.association },
-                                        showNumberLabels = !hardwareEnglish,
+                                        showNumberLabels = hardwareNumbers,
                                         commentsAreGlosses = hardwareGlosses && !hardwareCandidates.association,
                                         onShown = { words, count -> keyRouter.reportHardwareShown(words, count) })
                                   }
