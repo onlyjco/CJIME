@@ -271,6 +271,7 @@ private fun T9KeyboardSwipeOverlay(
     // 按住 !@# 当 Ctrl、中英或语言切换：和 26 键一样从按的那个键扩开（用户 11-14）。
     KeyGapLightMode(gapLight, ctrlTargets.ctrlFaces, on = ctrlTargets.ctrlFaces)
     KeyGapLightMode(gapLight, uiState.isAsciiMode to uiState.inputProfile)
+    KeyGapLightUncover(gapLight)
 
     CompositionLocalProvider(LocalKeyCornerRadius provides keyCornerRadius, LocalLongPressMenuKeyboard provides longPressMenuKeyboard,
         LocalT9GlideKeys provides glideKeys,

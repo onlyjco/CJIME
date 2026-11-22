@@ -630,6 +630,8 @@ fun KeyboardLayout(
     // 按住符号键当 Ctrl：键面换成快捷键时从符号键扩开，换回字母时收回；中英、语言切换时从语言键扩开（用户 11-14）。
     KeyGapLightMode(gapLight, shiftSlideTargets.ctrlFaces, on = shiftSlideTargets.ctrlFaces)
     KeyGapLightMode(gapLight, isAsciiMode to uiState.currentSchemaId)
+    // 换了一块新键盘、收起符号页时，从刚才点的切换键扩开（用户 11-22，见 KeyGapLightHandoff）。
+    KeyGapLightUncover(gapLight)
 
     CompositionLocalProvider(
         LocalKeyGapLight provides gapLight,

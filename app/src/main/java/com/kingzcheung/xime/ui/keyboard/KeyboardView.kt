@@ -2444,6 +2444,8 @@ fun KeyboardView(
                         }
                         CompositionLocalProvider(
                             LocalSuppressCursorMove provides suppressCursorMove,
+                            // 符号页收起时主键盘从「返回」那个位置扩开（键缝动效的切换扩散，用户 11-22）。
+                            LocalKeyboardCoveredBySymbols provides symbolPageShown,
                         ) {
                             KeyboardLayoutScreen(
                                 keyboardState = keyboardState,
