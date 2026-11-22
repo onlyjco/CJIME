@@ -292,6 +292,18 @@ internal fun clipboardCardMaxLines(stored: Int): Int = if (stored in setOf(2, 4,
  */
 internal const val CLIPBOARD_CLOSE_AFTER_PASTE_KEY = "close_after_paste"
 
+/**
+ * 卡片上只画得下几行，交给 Text 的只取开头一段。整段长文（几万字的复制）每次排版都要量完整段，
+ * 主线程一量几秒，按键排队超时（#536 ColorOS 17 ANR，栈在剪贴板瀑布流测量文字）。点了照样用完整内容。
+ */
+internal fun clipboardPreviewText(text: String, limit: Int = CLIPBOARD_PREVIEW_CHARS): String {
+    if (text.length <= limit) return text
+    val end = if (Character.isHighSurrogate(text[limit - 1])) limit - 1 else limit
+    return text.substring(0, end) + "…"
+}
+
+internal const val CLIPBOARD_PREVIEW_CHARS = 400
+
 internal fun clipboardClosesAfterPaste(prefs: android.content.SharedPreferences): Boolean =
     prefs.getBoolean(CLIPBOARD_CLOSE_AFTER_PASTE_KEY, true)
 
@@ -980,7 +992,8 @@ private fun ClipboardRecordCard(
             onClick = onClick, onLongClick = onLongClick,
             onLongClickLabel = if (selecting) "切换选择" else "更多操作")) {
         when (card) {
-            is ClipboardCard.Text -> Text(if (masked) com.kingzcheung.xime.clipboard.ClipboardLinkChoices.SENSITIVE_MASK else card.item.text,
+            is ClipboardCard.Text -> Text(if (masked) com.kingzcheung.xime.clipboard.ClipboardLinkChoices.SENSITIVE_MASK
+                else clipboardPreviewText(card.item.text),
                 // A one-line record is as tall as a pinned row and its line sits in the middle; the old
                 // 48dp floor left a strip under the text (user 10-30). Longer text grows the card.
                 Modifier.align(Alignment.CenterStart).fillMaxWidth()
