@@ -580,7 +580,15 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     /** 分体时模糊分三块：上方工具栏整宽，左右两半各一块，中缝保持清晰。 */
     private fun updateKeyboardGlass() {
         val handwriting = uiState.value.handwritingExpanded
-        val card = withFilledSides(if (handwriting) handwritingGlassControls else keyboardGlassCard)
+        // 语音悬浮条、实体键盘浮条时键盘不在屏幕上：不要键盘那块模糊。原来留着收起前量到的键盘位置，
+        // 拖悬浮条、柔化顶边切换等一调到这里就把它放回来，键盘容器在窗口里的位置又变了，整块模糊挪到屏幕最上面，
+        // 糊住 App 上半截（用户 11-22 手机截图：开了语音浮窗后上面一大块变模糊）。
+        val keyboardOffScreen = uiState.value.voiceCollapsed || uiState.value.isCompact
+        val card = withFilledSides(when {
+            keyboardOffScreen -> null
+            handwriting -> handwritingGlassControls
+            else -> keyboardGlassCard
+        })
         // All pieces below come from the card's measurement, so they share its anchor origin.
         val origin = if (handwriting) handwritingGlassControlsOrigin else keyboardGlassCardOrigin
         val hole = card?.let { splitKeyboardGap.hole(it.bottom.toFloat()) }
