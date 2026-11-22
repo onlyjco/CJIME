@@ -78,12 +78,15 @@ fun SpaceKeyButton(
     val voiceOn by rememberUpdatedState(isVoiceMode)
     val holdAction = settings.effectiveSpaceHold
     val cursorUnitPx = rememberCursorUnitPx()
-    // 滑到右上角锁定（SpaceVoiceLock）：键盘外没有提供时为 null，长按说话照旧、不能锁定。
+    // 滑到左右两把锁上锁定（SpaceVoiceLock）：键盘外没有提供时为 null，长按说话照旧、不能锁定。
     val voiceLock = LocalSpaceVoiceLock.current
     DisposableEffect(Unit) { onDispose {
         onCursorMode?.invoke(false)
         voiceLock?.holding = false
         voiceLock?.armed = false
+        voiceLock?.side = 0
+        voiceLock?.cancelShown = false
+        voiceLock?.cancelArmed = false
     } }
     // 空格在 Compose 根里的左上角：手指位置换算到根坐标，和锁按钮比。只在手势里读，不触发重组。
     val spaceOrigin = remember { floatArrayOf(0f, 0f) }
@@ -126,7 +129,14 @@ fun SpaceKeyButton(
     // 进入语音的样子同样只在麦克风真开着时出现：总开关关着、输入框不许语音时不假装在听。
     val showVoiceHold = (voiceHoldStarted || voiceLocked) && isVoiceMode
     // 锁按钮跟着麦克风真开着才浮出来（按住说话、但麦没开起来时不出锁）；只由开始这次说话的这个空格去写。
-    SideEffect { if (voiceHoldStarted && voiceLock != null) voiceLock.holding = isVoiceMode }
+    // 开了上滑取消时中间的取消按钮一起浮出，过线时跟空格一起变红。
+    SideEffect {
+        if (voiceHoldStarted && voiceLock != null) {
+            voiceLock.holding = isVoiceMode
+            voiceLock.cancelShown = showVoiceCancel
+            voiceLock.cancelArmed = showVoiceCancel && voiceCancelArmed
+        }
+    }
     // 手指在锁按钮上：松手就锁定。和锁按钮「到位」的样子同一个条件。
     val showVoiceLockArmed = voiceHoldStarted && voiceLock?.lockReady == true
     // 锁定后这句结束了（点麦克风停、发送后没接着听、离开输入框）：稍等一下再解除，发送后接着听时锁定的样子不闪掉。
@@ -255,22 +265,27 @@ fun SpaceKeyButton(
                             lastX = change.position.x
                             val dy = change.position.y - lastY
                             lastY = change.position.y
-                            // 滑到右上角浮起来的锁按钮上：松手锁定。那里不算上滑取消。
+                            // 滑到左右任一把浮起来的锁上（弧线以内）：松手锁定。那里不算上滑取消。
                             var lockArmed = false
+                            var onCancelButton = false
                             if (startedVoice && voiceLock != null) {
                                 val inRoot = Offset(spaceOrigin[0] + change.position.x, spaceOrigin[1] + change.position.y)
-                                lockArmed = spaceVoiceLockArmed(voiceLock.zoneContains(inRoot), released = !change.pressed,
+                                val side = voiceLock.zoneSide(inRoot)
+                                lockArmed = spaceVoiceLockArmed(side != 0, released = !change.pressed,
                                     wasArmed = voiceLock.armed)
+                                // 抬手那一下偏出去：还算刚才那一把。
+                                voiceLock.side = if (side != 0) side else if (lockArmed) voiceLock.side else 0
+                                onCancelButton = voiceLock.cancelButtonContains(inRoot)
                                 voiceLock.finger = inRoot
                                 if (lockArmed != voiceLock.armed) {
                                     voiceLock.armed = lockArmed
                                     if (lockArmed && voiceLock.holding) view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
                                 }
                             }
-                            // 上滑取消：手指高过空格顶边一个键高才算，左右挪不管；滑回来就恢复松手上屏。
+                            // 上滑取消：手指高过空格顶边一个键高（或在中间的取消按钮上）才算，左右挪不管；滑回来就恢复松手上屏。
                             if (voiceHolding) {
                                 voiceCancelPull = if (lockArmed) 0f else (-change.position.y / size.height).coerceIn(0f, 1f)
-                                val armed = spaceVoiceCancelArmed(lockArmed, change.position.y, size.height.toFloat())
+                                val armed = spaceVoiceCancelArmed(lockArmed, change.position.y, size.height.toFloat(), onCancelButton)
                                 if (armed != voiceCancelArmed) {
                                     voiceCancelArmed = armed
                                     if (armed) view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
@@ -354,11 +369,12 @@ fun SpaceKeyButton(
                         if (startedVoice) {
                             val lockNow = voiceLock?.lockReady == true
                             // 松手时记一笔（只记状态，不记文字）：再有人说「动画到了松手没锁上」，日志里看得出卡在哪一项。
-                            com.kingzcheung.xime.util.FileLogger.i("SpaceVoiceLock", "release armed=${voiceLock?.armed} " +
+                            com.kingzcheung.xime.util.FileLogger.i("SpaceVoiceLock", "release armed=${voiceLock?.armed} side=${voiceLock?.side} " +
                                 "holding=${voiceLock?.holding} voiceOn=$voiceOn lock=$lockNow cancel=${voiceHolding && voiceCancelArmed}")
                             when {
                                 // 锁定：手指离开也一直听，点一下空格结束。和锁按钮画「到位」用同一个条件（[SpaceVoiceLockState.lockReady]）。
                                 lockNow -> {
+                                    voiceLock?.lockedSide = voiceLock?.side?.takeIf { it != 0 } ?: 1
                                     voiceLock?.locked = true
                                     view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
                                 }
@@ -368,6 +384,9 @@ fun SpaceKeyButton(
                         }
                         voiceLock?.holding = false
                         voiceLock?.armed = false
+                        voiceLock?.side = 0
+                        voiceLock?.cancelShown = false
+                        voiceLock?.cancelArmed = false
                         voiceLock?.finger = Offset.Unspecified
                         voiceHolding = false
                         voiceCancelArmed = false

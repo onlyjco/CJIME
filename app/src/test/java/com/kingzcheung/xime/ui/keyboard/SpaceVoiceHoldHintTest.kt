@@ -130,7 +130,7 @@ class SpaceVoiceHoldHintTest {
     private var cancelled = false
     private val lock = SpaceVoiceLockState()
 
-    /** 240×164dp 的「键区」，空格在最下面 64dp；锁按钮那一层铺满键区，按钮在右上角。 */
+    /** 240×164dp 的「键区」，空格在最下面 64dp；锁按钮那一层铺满键区，两把锁在左右上角、取消按钮在中间。 */
     private fun setKeyWithBar(swipeCancel: Boolean, micStarts: Boolean = true) {
         rule.setContent {
             CompositionLocalProvider(
@@ -160,7 +160,7 @@ class SpaceVoiceHoldHintTest {
     /** 空格上写的提示，不管挂在哪个标签上（开了上滑取消时挂在 cancel-hint 上）。 */
     private fun hint(): List<String> = texts("space-voice-hold-hint") + texts("space-voice-cancel-hint")
 
-    private fun state(): String = "listening=$listening cancelled=$cancelled armed=${lock.armed} locked=${lock.locked} " +
+    private fun state(): String = "listening=$listening cancelled=$cancelled armed=${lock.armed} side=${lock.side} locked=${lock.locked} " +
         "holding=${lock.holding} host=${lock.host} space=${lock.space}\n${tree()}"
 
     /**
@@ -224,6 +224,42 @@ class SpaceVoiceHoldHintTest {
         rule.onNodeWithTag("space").performTouchInput { up() }
         settle()
         assertTrue("straight up past the line cancels\n${state()}", cancelled && !listening && !lock.locked)
+    }
+
+    // 用户 11-22：右上一把锁不对称，左右各一把、中间取消。
+    @Test fun `sliding to the left lock locks just like the right one`() {
+        setKeyWithBar(swipeCancel = true)
+        holdAndSlide { androidx.compose.ui.geometry.Offset(4f, -height * 0.4f) }
+        assertEquals(state(), listOf("松手锁定"), hint())
+        assertEquals(state(), -1, lock.side)
+        rule.onNodeWithTag("space").performTouchInput { up() }
+        settle()
+        assertTrue("left lock locks\n${state()}", listening && lock.locked && !cancelled)
+        assertEquals(state(), -1, lock.lockedSide)
+        rule.onNodeWithTag("space").performTouchInput { down(center); up() }
+        settle()
+        assertFalse("tapping space ends locked voice\n${state()}", listening || lock.locked)
+    }
+
+    @Test fun `the cancel button floats up between the locks only with swipe-up cancel on`() {
+        setKeyWithBar(swipeCancel = true)
+        holdAndSlide { androidx.compose.ui.geometry.Offset(centerX, -height * 0.1f) }
+        assertEquals(state(), 1, rule.onAllNodesWithTag("space-voice-cancel-button", useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertEquals(state(), 1, rule.onAllNodesWithTag("space-voice-lock-button", useUnmergedTree = true).fetchSemanticsNodes().size)
+        rule.onNodeWithTag("space").performTouchInput { up() }
+        settle()
+        assertTrue("letting go below the line just ends\n${state()}", !listening && !cancelled && !lock.locked)
+        assertEquals(state(), 0, rule.onAllNodesWithTag("space-voice-cancel-button", useUnmergedTree = true).fetchSemanticsNodes().size)
+    }
+
+    @Test fun `without swipe-up cancel there are only the two locks`() {
+        setKeyWithBar(swipeCancel = false)
+        holdAndSlide { androidx.compose.ui.geometry.Offset(centerX, -height * 1.3f) }
+        assertEquals(state(), 0, rule.onAllNodesWithTag("space-voice-cancel-button", useUnmergedTree = true).fetchSemanticsNodes().size)
+        assertEquals(state(), 1, rule.onAllNodesWithTag("space-voice-lock-button", useUnmergedTree = true).fetchSemanticsNodes().size)
+        rule.onNodeWithTag("space").performTouchInput { up() }
+        settle()
+        assertTrue("the middle without cancel just ends\n${state()}", !listening && !cancelled && !lock.locked)
     }
 
     @Test fun `no lock button and no lock when the microphone did not start`() {
