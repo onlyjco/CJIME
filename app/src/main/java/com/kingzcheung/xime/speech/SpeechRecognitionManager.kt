@@ -538,7 +538,9 @@ class SpeechRecognitionManager(
         // Retain the same owner across handoff so volume changes only once per live capture.
         private val otherAudioOwner = preStarted ?: this
         @Volatile var requestedLanguage = language
-        private val audioQueue = ArrayBlockingQueue<CapturedAudio>(100) // At most 10 s / 320 KB of PCM.
+        // 模型冷加载、上一次整段重识别（最多 15 s）都在这段时间里排队：以前只排 10 s，超了就报
+        // 「语音引擎准备时间过长」并停录（11-22 用户转来的评价）。60 s / 约 1.9 MB，按下就能说。
+        private val audioQueue = ArrayBlockingQueue<CapturedAudio>(600)
         private val backendFinished = CountDownLatch(1)
         /** 送音已结束，正在（或马上要）在 [AsrBackend.stop] 里等最终结果。 */
         @Volatile private var finishingBackend = false

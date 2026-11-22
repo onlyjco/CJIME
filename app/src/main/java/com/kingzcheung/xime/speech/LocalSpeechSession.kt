@@ -101,7 +101,9 @@ internal class LocalSpeechSession(
         else engine.decodeTimeoutMs
     private fun worker(name: String, capacity: Int) = ThreadPoolExecutor(1, 1, 0L, TimeUnit.MILLISECONDS,
         ArrayBlockingQueue(capacity), { task -> Thread(task, name).apply { isDaemon = true } })
-    private val audio = worker("CyIME-Speech", 100) // 10 s of 100 ms PCM, bounded on low-end CPUs
+    // 60 s of 100 ms PCM (about 1.9 MB): a slow phone may fall behind while a model loads or the previous input is
+    // re-read; 10 s used to stop the recording with an error.
+    private val audio = worker("CyIME-Speech", 600)
     private val refinement = worker("CyIME-Refinement", 2)
     private val lifecycle = Any()
     private val outputLock = Any()

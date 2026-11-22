@@ -542,7 +542,7 @@ class SpeechRecognitionLanguageSessionTest {
         f.manager.startRecognition(InputLanguage.CANTONESE)
         f.await { f.microphones.size == 2 && f.microphones[1].starts.get() == 1 }
         val waitingMicrophone = f.microphones[1]
-        repeat(150) { waitingMicrophone.feed(300 + it) }
+        repeat(650) { waitingMicrophone.feed(300 + it) } // 60 s queue (600 chunks) must overflow
         f.await { f.errors.isNotEmpty() && waitingMicrophone.released.get() }
 
         assertTrue(f.errors.single().contains("准备时间过长"))
@@ -584,7 +584,7 @@ class SpeechRecognitionLanguageSessionTest {
         val failedSession = f.session()
         f.await { f.microphones.single().starts.get() == 1 }
         val failedMicrophone = f.microphones.single()
-        repeat(150) { failedMicrophone.feed(500 + it) }
+        repeat(650) { failedMicrophone.feed(500 + it) } // past the 60 s queue
         f.await { f.errors.isNotEmpty() && failedMicrophone.released.get() }
         assertTrue(f.errors.single().contains("准备时间过长"))
         assertEquals("The test must not unblock startup or issue a UI stop", 1L, blockedStart.count)
