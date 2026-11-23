@@ -675,6 +675,12 @@ val prepareChineseDictionaries by tasks.registering {
             // never passes the committed text, so the first word is not scored as a sentence start.
             "\nt9:\n  sentence_rescore: true\n  joint_decoder: false\n  joint_requires_ngram: true\n  source_budget: 16\n  pool_budget: 16\n" +
             "  dictionary_beam: 64\n  sentence_beam: 8\n  result_budget: 12\n  display_sentences: 1\n" +
+            // 2026-11-23: still one whole sentence (asked 10-10: a long input recommends one sentence), then the
+            // first sentence cut at its word boundaries, longest first, so a wrong tail is fixed by picking the
+            // right head instead of character by character. 2000 real SMS clauses, ten characters and more
+            // four or more actions 22.8% -> 18.6%; the first candidate is the same at every key.
+            // menu_sentences / menu_sentence_margin (more whole sentences when unsure) wait for the user.
+            "  menu_prefixes: 3\n" +
             "  spelling_penalty: 0\n  word_penalty: 8.0\n  correction_penalty: -9.2\n  whole_input_phrases: 16\n" +
             "  prefer_user_entries: true\n  ngram_model: t9_ngram\n" +
             // rescore_rime_weight: share of Rime's own sentence weight added to the word model's score (0 = model alone).
