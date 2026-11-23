@@ -130,6 +130,7 @@ fun StrokeKeyboardLayout(
         candidateState = candidateState,
         callbacks = callbacks,
         inputProfile = inputProfile,
+        enterKeyText = enterKeyText,
     )
     }
 }
@@ -158,6 +159,7 @@ onKeyPressDown: ((String) -> Unit)?,
     candidateState: State<CandidateState>? = null,
     callbacks: KeyboardCallbacks? = null,
     inputProfile: InputProfile? = null,
+    enterKeyText: String = "确定",
 ) {
     val configuration = LocalConfiguration.current
     val isLandscape = !isFloatingMode && configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
@@ -238,6 +240,7 @@ onKeyPressDown: ((String) -> Unit)?,
                         candidateState = candidateState,
                         callbacks = callbacks,
                         inputProfile = inputProfile,
+                        enterKeyText = enterKeyText,
                     )
                 }
             }
@@ -270,6 +273,7 @@ onKeyPressDown: ((String) -> Unit)?,
                         candidateState = candidateState,
                         callbacks = callbacks,
                         inputProfile = inputProfile,
+                        enterKeyText = enterKeyText,
                     )
                 }
             }
@@ -372,6 +376,7 @@ private fun StrokeKeyboardContent(
     candidateState: State<CandidateState>? = null,
     callbacks: KeyboardCallbacks? = null,
     inputProfile: InputProfile? = null,
+    enterKeyText: String = "确定",
 ) {
     val strokeFontSize = if (compactMode) 13.sp else 16.sp
     val symbolFontSize = if (compactMode) 11.sp else 13.sp
