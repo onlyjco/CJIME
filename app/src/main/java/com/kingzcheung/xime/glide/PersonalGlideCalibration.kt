@@ -104,6 +104,7 @@ object PersonalGlideCalibration {
     @Volatile private var currentParams: SyllableGlideParams = SyllableGlideParams()
     @Volatile private var pendingGlide: PendingGlide? = null
     @Volatile private var lastCommittedGlide: PendingGlide? = null
+    private val recentPendingGlides = ArrayDeque<PendingGlide>(4)
     private var samplesSinceAutoTune = 0
 
     fun phraseRevision(): Long = phraseRevisionCounter.get()
@@ -211,6 +212,7 @@ object PersonalGlideCalibration {
         return delta
     }
 
+    @Synchronized
     fun noteDispatched(
         sessionId: Long,
         schemaKey: String,
@@ -223,7 +225,7 @@ object PersonalGlideCalibration {
     ) {
         if (code.isEmpty() || xs.size < 2 || xs.size != ys.size) return
         lastCommittedGlide = null
-        pendingGlide = PendingGlide(
+        val created = PendingGlide(
             sessionId = sessionId,
             schemaKey = schemaKey,
             bucket = bucket,
@@ -234,6 +236,9 @@ object PersonalGlideCalibration {
             code = code,
             createdAtMs = System.currentTimeMillis(),
         )
+        pendingGlide = created
+        if (recentPendingGlides.size >= 4) recentPendingGlides.removeFirst()
+        recentPendingGlides.addLast(created)
     }
 
     fun updatePendingCode(sessionId: Long, code: String) {
@@ -338,10 +343,18 @@ object PersonalGlideCalibration {
         recordPhraseLocked(dir, schemaKey, cleanCode, committedText)
 
         val now = System.currentTimeMillis()
-        val pending = pendingGlide ?: lastCommittedGlide?.takeIf {
-            it.sessionId == sessionId && it.schemaKey == schemaKey && it.deletedAtMs > 0L && now - it.deletedAtMs <= REJECT_WINDOW_MS
+        val matchedFromQueue = recentPendingGlides.lastOrNull { g ->
+            val pc = g.code.replace("'", "").lowercase()
+            g.sessionId == sessionId && g.schemaKey == schemaKey && pc.isNotEmpty() &&
+                (pc == cleanCode || cleanCode.endsWith(pc))
         }
-        pendingGlide = null
+        val pending = matchedFromQueue
+            ?: pendingGlide?.takeIf { it.sessionId == sessionId && it.schemaKey == schemaKey }
+            ?: lastCommittedGlide?.takeIf {
+                it.sessionId == sessionId && it.schemaKey == schemaKey && it.deletedAtMs > 0L && now - it.deletedAtMs <= REJECT_WINDOW_MS
+            }
+        if (matchedFromQueue != null) recentPendingGlides.remove(matchedFromQueue)
+        if (pending === pendingGlide) pendingGlide = null
         if (pending == null || pending.sessionId != sessionId || pending.schemaKey != schemaKey) return
 
         val pendingClean = pending.code.replace("'", "").lowercase()
@@ -403,6 +416,7 @@ object PersonalGlideCalibration {
         currentParams = SyllableGlideParams()
         pendingGlide = null
         lastCommittedGlide = null
+        recentPendingGlides.clear()
         samplesSinceAutoTune = 0
         listOf(OFFSETS_FILE, PHRASES_FILE, CONFUSIONS_FILE, SAMPLES_FILE, PARAMS_FILE).forEach {
             File(dir, it).delete()

@@ -261,5 +261,15 @@ class PersonalGlideCalibrationTest {
         PersonalGlideCalibration.noteGlideDeleted(201L)
         PersonalGlideCalibration.onCommitted(tempDir, 201L, flypy.id, "wmjbtxwqkdmy", "我们今天下午去看电影")
         assertEquals(0, PersonalGlideCalibration.stats(tempDir).confusionCount)
+
+        // 3. 连续滑出两句再先后上屏时，两条轨迹样本都应被保留（不被第二句覆盖丢弃）。
+        PersonalGlideCalibration.clear(tempDir)
+        val (xsA, ysA, tsA) = trace("vegewuju")
+        val (xsB, ysB, tsB) = trace("yswkti")
+        PersonalGlideCalibration.noteDispatched(202L, flypy.id, "p", keyboard, xsA, ysA, tsA, "vegewuju")
+        PersonalGlideCalibration.noteDispatched(202L, flypy.id, "p", keyboard, xsB, ysB, tsB, "yswkti")
+        PersonalGlideCalibration.onCommitted(tempDir, 202L, flypy.id, "vegewuju", "这个数据")
+        PersonalGlideCalibration.onCommitted(tempDir, 202L, flypy.id, "yswkti", "有问题")
+        assertEquals(2, PersonalGlideCalibration.stats(tempDir).sampleCount)
     }
 }

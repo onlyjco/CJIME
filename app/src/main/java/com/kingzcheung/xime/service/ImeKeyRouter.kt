@@ -3130,7 +3130,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 if (outcome.accepted) {
                     if (pending.learnSelection && previousText.isNotEmpty() && service.isChineseMode &&
                         SettingsPreferences.isSmartPredictionEnabled(service) && AssociationManager.isInitialized()) {
-                        service.predictionManager.recordInputPair(previousText.last().toString(), text)
+                        service.predictionManager.recordInputPair(previousText.last().toString(), text, previousText)
                     }
                 }
                 outcome

@@ -256,12 +256,18 @@ class PredictionManager(
         }
     }
 
-    fun recordInputPair(lastChar: String, candidate: String) {
+    fun recordInputPair(lastChar: String, candidate: String, previousContext: String = "") {
         if (com.kingzcheung.xime.settings.IncognitoState.active) return
         if (SettingsPreferences.isSmartPredictionEnabled(context) && AssociationManager.isInitialized()) {
             learn(lastChar + candidate)
         }
-        val prevFullCtx = _lastCommittedText
+        // submitText 可能已在回调前把 candidate 拼进 _lastCommittedText，此处务必还原为“本次上屏前的上文”。
+        val prevFullCtx = when {
+            previousContext.isNotEmpty() -> previousContext
+            candidate.isNotEmpty() && _lastCommittedText.endsWith(candidate) ->
+                _lastCommittedText.dropLast(candidate.length)
+            else -> _lastCommittedText
+        }
         val shownCtx = lastShownChineseContext
         val shownWords = lastShownChineseWords
         val skippedCheck = !suppressIgnoreOnce && shownWords.isNotEmpty() && shownCtx.isNotEmpty()
