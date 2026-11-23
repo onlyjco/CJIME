@@ -178,4 +178,71 @@ class PersonalGlideCalibrationTest {
         assertTrue(report.contains("我们今天下午去看电影"))
         assertTrue(report.contains("去看 → 电影"))
     }
+
+    @Test
+    fun exportFullBackupZipAndSanitizedSamplesJsonlGzPreserveTimingWithoutLeakingText() {
+        val code = "wmjbtxwqkdmy"
+        val (baseXs, baseYs, _) = trace(code)
+        // 构造超过 160 点的长句轨迹，并在中段注入明显减速停顿，验证重采样后时间节奏未丢失。
+        val totalPts = 210
+        val xs = FloatArray(totalPts)
+        val ys = FloatArray(totalPts)
+        val ts = LongArray(totalPts)
+        var t = 0L
+        for (i in 0 until totalPts) {
+            val pos = i * (baseXs.size - 1).toFloat() / (totalPts - 1)
+            val lo = pos.toInt().coerceAtMost(baseXs.size - 2)
+            val frac = pos - lo
+            xs[i] = baseXs[lo] + (baseXs[lo + 1] - baseXs[lo]) * frac
+            ys[i] = baseYs[lo] + (baseYs[lo + 1] - baseYs[lo]) * frac
+            if (i > 0) {
+                t += if (i in 95..115) 95L else 10L
+            }
+            ts[i] = t
+        }
+
+        PersonalGlideCalibration.noteDispatched(88L, flypy.id, "p", keyboard, xs, ys, ts, "wmjbtk")
+        PersonalGlideCalibration.noteGlideDeleted(88L)
+        PersonalGlideCalibration.noteManualTypingAfterGlide(88L)
+        PersonalGlideCalibration.onCommitted(tempDir, 88L, flypy.id, code, "我们今天下午去看电影")
+        com.kingzcheung.xime.association.PersonalAssociationBooster.recordContinuation(tempDir, "去看", "电影")
+
+        val gzFile = File(tempDir, "sanitized.jsonl.gz")
+        val gzSummary = PersonalGlideCalibration.exportSanitizedSamplesJsonlGz(tempDir, gzFile)
+        assertEquals(1, gzSummary.recordCount)
+        assertTrue(gzFile.exists() && gzFile.length() > 0L)
+
+        val jsonLines = java.util.zip.GZIPInputStream(gzFile.inputStream()).bufferedReader(Charsets.UTF_8).readLines()
+        assertEquals(1, jsonLines.size)
+        val line = jsonLines.first()
+        assertTrue(line.contains("\"good_code\":\"$code\""))
+        assertTrue(line.contains("\"bad_code\":\"wmjbtk\""))
+        assertTrue(line.contains("\"source\":\"delete_retype\""))
+        assertFalse("Sanitized export must never contain Chinese text", line.contains("电影") || line.contains("我们"))
+
+        // 解析 exported ts，核对停顿区与快速区时间步长差异被真实保留（未被均值线性抹平）。
+        val tsMatch = Regex("\"ts\":\\[([^\\]]+)]").find(line)!!
+        val exportedTs = tsMatch.groupValues[1].split(',').map { it.toLong() }
+        assertEquals(160, exportedTs.size)
+        val stepGaps = exportedTs.zipWithNext { a, b -> b - a }
+        val minGap = stepGaps.min()
+        val maxGap = stepGaps.max()
+        assertTrue("Expected pause timing variation preserved (max=$maxGap, min=$minGap)", maxGap > minGap * 3)
+
+        val zipFile = File(tempDir, "backup.zip")
+        val zipSummary = PersonalGlideCalibration.exportFullBackupZip(tempDir, zipFile)
+        assertTrue(zipSummary.fileCount >= 4)
+        val entryNames = buildSet {
+            java.util.zip.ZipInputStream(zipFile.inputStream()).use { zis ->
+                while (true) {
+                    val entry = zis.nextEntry ?: break
+                    add(entry.name)
+                }
+            }
+        }
+        assertTrue("manifest_report.txt" in entryNames)
+        assertTrue("personal_glide_samples.tsv" in entryNames)
+        assertTrue("personal_glide_confusions.tsv" in entryNames)
+        assertTrue("personal_assoc_boosts.tsv" in entryNames)
+    }
 }

@@ -67,6 +67,14 @@ object PersonalGlideCalibration {
         val normXs: FloatArray,
         val normYs: FloatArray,
         val normTs: LongArray,
+        val badCode: String = "",
+        val source: String = "confirm",
+    )
+
+    data class ExportSummary(
+        val file: File,
+        val recordCount: Int,
+        val fileCount: Int,
     )
 
     data class PendingGlide(
@@ -289,7 +297,8 @@ object PersonalGlideCalibration {
         }
         if (abs(correctedCode.length - baseCode.length) <= maxOf(5, (correctedCode.length + 1) / 2)) {
             calibrateOffsetsFromTraceLocked(dir, candidate.bucket, candidate.keyboard, candidate.xs, candidate.ys, correctedCode)
-            recordSampleLocked(dir, schemaKey, candidate.bucket, candidate.keyboard, correctedCode, sentenceAfter, candidate.xs, candidate.ys, candidate.ts)
+            recordSampleLocked(dir, schemaKey, candidate.bucket, candidate.keyboard, correctedCode, sentenceAfter,
+                candidate.xs, candidate.ys, candidate.ts, badCode = baseCode, source = "sentence_edit")
         }
         recordPhraseLocked(dir, schemaKey, correctedCode, sentenceAfter)
         candidate.code = correctedCode
@@ -308,7 +317,8 @@ object PersonalGlideCalibration {
                 recordConfusionLocked(dir, schemaKey, bad, cleanChosen)
             }
             calibrateOffsetsFromTraceLocked(dir, pending.bucket, pending.keyboard, pending.xs, pending.ys, cleanChosen)
-            recordSampleLocked(dir, schemaKey, pending.bucket, pending.keyboard, cleanChosen, chosenText, pending.xs, pending.ys, pending.ts)
+            recordSampleLocked(dir, schemaKey, pending.bucket, pending.keyboard, cleanChosen, chosenText,
+                pending.xs, pending.ys, pending.ts, badCode = if (bad != cleanChosen) bad else "", source = "alt")
             pending.code = cleanChosen
             pending.committedText = chosenText
         }
@@ -340,7 +350,8 @@ object PersonalGlideCalibration {
                 val lenTolerance = maxOf(5, (cleanCode.length + 1) / 2)
                 if (pending.hadManualEditAfterDelete && abs(cleanCode.length - pendingClean.length) <= lenTolerance) {
                     calibrateOffsetsFromTraceLocked(dir, pending.bucket, pending.keyboard, pending.xs, pending.ys, cleanCode)
-                    recordSampleLocked(dir, schemaKey, pending.bucket, pending.keyboard, cleanCode, committedText, pending.xs, pending.ys, pending.ts)
+                    recordSampleLocked(dir, schemaKey, pending.bucket, pending.keyboard, cleanCode, committedText,
+                        pending.xs, pending.ys, pending.ts, badCode = pendingClean, source = "delete_retype")
                 }
             }
             lastCommittedGlide = null
@@ -350,7 +361,8 @@ object PersonalGlideCalibration {
         if (pendingClean == cleanCode || cleanCode.endsWith(pendingClean)) {
             val traceTarget = if (pendingClean == cleanCode) cleanCode else pendingClean
             calibrateOffsetsFromTraceLocked(dir, pending.bucket, pending.keyboard, pending.xs, pending.ys, traceTarget)
-            recordSampleLocked(dir, schemaKey, pending.bucket, pending.keyboard, traceTarget, committedText, pending.xs, pending.ys, pending.ts)
+            recordSampleLocked(dir, schemaKey, pending.bucket, pending.keyboard, traceTarget, committedText,
+                pending.xs, pending.ys, pending.ts, badCode = "", source = "confirm")
             lastCommittedGlide = pending.copy(code = traceTarget, createdAtMs = now, committedText = committedText)
         }
     }
@@ -492,14 +504,11 @@ object PersonalGlideCalibration {
         val prev = Array(m) { IntArray(n) { -1 } }
 
         val c0 = keyboard.centers[collapsedCode[0]] ?: return null
-        dp[0][0] = hypot(rx[0] - c0.first, ry[0] - c0.second) / keyboard.keyUnit
-        for (j in 1 until n) {
-            val d = hypot(rx[j] - c0.first, ry[j] - c0.second) / keyboard.keyUnit
-            if (d < dp[0][j - 1]) dp[0][j] = d
-            else { dp[0][j] = dp[0][j - 1] }
+        val denom = max(1, n - 1).toFloat()
+        // 对第 0 键施加轻微起点贴合引导，避免偏离较大时起点飘到轨迹中段。
+        for (j in 0 until n) {
+            dp[0][j] = hypot(rx[j] - c0.first, ry[j] - c0.second) / keyboard.keyUnit + 0.08f * (j / denom)
         }
-        // 记录第 0 字符严格取 j 的直接拟合起点
-        for (j in 0 until n) dp[0][j] = hypot(rx[j] - c0.first, ry[j] - c0.second) / keyboard.keyUnit
 
         for (i in 1 until m) {
             val ci = keyboard.centers[collapsedCode[i]] ?: return null
@@ -513,7 +522,8 @@ object PersonalGlideCalibration {
                 }
                 if (bestPrevCost.isFinite()) {
                     val stepDist = hypot(rx[j] - ci.first, ry[j] - ci.second) / keyboard.keyUnit
-                    dp[i][j] = bestPrevCost + stepDist
+                    val endBias = if (i == m - 1) 0.08f * ((n - 1 - j) / denom) else 0f
+                    dp[i][j] = bestPrevCost + stepDist + endBias
                     prev[i][j] = bestPrevIdx
                 }
             }
@@ -526,7 +536,7 @@ object PersonalGlideCalibration {
                 bestLastIdx = j
             }
         }
-        if (!bestTotal.isFinite() || bestTotal / m > 1.35f) return null
+        if (!bestTotal.isFinite() || (bestTotal - 0.16f).coerceAtLeast(0f) / m > 1.35f) return null
         val result = MutableList(m) { 0f to 0f }
         var curJ = bestLastIdx
         for (i in m - 1 downTo 0) {
@@ -576,26 +586,50 @@ object PersonalGlideCalibration {
         xs: FloatArray,
         ys: FloatArray,
         ts: LongArray,
+        badCode: String = "",
+        source: String = "confirm",
     ) {
         if (xs.size < 2 || ys.size != xs.size || '\t' in text || '\n' in text) return
         val unit = keyboard.keyUnit
         val minCenterX = keyboard.centers.values.minOfOrNull { it.first } ?: return
         val minCenterY = keyboard.centers.values.minOfOrNull { it.second } ?: return
-        val cap = min(xs.size, 64)
+        val cap = min(xs.size, 160)
         val (rx, ry) = if (xs.size <= cap) xs to ys else GlideDecoder.resampleTo(xs, ys, cap)
         val normXs = FloatArray(rx.size) { ((rx[it] - minCenterX) / unit * 100f).roundToInt() / 100f }
         val normYs = FloatArray(ry.size) { ((ry[it] - minCenterY) / unit * 100f).roundToInt() / 100f }
         val baseT = ts.firstOrNull() ?: 0L
         val normTs = if (ts.size == xs.size && rx.size == xs.size) {
             LongArray(ts.size) { (ts[it] - baseT).coerceAtLeast(0L) }
-        } else if (ts.size >= 2) {
-            val totalDt = (ts.last() - baseT).coerceAtLeast(1L)
-            LongArray(rx.size) { idx -> totalDt * idx / max(1, rx.size - 1) }
+        } else if (ts.size == xs.size && xs.size >= 2) {
+            // 按原始弧长百分比插值真实时间戳，完整保留长句手指减速与停顿特征。
+            val cumDist = FloatArray(xs.size)
+            for (k in 1 until xs.size) {
+                val dx = xs[k] - xs[k - 1]
+                val dy = ys[k] - ys[k - 1]
+                cumDist[k] = cumDist[k - 1] + sqrt(dx * dx + dy * dy)
+            }
+            val totalLen = cumDist.last()
+            var rawIdx = 0
+            LongArray(rx.size) { idx ->
+                if (totalLen <= 0f) {
+                    val lastDt = (ts.last() - baseT).coerceAtLeast(1L)
+                    lastDt * idx / max(1, rx.size - 1)
+                } else {
+                    val targetD = totalLen * idx / max(1, rx.size - 1)
+                    while (rawIdx < cumDist.size - 2 && cumDist[rawIdx + 1] < targetD) rawIdx++
+                    val segLen = cumDist[rawIdx + 1] - cumDist[rawIdx]
+                    val frac = if (segLen > 1e-4f) ((targetD - cumDist[rawIdx]) / segLen).coerceIn(0f, 1f) else 0f
+                    val interpT = ts[rawIdx] + (ts[rawIdx + 1] - ts[rawIdx]) * frac
+                    (interpT - baseT).toLong().coerceAtLeast(0L)
+                }
+            }
         } else {
             LongArray(rx.size) { idx -> idx * 12L }
         }
+        val cleanBad = badCode.replace("'", "").lowercase().filter { it in 'a'..'z' }
+        val cleanSource = source.ifBlank { "confirm" }.replace('\t', '_').replace('\n', '_')
         if (samples.size >= MAX_SAMPLES) samples.removeAt(0)
-        samples += SampleEntry(schemaKey, bucket, code, text, normXs, normYs, normTs)
+        samples += SampleEntry(schemaKey, bucket, code, text, normXs, normYs, normTs, cleanBad, cleanSource)
         samplesSinceAutoTune++
         saveSamples(File(dir, SAMPLES_FILE))
     }
@@ -690,7 +724,9 @@ object PersonalGlideCalibration {
                 val ys = p[5].split(',').mapNotNull { it.toFloatOrNull() }.toFloatArray()
                 val ts = p[6].split(',').mapNotNull { it.toLongOrNull() }.toLongArray()
                 if (xs.size >= 2 && xs.size == ys.size && ts.size == xs.size) {
-                    samples += SampleEntry(p[0], p[1], p[2], p[3], xs, ys, ts)
+                    val badCode = p.getOrNull(7).orEmpty()
+                    val source = p.getOrNull(8)?.takeIf { it.isNotBlank() } ?: "confirm"
+                    samples += SampleEntry(p[0], p[1], p[2], p[3], xs, ys, ts, badCode, source)
                 }
             }
         }
@@ -704,7 +740,9 @@ object PersonalGlideCalibration {
                         .append(s.code).append('\t').append(s.text).append('\t')
                         .append(s.normXs.joinToString(",")).append('\t')
                         .append(s.normYs.joinToString(",")).append('\t')
-                        .append(s.normTs.joinToString(",")).append('\n')
+                        .append(s.normTs.joinToString(",")).append('\t')
+                        .append(s.badCode).append('\t')
+                        .append(s.source).append('\n')
                 }
             }
         }
@@ -792,6 +830,100 @@ object PersonalGlideCalibration {
                 assocPenalties.forEach { appendLine("  $it") }
             }
         }.trimEnd()
+    }
+
+    /**
+     * 导出完整本机校准备份压缩包（.zip），包含全部 7 份滑行与联想原始配置/样本文件及清单。
+     */
+    @Synchronized
+    fun exportFullBackupZip(dir: File, outputFile: File): ExportSummary {
+        ensureLoaded(dir)
+        com.kingzcheung.xime.association.PersonalAssociationBooster.ensureLoaded(dir)
+        val rawNames = listOf(
+            OFFSETS_FILE,
+            PHRASES_FILE,
+            CONFUSIONS_FILE,
+            SAMPLES_FILE,
+            PARAMS_FILE,
+            "personal_assoc_boosts.tsv",
+            "personal_assoc_penalties.tsv",
+        )
+        outputFile.parentFile?.mkdirs()
+        val tmp = File(outputFile.parentFile, "${outputFile.name}.tmp")
+        var fileCount = 0
+        java.util.zip.ZipOutputStream(tmp.outputStream().buffered()).use { zip ->
+            val manifest = buildDiagnosticReport(dir) + "\n"
+            zip.putNextEntry(java.util.zip.ZipEntry("manifest_report.txt"))
+            zip.write(manifest.toByteArray(Charsets.UTF_8))
+            zip.closeEntry()
+            for (name in rawNames) {
+                val src = File(dir, name)
+                if (!src.isFile || src.length() <= 0L) continue
+                zip.putNextEntry(java.util.zip.ZipEntry(name))
+                src.inputStream().use { it.copyTo(zip) }
+                zip.closeEntry()
+                fileCount++
+            }
+        }
+        if (!tmp.renameTo(outputFile)) {
+            outputFile.delete()
+            tmp.renameTo(outputFile)
+        }
+        val totalRecords = offsets.values.sumOf { it.size } + phrases.size + confusions.size + samples.size +
+            com.kingzcheung.xime.association.PersonalAssociationBooster.stats(dir).let { it.boostCount + it.penaltyCount }
+        return ExportSummary(outputFile, totalRecords, fileCount)
+    }
+
+    /**
+     * 导出严格脱敏的滑行轨迹训练集（.jsonl.gz）：剔除所有汉字原文、个人短语与联想记录，
+     * 仅保留归一化点序 (xs/ys/ts)、方向桶及纠错编码信息 (bad_code -> good_code, source)。
+     */
+    @Synchronized
+    fun exportSanitizedSamplesJsonlGz(dir: File, outputFile: File): ExportSummary {
+        ensureLoaded(dir)
+        outputFile.parentFile?.mkdirs()
+        val tmp = File(outputFile.parentFile, "${outputFile.name}.tmp")
+        var count = 0
+        java.util.zip.GZIPOutputStream(tmp.outputStream().buffered()).bufferedWriter(Charsets.UTF_8).use { writer ->
+            for (s in samples) {
+                val cleanGood = s.code.replace("'", "").lowercase().filter { it in 'a'..'z' }
+                if (cleanGood.length < 2 || s.normXs.size < 4 || s.normXs.size != s.normYs.size) continue
+                val cleanBad = s.badCode.replace("'", "").lowercase().filter { it in 'a'..'z' }
+                val line = buildString(256) {
+                    append("{\"ver\":1,\"schema\":\"").append(escapeJson(s.schema))
+                    append("\",\"bucket\":\"").append(escapeJson(s.bucket))
+                    append("\",\"good_code\":\"").append(cleanGood)
+                    if (cleanBad.isNotEmpty()) append("\",\"bad_code\":\"").append(cleanBad)
+                    append("\",\"source\":\"").append(escapeJson(s.source))
+                    append("\",\"xs\":[")
+                    s.normXs.forEachIndexed { idx, v -> if (idx > 0) append(','); append(v) }
+                    append("],\"ys\":[")
+                    s.normYs.forEachIndexed { idx, v -> if (idx > 0) append(','); append(v) }
+                    append("],\"ts\":[")
+                    s.normTs.forEachIndexed { idx, v -> if (idx > 0) append(','); append(v) }
+                    append("]}")
+                }
+                writer.write(line)
+                writer.newLine()
+                count++
+            }
+        }
+        if (!tmp.renameTo(outputFile)) {
+            outputFile.delete()
+            tmp.renameTo(outputFile)
+        }
+        return ExportSummary(outputFile, count, if (count > 0) 1 else 0)
+    }
+
+    private fun escapeJson(value: String): String = buildString(value.length) {
+        for (ch in value) when (ch) {
+            '\\' -> append("\\\\")
+            '"' -> append("\\\"")
+            '\n' -> append("\\n")
+            '\r' -> append("\\r")
+            '\t' -> append("\\t")
+            else -> append(ch)
+        }
     }
 
     private inline fun writeAtomic(file: File, content: () -> String) {

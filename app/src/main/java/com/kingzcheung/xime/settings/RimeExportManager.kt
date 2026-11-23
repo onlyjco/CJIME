@@ -54,14 +54,24 @@ object RimeExportManager {
             val (fileName, zipBytes) = buildArchive(context, mode).getOrElse { return Result.failure(it) }
             val tempZip = File(context.cacheDir, fileName)
             tempZip.writeBytes(zipBytes)
-            val savedToDownloads = saveToDownloads(context, tempZip, fileName)
-            settleTempArchive(tempZip, savedToDownloads, File(context.filesDir, "exports"))
-                ?.let { return Result.failure(it) }
-
-            return Result.success(ExportResult(resolveDownloadsUri(context, fileName), fileName, savedToDownloads = true))
+            return exportPreparedFile(context, tempZip, "application/zip")
         } catch (e: Exception) {
             android.util.Log.e(TAG, "exportArchive failed", e)
             return Result.failure(e)
+        }
+    }
+
+    /** 将已生成的临时文件保存到系统「下载」目录；若写入受限则留在 files/exports 供分享。 */
+    fun exportPreparedFile(context: Context, tempFile: File, mimeType: String): Result<ExportResult> {
+        return try {
+            val fileName = tempFile.name
+            val savedToDownloads = saveToDownloads(context, tempFile, fileName, mimeType)
+            settleTempArchive(tempFile, savedToDownloads, File(context.filesDir, "exports"))
+                ?.let { return Result.failure(it) }
+            Result.success(ExportResult(resolveDownloadsUri(context, fileName), fileName, savedToDownloads = true))
+        } catch (e: Exception) {
+            android.util.Log.e(TAG, "exportPreparedFile failed", e)
+            Result.failure(e)
         }
     }
 
@@ -121,12 +131,12 @@ object RimeExportManager {
         return ExportSaveException(kept)
     }
 
-    private fun saveToDownloads(context: Context, zipFile: File, fileName: String): Boolean {
+    private fun saveToDownloads(context: Context, file: File, fileName: String, mimeType: String = "application/zip"): Boolean {
         return try {
             if (AndroidPlatform.mediaStoreDownloads) {
                 val values = ContentValues().apply {
                     put(MediaStore.Downloads.DISPLAY_NAME, fileName)
-                    put(MediaStore.Downloads.MIME_TYPE, "application/zip")
+                    put(MediaStore.Downloads.MIME_TYPE, mimeType)
                     put(MediaStore.Downloads.RELATIVE_PATH, Environment.DIRECTORY_DOWNLOADS)
                 }
                 val uri = context.contentResolver.insert(
@@ -136,7 +146,7 @@ object RimeExportManager {
                 // 打不开或写到一半出错：删掉这个空条目，如实报失败
                 val written = runCatching {
                     context.contentResolver.openOutputStream(uri)?.use { output ->
-                        zipFile.inputStream().use { it.copyTo(output) }
+                        file.inputStream().use { it.copyTo(output) }
                     } != null
                 }.getOrElse { android.util.Log.e(TAG, "saveToDownloads write failed", it); false }
                 if (!written) runCatching { context.contentResolver.delete(uri, null, null) }
@@ -146,7 +156,7 @@ object RimeExportManager {
                 val destDir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS)
                 if (!destDir.exists()) destDir.mkdirs()
                 val dest = File(destDir, fileName)
-                zipFile.copyTo(dest, overwrite = true)
+                file.copyTo(dest, overwrite = true)
                 true
             }
         } catch (e: Exception) {
@@ -193,6 +203,7 @@ object RimeExportManager {
             file.name.endsWith(".bin") -> "application/octet-stream"
             file.name.endsWith(".gram") -> "application/octet-stream"
             file.name.endsWith(".zip") -> "application/zip"
+            file.name.endsWith(".gz") -> "application/gzip"
             else -> "application/octet-stream"
         }
     }

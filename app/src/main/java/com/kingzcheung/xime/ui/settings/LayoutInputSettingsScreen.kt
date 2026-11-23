@@ -283,13 +283,84 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                             onDismissRequest = { showReportDialog = false },
                             title = { Text("本机自递进校准数据") },
                             text = {
-                                Column(
-                                    modifier = Modifier
-                                        .fillMaxWidth()
-                                        .heightIn(max = 360.dp)
-                                        .verticalScroll(rememberScrollState())
-                                ) {
-                                    Text(reportText, style = MaterialTheme.typography.bodySmall)
+                                Column(modifier = Modifier.fillMaxWidth()) {
+                                    Column(
+                                        modifier = Modifier
+                                            .fillMaxWidth()
+                                            .heightIn(max = 280.dp)
+                                            .verticalScroll(rememberScrollState())
+                                    ) {
+                                        Text(reportText, style = MaterialTheme.typography.bodySmall)
+                                    }
+                                    HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                                    Row(
+                                        modifier = Modifier.fillMaxWidth(),
+                                        horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                    ) {
+                                        OutlinedButton(
+                                            modifier = Modifier.weight(1f),
+                                            onClick = {
+                                                tuneScope.launch(Dispatchers.IO) {
+                                                    val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US)
+                                                        .format(java.util.Date())
+                                                    val tmp = java.io.File(context.cacheDir, "cjime-self-learn-backup-$stamp.zip")
+                                                    val summary = com.kingzcheung.xime.glide.PersonalGlideCalibration
+                                                        .exportFullBackupZip(context.filesDir, tmp)
+                                                    val res = com.kingzcheung.xime.settings.RimeExportManager
+                                                        .exportPreparedFile(context, tmp, "application/zip")
+                                                    kotlinx.coroutines.withContext(Dispatchers.Main) {
+                                                        val err = res.exceptionOrNull()
+                                                        if (res.isSuccess) {
+                                                            android.widget.Toast.makeText(
+                                                                context,
+                                                                "已导出完整备份（${summary.fileCount} 份数据 / ${summary.recordCount} 条）至「下载/${res.getOrNull()?.fileName}」",
+                                                                android.widget.Toast.LENGTH_LONG,
+                                                            ).show()
+                                                        } else if (err is com.kingzcheung.xime.settings.ExportSaveException) {
+                                                            com.kingzcheung.xime.settings.RimeExportManager.shareSingleFile(context, err.kept)
+                                                        } else {
+                                                            android.widget.Toast.makeText(context, "导出失败：${err?.message ?: "未知错误"}", android.widget.Toast.LENGTH_LONG).show()
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                        ) { Text("导出完整备份 (.zip)") }
+                                        OutlinedButton(
+                                            modifier = Modifier.weight(1f),
+                                            onClick = {
+                                                tuneScope.launch(Dispatchers.IO) {
+                                                    val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US)
+                                                        .format(java.util.Date())
+                                                    val tmp = java.io.File(context.cacheDir, "cjime-glide-sanitized-$stamp.jsonl.gz")
+                                                    val summary = com.kingzcheung.xime.glide.PersonalGlideCalibration
+                                                        .exportSanitizedSamplesJsonlGz(context.filesDir, tmp)
+                                                    if (summary.recordCount == 0) {
+                                                        tmp.delete()
+                                                        kotlinx.coroutines.withContext(Dispatchers.Main) {
+                                                            android.widget.Toast.makeText(context, "暂无可导出的滑行轨迹样本（先多滑几句再导出）", android.widget.Toast.LENGTH_LONG).show()
+                                                        }
+                                                        return@launch
+                                                    }
+                                                    val res = com.kingzcheung.xime.settings.RimeExportManager
+                                                        .exportPreparedFile(context, tmp, "application/gzip")
+                                                    kotlinx.coroutines.withContext(Dispatchers.Main) {
+                                                        val err = res.exceptionOrNull()
+                                                        if (res.isSuccess) {
+                                                            android.widget.Toast.makeText(
+                                                                context,
+                                                                "已导出脱敏轨迹 ${summary.recordCount} 条（不含汉字原文）至「下载/${res.getOrNull()?.fileName}」",
+                                                                android.widget.Toast.LENGTH_LONG,
+                                                            ).show()
+                                                        } else if (err is com.kingzcheung.xime.settings.ExportSaveException) {
+                                                            com.kingzcheung.xime.settings.RimeExportManager.shareSingleFile(context, err.kept)
+                                                        } else {
+                                                            android.widget.Toast.makeText(context, "导出失败：${err?.message ?: "未知错误"}", android.widget.Toast.LENGTH_LONG).show()
+                                                        }
+                                                    }
+                                                }
+                                            },
+                                        ) { Text("导出脱敏样本") }
+                                    }
                                 }
                             },
                             confirmButton = {
