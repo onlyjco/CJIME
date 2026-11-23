@@ -35,7 +35,7 @@ import com.kingzcheung.xime.settings.AppLanguages
 
 /**
  * 设置首页「界面语言」一行：点开是单选框（不另开一页，首页不放只有一个设置的子页）。
- * 语言名永远用各自的文字写（简体中文、繁體中文、English、日本語），看不懂当前界面的人也找得到自己的语言；
+ * 语言名永远用各自的文字写（简体中文、繁體中文、English），看不懂当前界面的人也找得到自己的语言；
  * 标题后面总带英文 Language，同一个原因。Android 12 及更早点这一行打开系统语言设置。
  */
 @Composable
@@ -87,7 +87,7 @@ internal fun AppLanguageItem() {
     )
 }
 
-/** 「跟随系统」按当前界面语言写，其余四种用各自的文字。 */
+/** 「跟随系统」按当前界面语言写，其余三种用各自的文字。 */
 @Composable
 private fun AppLanguage.label(): String =
     if (this == AppLanguage.SYSTEM) stringResource(R.string.settings_app_language_system) else nativeName

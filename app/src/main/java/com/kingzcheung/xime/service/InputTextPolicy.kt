@@ -38,13 +38,6 @@ internal fun isSentencePunctuation(text: String): Boolean =
     text.isNotEmpty() && text.all { it in ",.?!;:，。？！、；：…" }
 
 /**
- * 日语罗马字的长音 -（26 键 L 右侧或 Shift 位置的 ー 键送出）：方案字母表里有它，ka- → かー，
- * 交给按键队列送进转换，不按标点直接上屏。只认屏幕键盘点按送来的 -；角标、符号面板走直接上屏那条路，不经过这里。
- */
-internal fun japaneseChoonpuIsCode(key: String, ascii: Boolean, profile: com.kingzcheung.xime.settings.InputProfile): Boolean =
-    key == "-" && !ascii && profile.capabilities.japaneseConversion
-
-/**
  * 注音键盘的注音键：轻声 ˙（U+02D9）在 Unicode 里是修饰符号，会被 [isLiteralPunctuation] 当成标点，
  * 把打着的 ㄉㄜ 原样连 ˙ 一起上屏（用户 11-18：轻声键是摆设，打不出「的」）。ˊˇˋ 是修饰字母，本来就不受影响。
  * 注音方案、非西文时这些键交给按键队列，由 ImeKeyRouter.routeZhuyinKey 换成大千键码送进 Rime。

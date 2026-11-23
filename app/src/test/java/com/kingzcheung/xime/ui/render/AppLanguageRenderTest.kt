@@ -22,7 +22,7 @@ import org.robolectric.annotation.GraphicsMode
 import java.io.File
 
 /**
- * 设置首页在简体、繁體、English、日本語下的样子：看翻译后的标题、说明有没有挤爆、截断。
+ * 设置首页在简体、繁體、English 下的样子：看翻译后的标题、说明有没有挤爆、截断。
  * 只在设置了环境变量 CYIME_RENDER_OUT=<目录> 时出图。
  */
 @RunWith(AndroidJUnit4::class)
@@ -34,7 +34,6 @@ class AppLanguageRenderTest {
     @Test @Config(qualifiers = "zh-rCN-w420dp-h2600dp-mdpi") fun simplified() = render("zh-CN")
     @Test @Config(qualifiers = "zh-rTW-w420dp-h2600dp-mdpi") fun traditional() = render("zh-TW")
     @Test @Config(qualifiers = "en-rUS-w420dp-h2600dp-mdpi") fun english() = render("en")
-    @Test @Config(qualifiers = "ja-rJP-w420dp-h2600dp-mdpi") fun japanese() = render("ja")
 
     private fun render(name: String) {
         val out = System.getenv("CYIME_RENDER_OUT")

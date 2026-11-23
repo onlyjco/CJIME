@@ -106,8 +106,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
         if (suppressFieldComposition()) return
         val inputText = composition.input
         val codeInInputBox = TerminalEditor.inputTextLocation(service) == SettingsPreferences.INPUT_TEXT_INPUT_BOX
-        // 日语罗马音显示归一化：末尾未拼完的字母按按下的键显示（与 updateUIWithResult 同一出口规则）
-        val preeditText = service.japaneseInputController.normalizePreedit(inputText, composition.preedit)
+        val preeditText = composition.preedit
         val candidatesWithComments = composition.candidates.toList()
         val isAsciiMode = composition.isAsciiMode
         val hasNextPage = composition.hasNextPage
@@ -283,12 +282,6 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
         // belongs there, never in the app behind it. 26-key search wrote it into the app's field and it
         // stayed after search closed (10-30 device check); all three callers pass through here.
         if (service.uiState.value.inputTarget.isInternal) return
-        // 日语光标在读音中间：竖线不写进输入框，输入框的光标放在那里（11-05 用户反馈）。
-        val caret = displayText.indexOf(PREEDIT_CARET)
-        if (caret >= 0 && service.uiState.value.inputProfile.capabilities.japaneseConversion) {
-            showInputBoxCompositionWithCaret(ic, displayText.removeRange(caret, caret + 1), caret)
-            return
-        }
         if (service.keepInlineEditCaret(displayText)) return
         // 第二参数为 1：光标相对编码起始偏移 1 个字符，使光标落在编码末尾，
         // 避免传 displayText.length 时被 AOSP 钳制到整段文本末尾（光标跑到最右边）。
@@ -322,9 +315,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
         if (suppressFieldComposition()) return
         val isAsciiMode = result.isAsciiMode
         val candidatesWithComments = result.candidates
-        // 日语罗马音显示归一化：末尾未拼完的字母按按下的键显示（引擎回显会给 っ / ん），
-        // 与退格单位同源。放在出口而不是按键路径，刷新（updateUI/applyComposition）才不打回原回显。
-        val preeditText = service.japaneseInputController.normalizePreedit(result.inputText, result.preeditText)
+        val preeditText = result.preeditText
 
         val pendingEnglish = service.candidateState.value.pendingEnglishText
 
@@ -562,8 +553,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
         // 中文的全角只管标点：候选里的英文、数字和空格照候选栏显示的半角上屏（GitHub 不会变成 ＧｉｔＨｕｂ）。
         // 日文的全角英数是常用写法，仍由引擎整段转成全角。
         val language = InputLanguage.forSchema(service.rimeEngine.getCurrentSchema())
-        val japanese = language == InputLanguage.JAPANESE
-        service.rimeEngine.setOption(FULL_SHAPE_ASCII_OPTION, japanese)
+        service.rimeEngine.setOption(FULL_SHAPE_ASCII_OPTION, false)
         // 英文单词方案不开 ascii 也是英文：和英文模式一样固定半角，不随中文的全角选择。
         if (asciiMode || language == InputLanguage.ENGLISH) {
             service.rimeEngine.setOption("full_shape", false)
@@ -589,10 +579,6 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
         if (!RimeEngine.isInitialized()) return false
         val prefs = SettingsPreferences.getPrefsPublic(service)
         val traditional = prefs.getBoolean(KeyboardInputPreferences.TRADITIONAL_OUTPUT_KEY, false)
-        // 日语长音键：默认 L 键就是 ー；选了单独的 ー 键时 L 是字母 l。翻译器读选项，显示与退格读同一个值。
-        val lLetter = !com.kingzcheung.xime.ui.keyboard.JapaneseLongVowelKey.fromName(
-            prefs.getString(KeyboardInputPreferences.JAPANESE_LONG_VOWEL_KEY, null)).lIsLongVowel
-        com.kingzcheung.xime.rime.japaneseLIsLongVowel = !lLetter
         val options = buildList {
             add("cyime_mixed_input" to prefs.getBoolean(KeyboardInputPreferences.MIXED_INPUT_KEY, false))
             add("traditionalization" to traditional)
@@ -624,7 +610,6 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
                 !(neighbor && com.kingzcheung.xime.settings.SpellingPatches.typo(service, com.kingzcheung.xime.settings.SpellingPatches.Typo.EXTRA)))
             add("_cyime_pause_swap_off" to
                 !(neighbor && com.kingzcheung.xime.settings.SpellingPatches.typo(service, com.kingzcheung.xime.settings.SpellingPatches.Typo.TRANSPOSITION)))
-            add("_cyime_l_letter" to lLetter)
         }
         var changed = false
         for ((name, value) in options) {

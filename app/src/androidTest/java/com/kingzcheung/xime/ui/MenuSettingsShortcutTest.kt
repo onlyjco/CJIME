@@ -23,7 +23,7 @@ import org.junit.Test
 class MenuSettingsShortcutTest {
     @get:Rule val rule = createComposeRule()
 
-    @Test fun documentOcrAndSettingsAreOnTheFirstPage() {
+    @Test fun settingsAndFloatAreOnTheFirstPage() {
         val opened = mutableListOf<ToolbarButton>()
         rule.setContent {
             CompositionLocalProvider(LocalDensity provides Density(1f, 1f)) {
@@ -33,10 +33,10 @@ class MenuSettingsShortcutTest {
                 }
             }
         }
-        rule.onNodeWithTag("menu-item:ocr").assertIsDisplayed().performClick()
+        rule.onNodeWithTag("menu-item:float").assertIsDisplayed().performClick()
         rule.onNodeWithTag("menu-item:settings").assertIsDisplayed().performClick()
-        rule.runOnIdle { assertEquals(listOf(ToolbarButton.OCR, ToolbarButton.SETTINGS), opened) }
-        rule.assertGeometry("menu-host", "OCR 首屏入口")
+        rule.runOnIdle { assertEquals(listOf(ToolbarButton.FLOAT, ToolbarButton.SETTINGS), opened) }
+        rule.assertGeometry("menu-host", "菜单首屏入口")
     }
 
     @Test fun eightDefaultItemsFitOnePageAtMinimumNormalFontHeight() {

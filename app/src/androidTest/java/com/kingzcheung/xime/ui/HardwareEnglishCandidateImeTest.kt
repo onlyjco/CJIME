@@ -80,8 +80,8 @@ class HardwareEnglishCandidateImeTest {
             }
         }
         try {
-            // Default switching is preserved; Japanese is exercised through the real menu later.
-            prefs.edit().putStringSet(LanguagePreferences.KEY, setOf(InputLanguage.CHINESE.id, InputLanguage.ENGLISH.id, InputLanguage.JAPANESE.id))
+            // Default switching is preserved; Cantonese is exercised through the real menu later.
+            prefs.edit().putStringSet(LanguagePreferences.KEY, setOf(InputLanguage.CHINESE.id, InputLanguage.ENGLISH.id, InputLanguage.CANTONESE.id))
                 .putString("selected_input_profile_${InputLanguage.CHINESE.id}", "rime_ice")
                 .remove(LanguageSwitchPreferences.MODE_KEY)
                 .remove(LanguageSwitchPreferences.LANGUAGE_KEY)
@@ -228,9 +228,9 @@ class HardwareEnglishCandidateImeTest {
             var released = false
             try {
                 rule.waitUntil(5_000) { has("language-menu") }
-                val japaneseChoice = rule.onAllNodesWithContentDescription("选择日语").fetchSemanticsNodes()
-                assertTrue("Japanese backend/menu entry is required to validate the Chinese/Japanese pair", japaneseChoice.isNotEmpty())
-                val target = rule.onNodeWithContentDescription("选择日语").performScrollTo().fetchSemanticsNode()
+                val cantoneseChoice = rule.onAllNodesWithContentDescription("选择粤语").fetchSemanticsNodes()
+                assertTrue("Cantonese backend/menu entry is required to validate the Chinese/Cantonese pair", cantoneseChoice.isNotEmpty())
+                val target = rule.onNodeWithContentDescription("选择粤语").performScrollTo().fetchSemanticsNode()
                 val key = pairKey.fetchSemanticsNode()
                 pairKey.performTouchInput {
                     moveTo(target.positionOnScreen + Offset(target.size.width / 2f, target.size.height / 2f) - key.positionOnScreen)
@@ -240,24 +240,24 @@ class HardwareEnglishCandidateImeTest {
             } finally {
                 if (!released) pairKey.performTouchInput { up() }
             }
-            rule.waitUntil(15_000) { !engine.isAsciiMode() && languageIs("あ") }
-            val japaneseSchema = engine.getCurrentSchema()
-            assertEquals(InputLanguage.JAPANESE, com.kingzcheung.xime.settings.InputModes.languageOf(japaneseSchema))
+            rule.waitUntil(15_000) { !engine.isAsciiMode() && languageIs("粤") }
+            val cantoneseSchema = engine.getCurrentSchema()
+            assertEquals(InputLanguage.CANTONESE, com.kingzcheung.xime.settings.InputModes.languageOf(cantoneseSchema))
             rule.onNodeWithTag("hardware-toolbar-language", true).performTouchInput { click() }
             rule.waitUntil(10_000) { engine.isAsciiMode() && languageIs("EN") }
             rule.onNodeWithTag("hardware-toolbar-language", true).performTouchInput { click() }
-            rule.waitUntil(10_000) { !engine.isAsciiMode() && languageIs("あ") && engine.getCurrentSchema() == japaneseSchema }
+            rule.waitUntil(10_000) { !engine.isAsciiMode() && languageIs("粤") && engine.getCurrentSchema() == cantoneseSchema }
             assertEquals(LanguageSwitchMode.CURRENT_ENGLISH, LanguageSwitchPreferences.read(context).mode)
 
             // Opting in to a cycle honors the user's configured language order.
-            prefs.edit().putString("input_language_order", "ja\nzh\nen").commit()
+            prefs.edit().putString("input_language_order", "yue\nzh\nen").commit()
             LanguageSwitchPreferences.save(context, LanguageSwitchOptions(LanguageSwitchMode.CYCLE))
             rule.onNodeWithTag("hardware-toolbar-language", true).performTouchInput { click() }
             rule.waitUntil(10_000) { !engine.isAsciiMode() && languageIs("中") && engine.getCurrentSchema() == "rime_ice" }
             shell("input keyboard keycombination KEYCODE_CTRL_LEFT KEYCODE_SPACE")
             rule.waitUntil(10_000) { engine.isAsciiMode() && languageIs("EN") }
             rule.onNodeWithTag("hardware-toolbar-language", true).performTouchInput { click() }
-            rule.waitUntil(10_000) { !engine.isAsciiMode() && languageIs("あ") && engine.getCurrentSchema() == japaneseSchema }
+            rule.waitUntil(10_000) { !engine.isAsciiMode() && languageIs("粤") && engine.getCurrentSchema() == cantoneseSchema }
             screenshot("hardware-language-cycle-ime.png")
 
             // An explicit Chinese/English pair first leaves Japanese for the chosen language.

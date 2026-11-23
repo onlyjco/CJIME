@@ -68,7 +68,6 @@ internal fun ConnectedClipboardBoard(
     onImageSelect: (ClipboardImage) -> Unit, onImageShare: (ClipboardImage, String?) -> Unit,
     onSystemPaste: () -> Unit, onPullRemote: (() -> Unit)?, modifier: Modifier = Modifier,
     onAddPinned: (() -> Unit)? = null, onEditText: ((Long, String, String) -> Unit)? = null,
-    onRecognizeDocument: (() -> Unit)? = null,
     onOpenSearch: (() -> Unit)? = null,
     /** 长按菜单的「翻译」：交给 AI 改写的翻译；null（没装或没开 AI 改写）不显示这一项。 */
     onTranslateText: ((String) -> Unit)? = null,
@@ -78,6 +77,7 @@ internal fun ConnectedClipboardBoard(
     liveQuery: ClipboardLiveQuery? = null,
     /** False in a short search results area (phone landscape): no category row, records only. */
     showControls: Boolean = true,
+    initialFavorites: Boolean = false,
 ) {
     val context = LocalContext.current
     val store = remember(context) { ClipboardImages.getInstance(context) }
@@ -101,11 +101,11 @@ internal fun ConnectedClipboardBoard(
     val favoriteStore = remember(context) { ClipboardFavoriteStore.getInstance(context) }
     val favoriteCards by favoriteStore.items.collectAsState()
     val favoritePins by favoriteStore.pinnedKeys.collectAsState()
-    var favoritesMode by remember(initialImages, showControls, liveQuery) {
+    var favoritesMode by remember(initialImages, initialFavorites, showControls, liveQuery) {
         mutableStateOf(
             when {
                 liveQuery != null -> favoriteStore.isSearchInFavorites()
-                showControls -> favoriteStore.consumeReturnToFavorites()
+                showControls -> initialFavorites || favoriteStore.consumeReturnToFavorites()
                 else -> false
             }
         )
@@ -193,7 +193,7 @@ internal fun ConnectedClipboardBoard(
             .putExtra("pick_image", true).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)) },
         onSystemPaste = onSystemPaste, onShare = onImageShare, onPullRemote = onPullRemote, modifier = modifier,
         onAddPinned = onAddPinned, onEditText = onEditText, onDismissFailure = store::clearPasteFailure,
-        onRecognizeDocument = onRecognizeDocument, onTranslateText = onTranslateText,
+        onTranslateText = onTranslateText,
         unpinnedTextTotal = unpinnedTotal, onLoadMore = { if (searchResults == null) manager.loadMoreHistory() },
         onClearUnpinned = { images ->
             // Clearing means all unfixed history in the database, not only the pages read so far.
@@ -310,7 +310,6 @@ internal fun ClipboardBoardView(
     onShare: (ClipboardImage, String?) -> Unit, onPullRemote: (() -> Unit)?, modifier: Modifier = Modifier,
     onAddPinned: (() -> Unit)? = null, onEditText: ((Long, String, String) -> Unit)? = null,
     onDismissFailure: () -> Unit = {},
-    onRecognizeDocument: (() -> Unit)? = null,
     /** 长按菜单的「翻译」；null 不显示。密码记录没有这一项。 */
     onTranslateText: ((String) -> Unit)? = null,
     /** Unfixed text records in the whole history; -1 when only [textItems] is known. */
@@ -636,6 +635,15 @@ internal fun ClipboardBoardView(
                     onOpenSearch?.let {
                         CompactClipboardAction(Icons.Default.Search, if (favoritesMode) "搜索收藏夹" else "搜索剪贴板", it, "clipboard-search")
                     }
+                    val topAddAction = if (favoritesMode) onAddFavorite else addPinned
+                    topAddAction?.let { addAction ->
+                        CompactClipboardAction(
+                            Icons.Default.Add,
+                            if (favoritesMode) "新增收藏内容" else "新增固定内容",
+                            addAction,
+                            if (favoritesMode) "clipboard-top-add-favorite" else "clipboard-top-add",
+                        )
+                    }
                     onToggleFavoritesMode?.let { toggleFav ->
                         CompactClipboardAction(
                             if (favoritesMode) Icons.Default.Star else Icons.Default.StarBorder,
@@ -862,8 +870,6 @@ internal fun ClipboardBoardView(
                 }
                 if (!favoritesMode) {
                     add(CompactActionMenuEntry(Icons.Default.Image, "添加图片", tag = "clipboard-pick", onClick = onPick))
-                    onRecognizeDocument?.let { action -> add(CompactActionMenuEntry(Icons.Default.DocumentScanner,
-                        "拍照识别", tag = "clipboard-ocr", onClick = action)) }
                     add(CompactActionMenuEntry(Icons.Default.PhotoLibrary, if (photoAccess) "关闭最近截图" else "启用最近截图",
                         tag = "clipboard-photos", onClick = onPhotoAccess))
                     onPullRemote?.let { action -> add(CompactActionMenuEntry(Icons.Default.Sync, "同步", tag = "clipboard-sync", onClick = action)) }
@@ -1013,17 +1019,6 @@ private fun ClipboardRecordCard(
                     alignment = if (keepTop) Alignment.TopCenter else Alignment.Center,
                     modifier = if (previewHeight == null) Modifier.fillMaxWidth().height(cardHeight)
                     else Modifier.fillMaxSize())
-                Canvas(Modifier.matchParentSize().testTag("clipboard-image-hatch:${card.key}")) {
-                    val spacing = 36.dp.toPx()
-                    var x = -size.height
-                    while (x < size.width) {
-                        val start = Offset(x, size.height)
-                        val end = Offset(x + size.height, 0f)
-                        drawLine(Color.Black.copy(alpha = .14f), start, end, 1.5.dp.toPx())
-                        drawLine(Color.White.copy(alpha = .16f), start, end, .5.dp.toPx())
-                        x += spacing
-                    }
-                }
             }
         }
         if (pinned) ClipboardCardBadge(Icons.Default.Lock, "已固定",

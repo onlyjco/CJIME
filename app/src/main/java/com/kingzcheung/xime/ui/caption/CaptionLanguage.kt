@@ -7,7 +7,7 @@ package com.kingzcheung.xime.ui.caption
  */
 enum class CaptionLanguage(val id: String, val label: String) {
     CHINESE("zh", "中文"),
-    JAPANESE("ja", "日本語"),
+    CANTONESE("yue", "粤语"),
     ENGLISH("en", "English");
 
     companion object {

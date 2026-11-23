@@ -46,7 +46,7 @@ class ChineseSchemasTest {
         ChineseSchemas.installAssets(context, File(directory, "rime"))
         assertTrue(File(directory, "rime/${QwjrtkLayout.ID}.schema.yaml").isFile)
         assertEquals("个人双指", CustomKeyboardLayouts.find(QwjrtkLayout.ID)?.name)
-        val old = listOf("my_custom", "japanese_kana")
+        val old = listOf("my_custom")
         val updated = ChineseSchemas.addOnFirstUpgrade(context, old)
         assertEquals(old + CyimeInputDefaults.recommended, updated)
         assertFalse(updated.contains("wubi86"))
@@ -54,14 +54,14 @@ class ChineseSchemasTest {
         val disabledAgain = updated - "t9_pinyin"
         assertEquals(disabledAgain, ChineseSchemas.addOnFirstUpgrade(context, disabledAgain))
     }
-    @Test fun absentLanguagePreferenceKeepsJapaneseDisabledAfterSetup() {
+    @Test fun absentLanguagePreferenceKeepsOptionalLanguagesDisabledAfterSetup() {
         SettingsPreferences.setSetupCompleted(context, true)
         assertEquals(setOf(InputLanguage.CHINESE, InputLanguage.ENGLISH), LanguagePreferences.enabled(context))
         LanguagePreferences.initialize(context)
         assertEquals(setOf(InputLanguage.CHINESE, InputLanguage.ENGLISH), LanguagePreferences.enabled(context))
         SettingsPreferences.getPrefsPublic(context).edit()
-            .putStringSet(LanguagePreferences.KEY, setOf("zh", "ja")).commit()
-        assertEquals(setOf(InputLanguage.CHINESE, InputLanguage.JAPANESE, InputLanguage.ENGLISH), LanguagePreferences.enabled(context))
+            .putStringSet(LanguagePreferences.KEY, setOf("zh", "yue")).commit()
+        assertEquals(setOf(InputLanguage.CHINESE, InputLanguage.CANTONESE, InputLanguage.ENGLISH), LanguagePreferences.enabled(context))
     }
     @Test(expected = IllegalArgumentException::class)
     fun englishCannotBeDisabled() {
@@ -98,10 +98,10 @@ class ChineseSchemasTest {
         assertTrue(available.containsAll(BuiltinLetterLayouts.ids))
         assertEquals(CyimeInputDefaults.recommended, SchemaManager.getEnabledSchemas(context))
         assertFalse(SchemaManager.getEnabledSchemas(context).any {
-            it in JapaneseSchemas.ids || it == "pinyin_14jian" || it in BuiltinLetterLayouts.ids
+            it == "pinyin_14jian" || it in BuiltinLetterLayouts.ids
         })
-        SchemaManager.setEnabledSchemas(context, listOf("t9_pinyin", "japanese"))
-        assertEquals(listOf("t9_pinyin", "japanese"), SchemaManager.getEnabledSchemas(context))
+        SchemaManager.setEnabledSchemas(context, listOf("t9_pinyin", "rime_ice"))
+        assertEquals(listOf("t9_pinyin", "rime_ice"), SchemaManager.getEnabledSchemas(context))
     }
 
     @Test fun packagedSchemaHasClearNameAndDoesNotOverwriteMarketReplacement() {

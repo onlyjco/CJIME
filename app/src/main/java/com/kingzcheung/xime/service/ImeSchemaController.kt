@@ -9,8 +9,6 @@ import android.widget.Toast
 import com.kingzcheung.xime.MainActivity
 import com.kingzcheung.xime.ui.keyboard.isHandwritingSchema
 import com.kingzcheung.xime.ui.keyboard.isT9Schema
-import com.kingzcheung.xime.ui.keyboard.JapaneseKanaAction
-import com.kingzcheung.xime.ui.keyboard.japaneseKanaRomaji
 import com.kingzcheung.xime.rime.RimeProcessResult
 import com.kingzcheung.xime.settings.KeysConfigHelper
 import com.kingzcheung.xime.settings.SchemaConfigHelper
@@ -113,7 +111,7 @@ internal class ImeSchemaController(private val service: XimeInputMethodService) 
                 ?: return false
         }
         val changesSchema = targetSchema != currentSchema
-        if (changesSchema && service.japaneseInputController.commit() && service.keyRouter.hasPendingCandidateCommit) return false
+        if (changesSchema && service.keyRouter.hasPendingCandidateCommit) return false
         val candState = service.candidateState.value
         val pendingEnglish = candState.pendingEnglishText
         FileLogger.i(XimeInputMethodService.TAG, "switchInputMethod: start, pendingEnglish='${if (pendingEnglish.isEmpty()) '-' else pendingEnglish}', isComposing=${candState.isComposing}, candidates=${candState.candidates.size}")
@@ -209,7 +207,6 @@ internal class ImeSchemaController(private val service: XimeInputMethodService) 
             )
             reopenHandwriting(keepHandwriting, target)
         }
-        if (changesSchema) service.japaneseInputController.cancel()
         return true
     }
     
@@ -335,70 +332,8 @@ internal class ImeSchemaController(private val service: XimeInputMethodService) 
                 "options=0x${Integer.toHexString(info?.imeOptions ?: 0)} $message")
     })
     private val pendingCursorSteps = PendingCursorSteps()
-    private val japaneseKanaComposer = JapaneseKanaComposer()
-    private var japaneseKanaSession = Long.MIN_VALUE
 
     internal fun resetEditorSelection() = editorCursor.resetSelection()
-
-    internal fun handleJapaneseKanaAction(action: JapaneseKanaAction) {
-        if (service.editorInputPolicy.locksNativeInput) return
-        val original = service.currentInputConnection ?: return
-        val inputSession = service.uiState.value.inputSessionId
-        val profileId = service.uiState.value.currentSchemaId
-        service.keyRouter.postRimeJob {
-            if (service.currentInputConnection !== original || service.uiState.value.inputSessionId != inputSession ||
-                service.rimeEngine.getCurrentSchema() != profileId || service.rimeEngine.isAsciiMode()) return@postRimeJob
-            val profile = com.kingzcheung.xime.settings.InputProfiles.current(profileId)
-            if (profile.scheme != com.kingzcheung.xime.settings.InputScheme.KANA ||
-                profile.layout.kind != com.kingzcheung.xime.settings.LayoutKind.KANA_KEYPAD) return@postRimeJob
-            if (japaneseKanaSession != inputSession) {
-                japaneseKanaComposer.reset()
-                japaneseKanaSession = inputSession
-            }
-            service.japaneseInputController.prepareKana(action == JapaneseKanaAction.Modify)
-            val before = service.rimeEngine.getInput()
-            var result: RimeProcessResult? = null
-            val committed = StringBuilder()
-            when (action) {
-                is JapaneseKanaAction.Input -> {
-                    if (action.romaji !in japaneseKanaRomaji) return@postRimeJob
-                    var allProcessed = true
-                    for (char in action.romaji) {
-                        val next = service.rimeEngine.processQueuedKeyAndGetResult(char.code, 0)
-                        result = next
-                        committed.append(next.committedText)
-                        if (!next.processed) { allProcessed = false; break }
-                    }
-                    if (allProcessed) japaneseKanaComposer.recordInput(before, action.romaji, result?.inputText.orEmpty(), committed.isNotEmpty())
-                    else japaneseKanaComposer.reset()
-                }
-                JapaneseKanaAction.Modify -> {
-                    if (japaneseKanaComposer.replacement(before) == null && before.isNotEmpty()) {
-                        val boundary = service.rimeEngine.previousJapaneseBoundary(before)
-                        japaneseKanaComposer.recordInput(before.take(boundary), before.drop(boundary), before, false)
-                    }
-                    val replacement = japaneseKanaComposer.replacement(before) ?: return@postRimeJob
-                    // 整体改写引擎中的未提交编码，不发送退格，绝不删除宿主里已经上屏的字。
-                    if (!service.rimeEngine.setInput(replacement.input)) return@postRimeJob
-                    result = service.rimeEngine.getProcessResult(true)
-                    committed.append(result.committedText)
-                    if (committed.isEmpty()) japaneseKanaComposer.recordReplacement(replacement, result.inputText)
-                    else japaneseKanaComposer.reset()
-                }
-            }
-            val finalResult = result ?: return@postRimeJob
-            val transformed = service.candidateTransform.transformFor(finalResult)
-            withContext(Dispatchers.Main) {
-                if (service.currentInputConnection !== original || service.uiState.value.inputSessionId != inputSession ||
-                    service.uiState.value.currentSchemaId != profileId) return@withContext
-                if (committed.isNotEmpty()) service.commitText(committed.toString())
-                service.sessionController.updateUIWithResult(
-                    transformed?.let { finalResult.copy(candidates = it.candidates.toTypedArray()) } ?: finalResult,
-                    transformed?.actions ?: emptyList(),
-                )
-            }
-        }
-    }
 
     /**
      * [preeditKey] 标记手势类光标移动（键盘滑动、空格滑动）。手势按下时界面可能还没认出组合
@@ -510,34 +445,7 @@ internal class ImeSchemaController(private val service: XimeInputMethodService) 
         }
     }
 
-    /**
-     * 日语打字中（读音还没上屏）长按空格、底部留白滑动、空格上下滑：挪读音里的光标，不挪输入框光标（11-05 用户反馈：
-     * 以前拖了没反应）。和按键同一个队列。不是日语打字中返回 false，照旧走拼音编辑或输入框光标。
-     */
-    internal fun moveJapaneseReadingCaret(steps: Int): Boolean {
-        if (steps == 0 || !japaneseReadingOnScreen()) return false
-        service.keyRouter.postRimeJob("japanese_caret") { service.japaneseInputController.moveCaret(steps) }
-        return true
-    }
 
-    /** 日语读音正显示着（不在英数、键盘自己的输入框里）。 */
-    internal fun japaneseReadingOnScreen(): Boolean {
-        val state = service.uiState.value
-        if (state.isAsciiMode || !state.inputProfile.capabilities.japaneseConversion || state.inputTarget.isInternal ||
-            state.quickSendFormFocused || state.toolPanelInputFocused) return false
-        return service.candidateState.value.let { it.isComposing || it.inputText.isNotEmpty() }
-    }
-
-    /** 已在按键队列中，不能再次排队，否则长按方向键会积压到后续操作之后。 */
-    internal suspend fun moveJapaneseCursorFromKeyQueue(steps: Int) {
-        val original = service.currentInputConnection ?: return
-        val owner = service.uiState.value.inputSessionId
-        withContext(Dispatchers.Main) {
-            if (service.currentInputConnection === original && service.uiState.value.inputSessionId == owner) {
-                editorCursor.move(original, steps)
-            }
-        }
-    }
 
     /**
      * 编辑面板的「复制」。先交给应用；应用不接复制菜单（有的应用自己画的编辑器，选区是应用自己选的，

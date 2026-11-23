@@ -174,13 +174,6 @@ fun SpeechToTextSettingsContent(
                 }
             }
 
-            // 模型名（Paraformer、SenseVoice…）多数人看不懂：先给一个按手机和用法自动选好的入口。
-            SettingsSection(title = "不知道怎么选") {
-                SettingsItem(icon = Icons.TwoTone.Tune, title = "按设备推荐配置",
-                    subtitle = "回答几个问题，选好语音模型",
-                    onClick = onNavigateToSetupGuide, showArrow = true)
-            }
-
             SettingsSection(title = "语音标点") { SpeechPunctuationSettings() }
 
             SettingsSection(title = "数字") { SpeechNumberSettings() }

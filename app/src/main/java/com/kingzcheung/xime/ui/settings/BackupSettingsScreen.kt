@@ -155,7 +155,7 @@ fun BackupSettingsContent(onBack: () -> Unit) {
                     SettingsToggleItem(
                         icon = Icons.TwoTone.Person,
                         title = "包含个人词库与学习数据",
-                        subtitle = "自造词、词频和个人词库，属于隐私数据",
+                        subtitle = "自造词、词频、个人词库及在线语音配置（含接口密钥，请注意妥善保管备份）",
                         checked = includePersonal,
                         onCheckedChange = { includePersonal = it; BackupChoices.setIncludePersonal(context, it) }
                     )
@@ -167,7 +167,7 @@ fun BackupSettingsContent(onBack: () -> Unit) {
                         onCheckedChange = { includeClipboardHistory = it; BackupChoices.setIncludeClipboardHistory(context, it) }
                     )
                     Text(
-                        text = "总会备份设置、主题、布局和固定的剪贴板记录；不含插件、模型、剪贴板图片和密码。",
+                        text = "总会备份设置、主题、布局、收藏夹、打字统计和固定的剪贴板记录；不含插件、离线模型、最近剪贴板图片与剪贴板密码。仅在勾选上方隐私数据时才带出在线语音密钥。",
                         style = MaterialTheme.typography.labelSmall,
                         color = MaterialTheme.colorScheme.outline,
                         modifier = Modifier.padding(start = 16.dp, end = 16.dp, bottom = 16.dp)
@@ -191,7 +191,7 @@ fun BackupSettingsContent(onBack: () -> Unit) {
                             Button(
                                 onClick = {
                                     val date = SimpleDateFormat("yyyy-MM-dd", Locale.getDefault()).format(Date())
-                                    exportLauncher.launch("CyIME备份-$date.zip")
+                                    exportLauncher.launch("CJIME备份-$date.zip")
                                 },
                                 modifier = Modifier.weight(1f),
                                 enabled = !busy

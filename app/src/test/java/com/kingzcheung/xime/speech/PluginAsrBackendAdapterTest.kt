@@ -121,7 +121,7 @@ class PluginAsrBackendAdapterTest {
         val plugin = FakePlugin()
         val adapter = PluginAsrBackendAdapter("在线语音", plugin, batch)
         Sink().bind(adapter)
-        adapter.start(InputLanguage.JAPANESE)
-        assertEquals("ja", plugin.startedWith)
+        adapter.start(InputLanguage.CANTONESE)
+        assertEquals("yue", plugin.startedWith)
     }
 }

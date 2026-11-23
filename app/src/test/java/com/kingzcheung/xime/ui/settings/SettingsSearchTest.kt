@@ -58,8 +58,8 @@ class SettingsSearchTest {
     }
 
     @Test fun allTermsMustMatchAndBlankFindsNothing() {
-        assertEquals("假名方向提示", titles("假名 方向").first())
-        assertTrue(titles("假名 方向").none { it == "按键效果" })
+        assertEquals("拂动时显示方向圆盘", titles("拂动 圆盘").first())
+        assertTrue(titles("拂动 圆盘").none { it == "按键效果" })
         assertTrue(titles("   ").isEmpty())
         assertTrue(titles("不存在的设置词").isEmpty())
     }
@@ -94,7 +94,7 @@ class SettingsSearchTest {
     @Test fun everySettingLivesInOnePlaceUnderTheNewGroups() {
         val dup = SettingsSearchIndex.groupBy { it.title }.filterValues { it.size > 1 }.keys
         assertTrue("重复：$dup", dup.isEmpty())
-        val groups = setOf("配置选择", "输入", "外观", "智能", "系统")
+        val groups = setOf("输入", "外观", "智能", "系统")
         val stray = SettingsSearchIndex.filter { it.path.substringBefore(" › ") !in groups }.map { it.title }
         assertTrue("不在新分组下：$stray", stray.isEmpty())
     }
@@ -112,7 +112,6 @@ class SettingsSearchTest {
         assertTrue("显示模式" in titles("夜间模式"))
         assertTrue("玻璃效果" in titles("毛玻璃"))
         assertTrue("卡片显示行数" in titles("剪切板"))
-        assertTrue("性能与省电" in titles("卡顿"))
         assertTrue("我的短语" in titles("快捷短语"))
         assertTrue("Ctrl + 空格" in titles("ctrl"))
         assertTrue("Ctrl + 空格" in titles("ＣＴＲＬ"))
@@ -171,8 +170,6 @@ class SettingsSearchTest {
     /** 11-01 整理：新功能和用户自己的说法都能找到。 */
     @Test fun newFeaturesAndEverydayWordsAreSearchable() {
         assertTrue("中英混输" in titles("中英混打"))
-        assertTrue("拍照识别模型" in titles("OCR"))
-        assertTrue("拍照识别模型" in titles("拍照识字"))
         assertTrue("逗号键分词" in titles("隔音符"))
         assertTrue("中文滑行" in titles("划词"))
         assertTrue("生僻字" in titles("罕用字"))

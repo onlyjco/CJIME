@@ -6,26 +6,21 @@ val roots = listOf(
     "rime_chinese" to file("src/main/assets/rime_chinese"),
     "rime_chinese" to layout.buildDirectory.dir("generated/stroke-assets/rime_chinese").get().asFile,
     "rime_chinese" to layout.buildDirectory.dir("generated/cangjie-assets/rime_chinese").get().asFile,
-    "rime_japanese" to file("src/main/assets/rime_japanese"),
-    "rime_letters" to file("src/main/assets/rime_letters"),
 )
-// The elder package leaves the Japanese and the letter-language (Spanish, German…) assets out of the APK, so out of the manifest too.
-val elder = providers.gradleProperty("elderEdition").orNull == "true"
 val prepareRimeManifest by tasks.registering {
-    dependsOn("prepareChineseDictionaries", "prepareStrokeDictionary", "prepareCangjieDictionary", "prepareJapaneseDictionaries")
-    inputs.property("elder", elder)
+    dependsOn("prepareChineseDictionaries", "prepareStrokeDictionary", "prepareCangjieDictionary")
     inputs.files(roots.map { it.second })
     outputs.dir(manifestOutput)
     doLast {
         val entries = sortedMapOf<String, String>()
-        for ((assetRoot, root) in roots) if (!(elder && assetRoot in setOf("rime_japanese", "rime_letters"))) root.walkTopDown().filter { it.isFile }.forEach { source ->
+        for ((assetRoot, root) in roots) root.walkTopDown().filter { it.isFile }.forEach { source ->
             val relative = source.relativeTo(root).invariantSeparatorsPath
             // 长句重排已停用，两种包都不带这个模型（与 build.gradle.kts 的资源忽略规则一致）。
             if (assetRoot == "rime_chinese" && relative == "t9_sentence.onnx") return@forEach
             if (relative.endsWith(".md") || relative.startsWith("LICENSE") || relative.endsWith(".custom.yaml")) return@forEach
             // Optional layouts are installed only when missing; a user's edited schema stays theirs.
             if (assetRoot == "rime_ice" && relative in setOf("pinyin_qwjrtk.schema.yaml", "pinyin_cyletix10.schema.yaml", "pinyin_colemak.schema.yaml", "pinyin_typewise.schema.yaml")) return@forEach
-            val target = if (assetRoot == "rime_japanese" && relative.endsWith(".lua")) "lua/$relative" else relative
+            val target = relative
             val digest = MessageDigest.getInstance("SHA-256")
             source.inputStream().use { input ->
                 val buffer = ByteArray(65536)

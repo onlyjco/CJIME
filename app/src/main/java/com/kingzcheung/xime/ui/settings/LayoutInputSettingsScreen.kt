@@ -38,32 +38,9 @@ import com.kingzcheung.xime.ui.keyboard.rememberKeyboardInputPreferences
 
 internal enum class LayoutInputCategory(val route: String, val title: String, val description: String) {
     Qwerty("layout_input_qwerty", "26 键", "中英混输、字母错位、标点键、分词键"),
-    Nine("layout_input_nine", "九键与 14 键", "拂动选字母、双字母键、假名提示"),
+    Nine("layout_input_nine", "九键与 14 键", "拂动选字母、双字母键"),
     /** 英文、中文 26 键和九键滑行原来分在 26 键、九键两页三个开关（用户 11-09「三个入口太乱」），合到这一页；存的值不变。 */
     Glide("layout_input_glide", "滑行输入", "英文、中文、九键滑行"),
-}
-
-/** 日语 26 键的长音 ー 放在哪：三张带图例的卡片，默认 L 键（见 JapaneseLongVowelKey）。 */
-@Composable
-internal fun JapaneseLongVowelKeySettings(
-    settings: com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences,
-    onChange: (com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences) -> Unit,
-) {
-    Column(Modifier.settingsSearchAnchor("长音键").padding(horizontal = 16.dp, vertical = 12.dp),
-        verticalArrangement = Arrangement.spacedBy(8.dp)) {
-        Text("长音键", style = MaterialTheme.typography.titleSmall)
-        Text("日语 26 键上输入 ー 的键",
-            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Row(Modifier.fillMaxWidth().choiceCardRowHeight(108.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            com.kingzcheung.xime.ui.keyboard.JapaneseLongVowelKey.entries.forEach { mode ->
-                IllustratedChoiceCard(mode.label, settings.japaneseLongVowelKey == mode,
-                    onClick = { onChange(settings.copy(japaneseLongVowelKey = mode)) },
-                    modifier = Modifier.weight(1f), tag = "long-vowel-key:${mode.name}") {
-                    JapaneseLongVowelIllustration(mode)
-                }
-            }
-        }
-    }
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -116,19 +93,19 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                         })
                     HorizontalDivider()
                     SettingsToggleItem(Icons.TwoTone.Gesture, "底排标点固定上滑",
-                        "空格两侧的标点键总是上滑输入角标",
+                        "数字键盘点键总是上滑输入冒号",
                         checked = settings.bottomPunctuationSwipeUp, onCheckedChange = {
                             settings = settings.copy(bottomPunctuationSwipeUp = it); settings.save(context)
                         })
                     HorizontalDivider()
                     // 逗号键分词（默认关）：下角标的方向跟「反转上下滑方向」走，说明照实际方向写。
                     SettingsToggleItem(Icons.TwoTone.ContentCut, "逗号键分词",
-                        "打拼音时在逗号键上${if (settings.bottomPunctuationSwipeUp || settings.reverseSymbolSwipe) "下滑" else "上滑"}插入分词符 '",
+                        "打拼音时在逗号键上${if (settings.reverseSymbolSwipe) "上滑" else "下滑"}插入分词符 '",
                         checked = settings.syllableSplitKey, onCheckedChange = {
                             settings = settings.copy(syllableSplitKey = it); settings.save(context)
                         })
                     SyllableSplitKeyLegend(settings.syllableSplitKey, settings.qwertyCommaKey, settings.qwertyPeriodKey,
-                        settings.bottomPunctuationSwipeUp || settings.reverseSymbolSwipe)
+                        settings.reverseSymbolSwipe)
                     HorizontalDivider()
                     SettingsToggleItem(Icons.TwoTone.ContentCut, "Shift 键分词",
                         "打拼音时 Shift 键变成分词键",
@@ -139,8 +116,6 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                         lockMessage = com.kingzcheung.xime.ui.keyboard.InputGestureLocks.lockFor(settings, com.kingzcheung.xime.ui.keyboard.InputGestureLock.Option.SHIFT_SYLLABLE_SPLIT, true)
                             ?.takeIf { !settings.shiftSyllableSplit }?.message)
                     ShiftSyllableSplitLegend(settings.shiftSyllableSplit)
-                    HorizontalDivider()
-                    JapaneseLongVowelKeySettings(settings) { settings = it; it.save(context) }
                 })
                 }
                 LayoutInputCategory.Nine -> Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
@@ -208,7 +183,7 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         }
                     })
-                    InputExperienceSettings(setOf(InputExperiencePart.FLICK_DISC, InputExperiencePart.KANA), "拂动与假名提示")
+                    InputExperienceSettings(setOf(InputExperiencePart.FLICK_DISC), "拂动提示")
                 }
                 LayoutInputCategory.Glide -> Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
                 // 三个布局各一行，存的还是原来三个开关（glide_typing_v2、glide_typing_chinese、t9_glide_typing），默认值不变。
@@ -257,7 +232,6 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                             settings = settings.copy(deleteChineseGlideCharacter = it); settings.save(context)
                         })
                 })
-                SettingsSection(title = "贡献", content = { GlidePracticeItem { onNavigate(SettingsRoutes.GlideContribute) } })
                 }
             }
             SettingsJumpText((if (category == LayoutInputCategory.Glide) "" else "滑行在「键盘布局 › 滑行输入」；") +

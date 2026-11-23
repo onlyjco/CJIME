@@ -138,14 +138,6 @@ class HandwritingPanelContractTest {
         assertTrue("英文手写要有公式按钮", exists("handwriting-formula-toggle"))
     }
 
-    @Test fun japaneseHasNoFormulaButton() {
-        show(InputLanguage.JAPANESE)
-        assertFalse("日语手写不该有公式按钮", exists("handwriting-formula-toggle"))
-        // 缺公式模型时（假名比对要用它）说清楚去哪下载，不说「暂不支持」
-        if (exists("handwriting-unavailable")) assertTrue(
-            rule.onAllNodesWithText("公式手写模型", substring = true, useUnmergedTree = true).fetchSemanticsNodes().isNotEmpty())
-    }
-
     @Test fun formulaWithoutModelOpensItsDownloadPage() {
         assertFalse("测试环境里不该有公式模型", FormulaRecognizer.isAvailable(app))
         show(InputLanguage.ENGLISH)

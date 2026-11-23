@@ -11,7 +11,6 @@ import android.os.Build
 import android.provider.Settings
 import androidx.core.content.FileProvider
 import com.kingzcheung.xime.BuildConfig
-import com.kingzcheung.xime.model.DownloadMirrors
 import com.kingzcheung.xime.util.FileLogger
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.CoroutineScope
@@ -120,7 +119,7 @@ object AppUpdater {
         job = scope.launch {
             if (manual) _state.value = AppUpdateState.Checking
             try {
-                val latest = fetchLatest(DownloadMirrors.prefersDomestic(app))
+                val latest = fetchLatest()
                 prefs(app).edit().putLong(KEY_LAST_CHECK, System.currentTimeMillis()).apply()
                 _state.value = when {
                     latest != null && AppUpdateCatalog.isNewer(latest.version, BuildConfig.VERSION_NAME) -> AppUpdateState.Available(latest)
@@ -136,34 +135,20 @@ object AppUpdater {
         }
     }
 
-    /** 国内先查魔搭，海外先查 GitHub；一边连不上、被限流或没有内容就换另一边。两边都失败才算失败。 */
-    private fun fetchLatest(domestic: Boolean): AppRelease? {
-        var firstError: Exception? = null
-        for (fromModelScope in if (domestic) listOf(true, false) else listOf(false, true)) {
-            try {
-                val latest = fetchFrom(fromModelScope) ?: continue
-                // 自用版（打包器「装到我的设备」）带个人九键模型、CyLM 和私有释义，公开包覆盖上去会把它们换掉：
-                // 只提示有新版，不给一键下载安装，点了去发布页。
-                return if (privateBuild) latest.copy(asset = null) else AppUpdateCatalog.withMirror(latest, fromModelScope)
-            } catch (e: CancellationException) {
-                throw e
-            } catch (e: Exception) {
-                FileLogger.w(TAG, "${if (fromModelScope) "魔搭" else "GitHub"} 查不到更新：${e.message}")
-                if (firstError == null) firstError = e
-            }
-        }
-        firstError?.let { throw it }
-        return null
+    /** 检查 onlyjco/CJIME GitHub Releases 最新正式版。 */
+    private fun fetchLatest(): AppRelease? {
+        val latest = fetchFromGitHub() ?: return null
+        return if (privateBuild) latest.copy(asset = null) else latest
     }
 
-    private fun fetchFrom(fromModelScope: Boolean): AppRelease? {
-        val builder = Request.Builder().header("User-Agent", "CyIME/${BuildConfig.VERSION_NAME}")
-        if (fromModelScope) builder.url(AppUpdateCatalog.MODELSCOPE_RELEASES)
-        else builder.url(AppUpdateCatalog.RELEASES_API)
+    private fun fetchFromGitHub(): AppRelease? {
+        val builder = Request.Builder()
+            .url(AppUpdateCatalog.RELEASES_API)
+            .header("User-Agent", "CJIME/${BuildConfig.VERSION_NAME}")
             .header("Accept", "application/vnd.github+json")
             .header("X-GitHub-Api-Version", "2022-11-28")
         client.newCall(builder.build()).execute().use { response ->
-            if (!fromModelScope && (response.code == 403 || response.code == 429)) throw IOException("rate-limited")
+            if (response.code == 403 || response.code == 429) throw IOException("rate-limited")
             if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
             return AppUpdateCatalog.latest(response.body.string(), BuildConfig.BUNDLED_MODELS, Build.SUPPORTED_ABIS.toList())
         }
@@ -250,7 +235,7 @@ object AppUpdater {
 
     private suspend fun fetchApk(release: AppRelease, asset: AppReleaseAsset, url: String, partial: File) {
         val offset = if (partial.isFile) partial.length() else 0L
-        val builder = Request.Builder().url(url).header("User-Agent", "CyIME/${BuildConfig.VERSION_NAME}")
+        val builder = Request.Builder().url(url).header("User-Agent", "CJIME/${BuildConfig.VERSION_NAME}")
         if (offset > 0) builder.header("Range", "bytes=$offset-")
         client.newCall(builder.build()).execute().use { response ->
             if (!response.isSuccessful) throw IOException("HTTP ${response.code}")
@@ -299,7 +284,7 @@ object AppUpdater {
         val pm = context.packageManager
         val archive = pm.getPackageArchiveInfo(apk.path, PackageManager.GET_SIGNING_CERTIFICATES)
             ?: return "下载的安装包打不开，请重新下载"
-        if (archive.packageName != context.packageName) return "下载的文件不是 CyIME 安装包"
+        if (archive.packageName != context.packageName) return "下载的文件不是 CJIME 安装包"
         val installed = pm.getPackageInfo(context.packageName, PackageManager.GET_SIGNING_CERTIFICATES)
         if (archive.longVersionCode <= installed.longVersionCode) return "下载的安装包不比现在装的新，不用更新"
         val newSigners = archive.signingInfo?.apkContentsSigners?.map { it.toCharsString() }?.toSet()

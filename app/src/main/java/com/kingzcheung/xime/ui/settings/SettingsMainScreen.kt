@@ -187,52 +187,42 @@ fun SettingsMainContent(
                     } else onNavigateToRoute(entry.target)
                 }
             }
-            item {
-                SettingsSection(title = stringResource(R.string.section_setup), searchKey = "配置选择", content = {
-                    SettingsItem(
-                        icon = Icons.TwoTone.AppSettingsAlt,
-                        title = stringResource(R.string.item_enable_ime_title), searchKey = "启用输入法",
-                        subtitle = stringResource(R.string.item_enable_ime_summary),
-                        status = if (entryStatus.imeEnabled) stringResource(R.string.status_set) else stringResource(R.string.status_not_set),
-                        statusTone = if (entryStatus.imeEnabled) SettingsStatusTone.OK else SettingsStatusTone.WARNING,
-                        onClick = {
-                            val intent = Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)
-                            context.startActivity(intent)
-                        }
-                    )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(start = 56.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
-                    SettingsItem(
-                        icon = Icons.TwoTone.ToggleOn,
-                        title = stringResource(R.string.item_select_ime_title), searchKey = "选择输入法",
-                        subtitle = stringResource(R.string.item_select_ime_summary),
-                        status = if (entryStatus.imeSelected) stringResource(R.string.status_set) else stringResource(R.string.status_not_set),
-                        statusTone = if (entryStatus.imeSelected) SettingsStatusTone.OK else SettingsStatusTone.WARNING,
-                        onClick = {
-                            val imm = context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) 
-                                as InputMethodManager
-                            imm.showInputMethodPicker()
-                        }
-                    )
-                    HorizontalDivider(
-                        modifier = Modifier.padding(start = 56.dp),
-                        thickness = 0.5.dp,
-                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                    )
-                    SettingsItem(
-                        icon = Icons.TwoTone.Tune,
-                        title = stringResource(R.string.item_setup_guide_title), searchKey = "按设备推荐配置",
-                        subtitle = stringResource(R.string.item_setup_guide_summary),
-                        onClick = { onNavigateToRoute(SettingsRoutes.SetupGuide) },
-                        showArrow = true
-                    )
-                })
+            if (!entryStatus.imeEnabled || !entryStatus.imeSelected) {
+                item {
+                    SettingsSection(content = {
+                        SettingsItem(
+                            icon = Icons.TwoTone.AppSettingsAlt,
+                            title = stringResource(R.string.item_enable_ime_title), searchKey = "启用输入法",
+                            subtitle = stringResource(R.string.item_enable_ime_summary),
+                            status = if (entryStatus.imeEnabled) stringResource(R.string.status_set) else stringResource(R.string.status_not_set),
+                            statusTone = if (entryStatus.imeEnabled) SettingsStatusTone.OK else SettingsStatusTone.WARNING,
+                            onClick = {
+                                val intent = Intent(Settings.ACTION_INPUT_METHOD_SETTINGS)
+                                context.startActivity(intent)
+                            }
+                        )
+                        HorizontalDivider(
+                            modifier = Modifier.padding(start = 56.dp),
+                            thickness = 0.5.dp,
+                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                        )
+                        SettingsItem(
+                            icon = Icons.TwoTone.ToggleOn,
+                            title = stringResource(R.string.item_select_ime_title), searchKey = "选择输入法",
+                            subtitle = stringResource(R.string.item_select_ime_summary),
+                            status = if (entryStatus.imeSelected) stringResource(R.string.status_set) else stringResource(R.string.status_not_set),
+                            statusTone = if (entryStatus.imeSelected) SettingsStatusTone.OK else SettingsStatusTone.WARNING,
+                            onClick = {
+                                val imm = context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE) 
+                                    as InputMethodManager
+                                imm.showInputMethodPicker()
+                            }
+                        )
+                    })
+                }
             }
 
-            // 首页五组按用户 10-21 的分法：配置选择 / 输入 / 外观 / 智能 / 系统。
+            // 首页四组：输入 / 外观 / 智能 / 系统。
             item {
                 SettingsSection(title = stringResource(R.string.section_input), searchKey = "输入", content = {
                     SettingsItem(icon = Icons.TwoTone.Language, title = stringResource(R.string.item_languages_title), searchKey = "语言与方案",
@@ -413,7 +403,7 @@ fun SettingsMainContent(
                     )
                     SettingsItem(
                         icon = Icons.TwoTone.Info,
-                        title = stringResource(R.string.item_about_title), searchKey = "关于 CyIME",
+                        title = stringResource(R.string.item_about_title), searchKey = "关于 CJIME",
                         subtitle = stringResource(R.string.item_about_summary),
                         onClick = onNavigateToAbout,
                         showArrow = true

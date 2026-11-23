@@ -26,20 +26,19 @@ class AutomaticPreparationTest {
         assertTrue(messages.any { "缺少词典索引" in it && "3 秒后自动重试" in it })
     }
     @Test fun noticeNamesWhatIsBeingPrepared() {
-        // 中文早已编译好，只开了德语、法语：不能说「准备中文输入」。
-        assertEquals("正在准备德语、法语输入，请稍候…",
-            preparingMessage(listOf(InputLanguage.GERMAN, InputLanguage.FRENCH, InputLanguage.GERMAN), firstTime = false))
+        assertEquals("正在准备粤语输入，请稍候…",
+            preparingMessage(listOf(InputLanguage.CANTONESE, InputLanguage.ENGLISH, InputLanguage.CANTONESE), firstTime = false))
         assertEquals("正在更新输入方案，请稍候…", preparingMessage(emptyList(), firstTime = false))
         assertEquals("正在更新输入方案，请稍候…", preparingMessage(listOf(InputLanguage.UNSPECIFIED), firstTime = false))
         // 新装或中文方案本身缺编译结果时，确实是在准备中文。
-        assertEquals("正在自动准备中文输入，请稍候…", preparingMessage(listOf(InputLanguage.JAPANESE), firstTime = true))
+        assertEquals("正在自动准备中文输入，请稍候…", preparingMessage(listOf(InputLanguage.CANTONESE), firstTime = true))
         assertEquals("正在自动准备中文输入，请稍候…",
-            preparingMessage(listOf(InputLanguage.CHINESE, InputLanguage.KOREAN), firstTime = false))
+            preparingMessage(listOf(InputLanguage.CHINESE, InputLanguage.CANTONESE), firstTime = false))
     }
     @Test fun retryShowsTheSuppliedNotice() = runBlocking {
         val messages = mutableListOf<String>()
-        retryPreparation(messages::add, {}, preparing = { "正在准备日语输入，请稍候…" }) { true }
-        assertEquals(listOf("正在准备日语输入，请稍候…"), messages)
+        retryPreparation(messages::add, {}, preparing = { "正在准备粤语输入，请稍候…" }) { true }
+        assertEquals(listOf("正在准备粤语输入，请稍候…"), messages)
     }
     @Test fun unreadablePackageSaysReinstallInsteadOfABlankLine() = runBlocking {
         // GitHub #283：系统读安装包抛出的 IOException 没有说明，原来提示只剩「3 秒后自动重试，无需操作」。

@@ -44,7 +44,7 @@ class HoldTimingSplitTest {
                 LocalKeyboardInputPreferences provides prefs,
                 LocalKeyboardInputActions provides KeyboardInputActions(
                     schemas = listOf(SchemaInfo("first", "中文", "", "", "", language = InputLanguage.CHINESE),
-                        SchemaInfo("second", "日语", "", "", "", language = InputLanguage.JAPANESE)),
+                        SchemaInfo("second", "粤语", "", "", "", language = InputLanguage.CANTONESE)),
                     currentInputModeId = "first", onSwitchSchema = {})) {
                 MaterialTheme {
                     Box(Modifier.size(360.dp, 280.dp)) {

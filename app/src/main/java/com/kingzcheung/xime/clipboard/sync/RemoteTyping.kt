@@ -48,7 +48,7 @@ class RemoteTypingSender internal constructor(
         var name: String? = null
         for (wait in retryWaits) {
             if (wait > 0) delay(wait)
-            val peer = target() ?: return Result(false, false, failure ?: "没有连上支持隔空输入的电脑（电脑端 CyIME 需开着手机互联并更新到新版）", null)
+            val peer = target() ?: return Result(false, false, failure ?: "没有连上支持隔空输入的电脑（电脑端 CJIME 需开着手机互联并更新到新版）", null)
             name = peer.name
             val body = JSONObject().put("v", 1).put("id", id).put("text", text)
             try {
@@ -57,9 +57,9 @@ class RemoteTypingSender internal constructor(
                     200 -> return Result(reply?.optBoolean("typed") == true, reply?.optBoolean("copied") == true, null, peer.name)
                     401 -> return Result(false, false, "${peer.name} 已撤销配对，请重新连接", peer.name)
                     403 -> return Result(false, false, "${peer.name} 关了「接收手机内容」或暂停了这台手机", peer.name)
-                    404 -> return Result(false, false, "${peer.name} 上的 CyIME 版本太旧，不支持隔空输入", peer.name)
+                    404 -> return Result(false, false, "${peer.name} 上的 CJIME 版本太旧，不支持隔空输入", peer.name)
                     413 -> return Result(false, false, "这段太长，最多 64 KiB", peer.name)
-                    400, 415 -> return Result(false, false, "两端版本不匹配，请更新 CyIME", peer.name)
+                    400, 415 -> return Result(false, false, "两端版本不匹配，请更新 CJIME", peer.name)
                     else -> failure = "${peer.name} 暂时无法输入（$code）"
                 }
             } catch (e: CancellationException) { throw e }

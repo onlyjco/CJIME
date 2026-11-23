@@ -72,6 +72,18 @@ class KeyboardInputPreferencesTest {
         }
     }
 
+    @Test fun `bottom lift action buttons default on and persist without touching other settings`() {
+        val before = KeyboardInputPreferences.read(context)
+        assertEquals(true, before.bottomLiftActions)
+        assertTrue(KeyboardInputPreferences.BOTTOM_LIFT_ACTIONS_KEY in KeyboardInputPreferences.watchedKeys)
+        for (enabled in listOf(false, true)) {
+            before.copy(bottomLiftActions = enabled).save(context)
+            val after = KeyboardInputPreferences.read(context)
+            assertEquals(enabled, after.bottomLiftActions)
+            assertEquals(before, after.copy(bottomLiftActions = true))
+        }
+    }
+
     @Test fun `symbol direction defaults to pulling into key and persists either habit`() {
         assertEquals(false, KeyboardInputPreferences.read(context).reverseSymbolSwipe)
         for (reversed in listOf(true, false)) {

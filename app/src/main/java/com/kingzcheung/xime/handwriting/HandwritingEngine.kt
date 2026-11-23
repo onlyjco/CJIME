@@ -145,8 +145,6 @@ object HandwritingEngine {
             // 英文：同一个模型里的英文字母和数字（汉字过滤会把它们全部去掉）
             InputLanguage.ENGLISH -> return HandwritingLanguages.latinCandidates(
                 predictRaw(strokes, HandwritingTemplates.OCH_TOP_N).map { HandwritingCandidate(it.char, it.score) }, topK)
-            // 日语假名由模板比对（HandwritingTemplates），这里不出汉字
-            InputLanguage.JAPANESE -> return emptyList()
             else -> {}
         }
         if (!ensureEngineReady()) return emptyList()

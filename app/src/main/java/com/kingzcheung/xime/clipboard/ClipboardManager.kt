@@ -989,7 +989,7 @@ class ClipboardManager private constructor(private val context: Context) {
             val values = ContentValues().apply {
                 put(MediaStore.Images.Media.DISPLAY_NAME, imageFile.name)
                 put(MediaStore.Images.Media.MIME_TYPE, "image/jpeg")
-                put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/CyIME")
+                put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/CJIME")
                 put(MediaStore.Images.Media.IS_PENDING, 1)
             }
             val collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)

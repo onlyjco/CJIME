@@ -41,7 +41,7 @@ object UiTexts {
         }.getOrElse { UiTranslations.EMPTY }.also { loaded = it }
     }
 
-    /** 界面语言是英文时的表，否则 null（简体、繁体、日语界面不换：它们走各自的 strings.xml）。 */
+    /** 界面语言是英文时的表，否则 null（简体、繁体界面不换：它们走各自的 strings.xml）。 */
     fun forConfiguration(context: Context, configuration: Configuration = context.resources.configuration): UiTranslations? =
         if (configuration.locales[0]?.language == "en") english(context) else null
 

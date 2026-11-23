@@ -290,10 +290,6 @@ fun PluginConfigFormScreen(
                 } else if (entryHint != null) item { SettingsNote(entryHint) }
                 // 字幕插件：字幕的设置在宿主里（11-05 从 语音转文本 › 字幕 整组搬来），插件开着才显示。
                 if (pluginId == com.kingzcheung.xime.ui.caption.CaptionPlugin.ID && pluginEnabled) item { CaptionSettingsSection() }
-                // 日语插件：词库和转换引擎下载到哪一步了。
-                if (pluginId == com.kingzcheung.xime.settings.JapanesePlugin.ID && pluginEnabled) item {
-                    JapanesePackStatus(Modifier.padding(horizontal = 16.dp, vertical = 8.dp), showReady = true)
-                }
                 groupedFields.forEach { (section, sectionFields) ->
                     item {
                         sectionContent(section, sectionFields)
@@ -634,6 +630,6 @@ private fun UiNodeEditor(
     }
 }
 
-/** 插件自己没有设置项、设置由宿主画在插件页里的插件（字幕的开关、日语的下载状态）。 */
+/** 插件自己没有设置项、设置由宿主画在插件页里的插件（字幕的开关）。 */
 internal fun hasHostSettings(pluginId: String): Boolean =
-    pluginId == com.kingzcheung.xime.ui.caption.CaptionPlugin.ID || pluginId == com.kingzcheung.xime.settings.JapanesePlugin.ID
+    pluginId == com.kingzcheung.xime.ui.caption.CaptionPlugin.ID

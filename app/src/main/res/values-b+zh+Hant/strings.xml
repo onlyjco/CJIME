@@ -1,15 +1,15 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="settings_title">CyIME 設定</string>
+    <string name="settings_title">CJIME 設定</string>
     <string name="section_model_download">模型下載</string>
     <string name="item_wait_wifi_title">等連上 Wi-Fi 再下載模型</string>
     <string name="item_wait_wifi_summary">語音、聯想、手寫等模型共約 %1$s；現在用的是行動數據，點這裡用行動數據下載</string>
     <string name="status_wait_wifi">等 Wi-Fi</string>
     <string name="section_setup">配置選擇</string>
     <string name="item_enable_ime_title">啟用輸入法</string>
-    <string name="item_enable_ime_summary">在系統設定中啟用 CyIME</string>
+    <string name="item_enable_ime_summary">在系統設定中啟用 CJIME</string>
     <string name="item_select_ime_title">選擇輸入法</string>
-    <string name="item_select_ime_summary">將 CyIME 設為目前的輸入法</string>
+    <string name="item_select_ime_summary">將 CJIME 設為目前的輸入法</string>
     <string name="status_set">已設定</string>
     <string name="status_not_set">未設定</string>
     <string name="item_setup_guide_title">依裝置推薦配置</string>
@@ -51,20 +51,18 @@
     <string name="item_extensions_summary">輸入方案、模型和外掛：下載、已安裝、匯入</string>
     <string name="item_backup_title">備份與還原</string>
     <string name="item_backup_summary">把設定匯出為本機檔案，或從備份檔案還原</string>
-    <string name="item_performance_title">效能與省電</string>
-    <string name="item_performance_summary">檔位、語音模型佔用記憶體</string>
     <string name="item_other_title">其他設定</string>
-    <string name="item_other_summary">備份與還原、效能與省電</string>
-    <string name="item_other_summary_with_language">備份、效能與省電、介面語言</string>
-    <string name="item_about_title">關於 CyIME</string>
+    <string name="item_other_summary">備份與還原</string>
+    <string name="item_other_summary_with_language">備份與還原、介面語言</string>
+    <string name="item_about_title">關於 CJIME</string>
     <string name="item_about_summary">版本資訊、開發者、聯絡方式</string>
     <string name="settings_app_language">介面語言 · Language</string>
     <string name="settings_app_language_summary">設定頁的顯示語言</string>
     <string name="settings_app_language_summary_old_android">跟隨系統語言，點這裡去系統設定</string>
     <string name="settings_app_language_system">跟隨系統</string>
-    <string name="settings_app_language_note">English 已翻譯設定各頁；繁體中文、日本語目前只翻了設定首頁，其餘頁面先顯示簡體中文。只改介面文字，不影響輸入語言和繁體輸出。</string>
+    <string name="settings_app_language_note">English 已翻譯設定各頁；繁體中文目前只翻了設定首頁，其餘頁面先顯示簡體中文。只改介面文字，不影響輸入語言和繁體輸出。</string>
     <string name="action_close">關閉</string>
     <string name="subtype_label_pinyin">拼音</string>
-    <string name="call_caption_service_label">CyIME 通話字幕</string>
+    <string name="call_caption_service_label">CJIME 通話字幕</string>
     <string name="call_caption_service_description">打電話、微信語音或視訊時，在螢幕底部自動顯示對方說的話（字幕），掛斷後自動消失。需要開擴音或外放。聲音只在本機辨識，不錄音、不上傳，也不讀取螢幕內容。</string>
 </resources>

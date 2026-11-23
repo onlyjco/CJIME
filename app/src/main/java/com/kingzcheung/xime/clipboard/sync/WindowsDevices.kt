@@ -246,7 +246,7 @@ object WindowsDevices {
                         }
                     }
                 } else if (_nearby.value.isEmpty() && !isPairing) {
-                    _status.value = "正在寻找附近电脑 · 请在 Windows CyIME 开启手机互联，并连接同一 Wi-Fi"
+                    _status.value = "正在寻找附近电脑 · 请在 Windows CJIME 开启手机互联，并连接同一 Wi-Fi"
                 }
                 if (failures > CHECK_RETRIES.size) failures = 0 // Gave up: wait for the next event.
             }

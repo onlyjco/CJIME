@@ -36,20 +36,18 @@ class AsrModelManager(private val context: Context) {
         private fun toAsrModelInfo(info: com.kingzcheung.xime.model.ModelInfo): AsrModelInfo {
             val version = info.resolvedVersion()
             val fileNames = info.files.map { it.name }
-            val japanese = SpeechModelCatalog.isJapaneseZipformer(info.id)
-            val japaneseSuffix = if (info.id == SpeechModelCatalog.ZIPFORMER_JA_INT8) ".int8.onnx" else ".onnx"
             return AsrModelInfo(
                 id = info.id,
                 name = SpeechModelSelection.displayName(info.id) ?: info.name,
                 description = info.description,
-                language = when (info.id) { SpeechModelCatalog.ZIPFORMER_JA, SpeechModelCatalog.ZIPFORMER_JA_INT8 -> "ja"; SpeechModelCatalog.SENSEVOICE -> "auto"; SpeechModelCatalog.PARAFORMER -> "zh-en"; else -> "zh" },
+                language = when (info.id) { SpeechModelCatalog.SENSEVOICE -> "auto"; SpeechModelCatalog.PARAFORMER -> "zh-en"; else -> "zh" },
                 size = version?.size ?: info.size,
                 downloadUrl = info.archiveUrl ?: "",
-                modelType = when (info.id) { SpeechModelCatalog.ZIPFORMER_JA, SpeechModelCatalog.ZIPFORMER_JA_INT8 -> "offline-transducer"; SpeechModelCatalog.PARAFORMER -> "paraformer"; SpeechModelCatalog.SENSEVOICE -> "sensevoice"; else -> "transducer" },
+                modelType = when (info.id) { SpeechModelCatalog.PARAFORMER -> "paraformer"; SpeechModelCatalog.SENSEVOICE -> "sensevoice"; else -> "transducer" },
                 files = fileNames,
-                encoderFile = if (japanese) "encoder-epoch-99-avg-1$japaneseSuffix" else "encoder.int8.onnx",
-                decoderFile = if (japanese) "decoder-epoch-99-avg-1$japaneseSuffix" else if (info.id == SpeechModelCatalog.PARAFORMER) "decoder.int8.onnx" else "decoder.onnx",
-                joinerFile = if (japanese) "joiner-epoch-99-avg-1$japaneseSuffix" else "joiner.int8.onnx"
+                encoderFile = "encoder.int8.onnx",
+                decoderFile = if (info.id == SpeechModelCatalog.PARAFORMER) "decoder.int8.onnx" else "decoder.onnx",
+                joinerFile = "joiner.int8.onnx"
             )
         }
     }
@@ -103,7 +101,8 @@ class AsrModelManager(private val context: Context) {
         // an unspecified language always decode as Chinese, in every build. Detection stays only when the
         // voice language is explicitly Japanese or English (one shared engine for both, as before).
         val languageId = when (language) {
-            InputLanguage.JAPANESE, InputLanguage.ENGLISH -> "auto"
+            InputLanguage.ENGLISH -> "auto"
+            InputLanguage.CANTONESE -> "yue"
             else -> "zh"
         }
         fun dir(id: String): File {
@@ -166,8 +165,7 @@ class AsrModelManager(private val context: Context) {
         if (SpeechLanguages.supports(legacy, language)) return withDefaultCorrection(legacy, language)
         return runCatching { SpeechLanguages.select(language, legacy) { selection(it, language).ready } }.getOrElse {
             when (language) {
-                // 一个日语模型都没下载时：指向 153 MB 的轻量版（和自动选择、开箱引导的先后一致），不是 586 MB 的原版。
-                InputLanguage.JAPANESE -> SpeechModelCatalog.ZIPFORMER_JA_INT8
+                InputLanguage.CANTONESE -> SpeechModelCatalog.SENSEVOICE
                 InputLanguage.ENGLISH -> SpeechModelCatalog.PARAFORMER
                 else -> com.kingzcheung.xime.model.DeviceDefaults.voiceModel(context)
             }

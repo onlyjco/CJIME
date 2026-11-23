@@ -259,7 +259,7 @@ internal fun measureSwipeBubble(swipeState: SwipeState, keyBounds: Rect, keyBack
 
     // A single long-press choice (the digit of a nine-key flick key) is the round bubble too.
     val menuCells = KeyboardKeyMetrics.longPressMenuCells(keyBounds.left, keyWidthPx, swipeState.longPressItems.size,
-        swipeState.longPressDrawableIds.isNotEmpty(), keyboardWidth, screenMarginPx)
+        swipeState.longPressDrawableIds.isNotEmpty(), keyboardWidth, screenMarginPx, swipeState.longPressDefaultIndex)
     val bodyWidth = if (isLongPressMode && swipeState.longPressItems.size == 1 && swipeState.longPressDrawableIds.isEmpty()) {
         maxOf(bubbleMeasurePaint.measureText(swipeState.longPressItems.first()) + with(density) { 20.dp.toPx() } * bubbleScale, minBodyWidthPx)
     } else if (isLongPressMode) {

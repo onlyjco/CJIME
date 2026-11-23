@@ -324,7 +324,7 @@ class AsrInferenceService : Service() {
                 val manager = AsrModelManager(this@AsrInferenceService)
                 val base = manager.selection(modelId, null)
                 val selection = when (languageId) {
-                    "ja" -> base.copy(secondDir = null, recognitionLanguage = "ja")
+                    "yue" -> base.copy(recognitionLanguage = "yue")
                     "en" -> base.copy(recognitionLanguage = "en")
                     else -> base.copy(recognitionLanguage = "zh")
                 }

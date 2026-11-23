@@ -136,8 +136,6 @@ class XimeApplication : Application(), ImageLoaderFactory {
             com.kingzcheung.xime.settings.XimeIndexSource.updateBundledPlugins(this@XimeApplication)
             // 字幕是插件：用过字幕的老用户升级时自动装上；每次启动按插件状态放出或收起字幕的入口。
             com.kingzcheung.xime.ui.caption.CaptionPlugin.migrateOnce(this@XimeApplication)
-            // 日语也是插件（11-11）：开着日语的老用户升级时自动装上，轻量版缺的引擎马上补下载。
-            com.kingzcheung.xime.settings.JapanesePlugin.migrateOnce(this@XimeApplication)
         }
         // 轻量版不带语音引擎（1.16）：下过语音模型的老用户升级后马上补下引擎。
         applicationScope.launch {

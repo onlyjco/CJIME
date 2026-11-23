@@ -66,7 +66,7 @@ class SpeechModelSelectionTest {
             assertTrue(it, SpeechModelSelection.wholeSentenceApplies(it, chinese = true))
             assertFalse(it, SpeechModelSelection.wholeSentenceApplies(it, chinese = false))
         }
-        listOf(c.PARAFORMER, c.ZIPFORMER, c.ZIPFORMER_JA, c.ZIPFORMER_JA_INT8).forEach {
+        listOf(c.PARAFORMER, c.ZIPFORMER).forEach {
             assertFalse(it, SpeechModelSelection.wholeSentenceApplies(it, chinese = true))
         }
         assertFalse(SpeechModelSelection.pipeline(c.TWO_PASS, chinese = true, wholeSentenceOn = false, xasrReady = true).wholeSentence)
@@ -90,11 +90,10 @@ class SpeechModelSelectionTest {
         assertEquals(Finish.WHOLE, SpeechModelSelection.finish(c.TWO_PASS, chinese = true, wholeSentenceOn = true))
         assertEquals(Finish.SENSEVOICE, SpeechModelSelection.finish(c.TWO_PASS, chinese = true, wholeSentenceOn = false))
         assertEquals(Finish.NONE, SpeechModelSelection.finish(c.PARAFORMER, chinese = true, wholeSentenceOn = true))
-        // 英文：整句开关不影响；只用 SenseVoice 或日语时没得选。
+        // 英文：整句开关不影响；只用 SenseVoice 时没得选。
         assertEquals(Finish.SENSEVOICE, SpeechModelSelection.finish(c.TWO_PASS, chinese = false, wholeSentenceOn = true))
         assertEquals(listOf(Finish.NONE, Finish.SENSEVOICE), SpeechModelSelection.finishOptions(c.TWO_PASS, chinese = false))
         assertEquals(listOf(Finish.NONE), SpeechModelSelection.finishOptions(c.SENSEVOICE, chinese = false))
-        assertEquals(listOf(Finish.NONE), SpeechModelSelection.finishOptions(c.ZIPFORMER_JA, chinese = false))
         assertEquals(listOf(Finish.NONE, Finish.WHOLE), SpeechModelSelection.finishOptions(c.SENSEVOICE, chinese = true))
         // 英文的选择从不改整句开关（它只管中文）。
         assertNull(SpeechModelSelection.applyFinish(c.TWO_PASS, chinese = false, finish = Finish.NONE).second)
@@ -112,6 +111,6 @@ class SpeechModelSelectionTest {
         val c = SpeechModelCatalog
         assertFalse(c.ZIPFORMER in SpeechModelSelection.offeredIds(c.SENSEVOICE))
         assertTrue(c.ZIPFORMER in SpeechModelSelection.offeredIds(c.ZIPFORMER))
-        assertTrue(listOf(c.PARAFORMER, c.SENSEVOICE, c.ZIPFORMER_JA_INT8, c.ZIPFORMER_JA).all { it in SpeechModelSelection.offeredIds(c.SENSEVOICE) })
+        assertTrue(listOf(c.PARAFORMER, c.SENSEVOICE).all { it in SpeechModelSelection.offeredIds(c.SENSEVOICE) })
     }
 }

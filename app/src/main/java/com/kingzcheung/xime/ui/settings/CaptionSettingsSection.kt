@@ -75,7 +75,7 @@ internal fun CaptionSettingsSection() {
                 )
             }
             Text(
-                text = "每次的字幕自动存到“下载/CyIME字幕”",
+                text = "每次的字幕自动存到“下载/CJIME字幕”",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )

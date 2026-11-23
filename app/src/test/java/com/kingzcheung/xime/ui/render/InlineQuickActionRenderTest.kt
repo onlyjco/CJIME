@@ -161,35 +161,35 @@ class InlineQuickActionRenderTest {
         val hint = rule.onNodeWithTag("quick-actions-save-hint").fetchSemanticsNode().boundsInRoot
         assertTrue("保存提示应位于对钩下方并留在键盘内", hint.top >= editSlot.bottom && hint.right <= 360f && hint.center.x > 180f)
         rule.onNodeWithContentDescription("隐藏声音振动", useUnmergedTree = true).assertIsDisplayed()
-        rule.onNodeWithContentDescription("添加拍照识别", useUnmergedTree = true).assertIsDisplayed()
+        rule.onNodeWithContentDescription("添加键盘调节", useUnmergedTree = true).assertIsDisplayed()
         val view = rule.activity.window.decorView
         val image = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
         rule.runOnIdle { view.draw(android.graphics.Canvas(image)) }
         val output = File("build/reports/inline-quick-action-visibility.png")
         output.parentFile?.mkdirs()
         output.outputStream().use { image.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        val badge = rule.onNodeWithContentDescription("添加拍照识别", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val badge = rule.onNodeWithContentDescription("添加键盘调节", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val opaqueBlue = android.graphics.Color.rgb(36, 120, 248)
         val bluePixels = (badge.left.toInt().coerceAtLeast(0) until badge.right.toInt().coerceAtMost(image.width)).sumOf { x ->
             (badge.top.toInt().coerceAtLeast(0) until badge.bottom.toInt().coerceAtMost(image.height)).count { y -> image.getPixel(x, y) == opaqueBlue }
         }
         assertTrue("添加按钮保持完全不透明", bluePixels > 20)
         val shown = rule.onNodeWithTag("menu-visual:settings", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
-        val hidden = rule.onNodeWithTag("menu-visual:ocr", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
+        val hidden = rule.onNodeWithTag("menu-visual:float", useUnmergedTree = true).fetchSemanticsNode().boundsInRoot
         val shownPixel = image.getPixel((shown.left + 12).toInt(), (shown.bottom - 12).toInt())
         val hiddenPixel = image.getPixel((hidden.left + 12).toInt(), (hidden.bottom - 12).toInt())
         assertTrue("隐藏卡片应比显示卡片更透明", android.graphics.Color.red(hiddenPixel) < android.graphics.Color.red(shownPixel))
         rule.onNodeWithContentDescription("隐藏声音振动", useUnmergedTree = true).performClick()
-        rule.onNodeWithContentDescription("添加拍照识别", useUnmergedTree = true).performClick()
-        rule.onNodeWithContentDescription("隐藏拍照识别", useUnmergedTree = true).assertIsDisplayed()
+        rule.onNodeWithContentDescription("添加键盘调节", useUnmergedTree = true).performClick()
+        rule.onNodeWithContentDescription("隐藏键盘调节", useUnmergedTree = true).assertIsDisplayed()
         rule.runOnIdle { assertNull(saved) }
         rule.onNodeWithContentDescription("保存排列").performClick()
-        rule.runOnIdle { assertEquals(listOf("settings", "ocr"), saved?.menu) }
+        rule.runOnIdle { assertEquals(listOf("settings", "float"), saved?.menu) }
         rule.onNodeWithTag("toolbar-edit").assertIsDisplayed()
         rule.onNodeWithContentDescription("返回").assertIsDisplayed()
         rule.onNodeWithTag("menu-item:sound").assertDoesNotExist()
-        rule.onNodeWithTag("menu-item:ocr").assertIsDisplayed()
-        rule.onNodeWithTag("quick-action-visibility:ocr", useUnmergedTree = true).assertDoesNotExist()
+        rule.onNodeWithTag("menu-item:float").assertIsDisplayed()
+        rule.onNodeWithTag("quick-action-visibility:float", useUnmergedTree = true).assertDoesNotExist()
     }
 
     @Test fun otherMenuCardsMoveThroughIntermediatePositionsWhileDragging() {

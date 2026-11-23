@@ -25,7 +25,6 @@ import com.kingzcheung.xime.settings.LanguagePreferences
 import com.kingzcheung.xime.settings.SchemaMeta
 import com.kingzcheung.xime.settings.SettingsPreferences
 import com.kingzcheung.xime.ui.settings.AboutContent
-import com.kingzcheung.xime.ui.settings.IconSettingsContent
 import com.kingzcheung.xime.ui.settings.LanguageSettingsContent
 import com.kingzcheung.xime.ui.settings.StorageSpaceScreen
 import com.kingzcheung.xime.ui.settings.SchemaToggleItem
@@ -117,31 +116,6 @@ class SettingsSecondaryLayoutGateTest {
                 .performTouchInput { click() }
         }
         rule.runOnIdle { assertEquals(viewports.size, storageOpens) }
-    }
-
-    @Test fun iconPageKeepsStyleChoiceClickableAfterScrolling() {
-        val viewport = mutableStateOf(viewports.first())
-        rule.setContent {
-            val v = viewport.value
-            CompositionLocalProvider(LocalDensity provides Density(1f, v.font)) {
-                MaterialTheme {
-                    Box(Modifier.requiredSize(v.width.dp, v.height.dp).testTag("icon-host")) {
-                        IconSettingsContent(onBack = {}, onChanged = {})
-                    }
-                }
-            }
-        }
-        for (v in viewports) {
-            rule.runOnIdle { viewport.value = v }
-            rule.assertGeometry("icon-host", "图标设置顶部 $v")
-            val lastChoice = rule.onNodeWithTag("icon-style-original").performScrollTo()
-                .assertIsDisplayed().assertHasClickAction()
-            assertInside("icon-host", lastChoice, "图标设置末项 $v")
-            assertTrue("图标样式点击区高度不足 $v", lastChoice.fetchSemanticsNode().size.height >= 47)
-            assertInside("icon-host", rule.onNodeWithText("绑定开启时，恢复原有图标也会恢复原有外观。关闭绑定后可单独恢复图标。")
-                .performScrollTo().assertIsDisplayed(), "图标设置末尾说明 $v")
-            rule.assertGeometry("icon-host", "图标设置末项 $v")
-        }
     }
 
     @Test fun languagePageKeepsLastDragCardReachable() {

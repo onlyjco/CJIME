@@ -104,4 +104,38 @@ class ClipboardCloseAfterPasteTest {
         rule.waitForIdle()
         assertEquals(1, opened)
     }
+
+    @Test fun topAddButtonCreatesPinnedOrFavoriteBesideSearch() {
+        var addedPinned = 0
+        var addedFavorite = 0
+        rule.setContent {
+            MaterialTheme(colorScheme = lightColorScheme()) {
+                var favMode by remember { mutableStateOf(false) }
+                ClipboardBoardView(
+                    listOf(ClipboardItem(1, "明天下午三点开会", timestamp = 1)),
+                    emptyList(), false, false, emptySet(), false, null,
+                    onBack = {}, onQuickSend = {}, onSelectText = {}, onSelectImage = {},
+                    onSplit = { _, _ -> }, onAddQuick = {}, onPinsChange = {}, onRemove = {},
+                    onPhotoAccess = {}, onPick = {}, onSystemPaste = {}, onShare = { _, _ -> },
+                    onPullRemote = null,
+                    onAddPinned = { addedPinned++ },
+                    onOpenSearch = {},
+                    favoritesMode = favMode,
+                    onToggleFavoritesMode = { favMode = !favMode },
+                    onAddFavorite = { addedFavorite++ },
+                )
+            }
+        }
+        rule.onAllNodesWithTag("clipboard-search")[0].fetchSemanticsNode()
+        rule.onAllNodesWithTag("clipboard-top-add")[0].performClick()
+        rule.waitForIdle()
+        assertEquals(1, addedPinned)
+        assertEquals(0, addedFavorite)
+
+        rule.onAllNodesWithTag("clipboard-favorites")[0].performClick()
+        rule.onAllNodesWithTag("clipboard-top-add-favorite")[0].performClick()
+        rule.waitForIdle()
+        assertEquals(1, addedPinned)
+        assertEquals(1, addedFavorite)
+    }
 }

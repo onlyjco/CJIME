@@ -50,7 +50,7 @@ class HandwritingLanguageHintRenderTest {
         val context = ApplicationProvider.getApplicationContext<Context>()
         KeyboardThemes.initFromConfig(context)
         val themes = listOf("soft_blue", "pure_black", "cream_beige")
-        val hints = listOf(InputLanguage.CHINESE to false, InputLanguage.ENGLISH to false, InputLanguage.JAPANESE to true)
+        val hints = listOf(InputLanguage.CHINESE to false, InputLanguage.ENGLISH to false, InputLanguage.CANTONESE to false)
             .map { (l, t) -> handwritingLanguageHint(l, useTemplates = t, preparing = false, missingKana = false) }
         rule.setContent {
             Column(Modifier.background(Color(0xFF808080)).padding(4.dp)) {

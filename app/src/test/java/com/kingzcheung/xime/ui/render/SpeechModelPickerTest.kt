@@ -57,19 +57,19 @@ class SpeechModelPickerTest {
     }
 
     @Test fun downloadAndRetryBelongToOneModelAtLargeFontAndNeverSelectIt() {
-        val target = SpeechModelCatalog.ZIPFORMER_JA
-        val installed = SpeechModelCatalog.ZIPFORMER_JA_INT8
+        val target = SpeechModelCatalog.PARAFORMER
+        val installed = SpeechModelCatalog.SENSEVOICE
         val downloads = mutableStateMapOf<String, ModelDownloadState>()
-        val ready = mutableStateListOf(installed, SpeechModelCatalog.SENSEVOICE)
+        val ready = mutableStateListOf(installed)
         val calls = mutableListOf<String>()
         RuntimeEnvironment.setFontScale(1.5f)
         rule.setContent {
             XimeTheme(darkTheme = true) {
-                SpeechModelPicker(InputLanguage.JAPANESE, installed, ready.toSet(), downloads,
+                SpeechModelPicker(InputLanguage.CHINESE, installed, ready.toSet(), downloads,
                     onSelect = { calls += "select:$it" }, onDownload = { calls += "get:$it" }, onClose = {})
             }
         }
-        val choice = rule.onNodeWithTag("speech-choice:ja:$target")
+        val choice = rule.onNodeWithTag("speech-choice:zh:$target")
         val button = rule.onNodeWithTag("speech-download:$target")
         button.performScrollTo()
         val row = choice.assertIsNotEnabled().fetchSemanticsNode().boundsInRoot
@@ -77,7 +77,7 @@ class SpeechModelPickerTest {
         assertTrue("整块下载热区在型号右侧且与型号同一行", tap.left >= row.right - 1 &&
             tap.center.y in row.top..row.bottom && minOf(tap.width, tap.height) >= 47 * rule.density.density)
         rule.onNodeWithTag("speech-download:$installed").assertDoesNotExist()
-        rule.onNodeWithTag("speech-choice:ja:${SpeechModelCatalog.ZIPFORMER}").assertDoesNotExist()
+        rule.onNodeWithTag("speech-choice:zh:${SpeechModelCatalog.ZIPFORMER}").assertDoesNotExist()
         rule.runOnIdle { System.getenv("CYIME_RENDER_OUT")?.let { directory ->
             val view = ShadowDialog.getLatestDialog().window!!.decorView
             val bmp = Bitmap.createBitmap(view.width, view.height, Bitmap.Config.ARGB_8888)
@@ -95,7 +95,7 @@ class SpeechModelPickerTest {
         assertEquals(listOf("get:$target", "get:$target"), calls)
         rule.runOnIdle { downloads[target] = ModelDownloadState.Complete; ready.add(target) }
         button.assertDoesNotExist()
-        rule.onNodeWithTag("speech-choice:ja:$installed").assertIsSelected()
+        rule.onNodeWithTag("speech-choice:zh:$installed").assertIsSelected()
         choice.assertIsEnabled().performScrollTo().performClick()
         assertEquals("select:$target", calls.last())
     }

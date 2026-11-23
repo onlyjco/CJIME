@@ -299,5 +299,5 @@ private fun DictionaryRow(
 internal fun exportFileName(name: String, format: DictionaryExport.Format, date: java.util.Date = java.util.Date()): String {
     val day = java.text.SimpleDateFormat("yyyyMMdd", java.util.Locale.ROOT).format(date)
     val safe = name.replace(Regex("[\\\\/:*?\"<>|\\s]+"), "_").trim('_').take(40).ifBlank { "词库" }
-    return "CyIME词库-$safe-$day.${format.extension}"
+    return "CJIME词库-$safe-$day.${format.extension}"
 }

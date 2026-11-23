@@ -33,11 +33,8 @@ class QwertySwipeSymbolsTest {
     }
     @org.junit.After fun resetActiveProfile() { KeysConfigHelper.setActiveKeyboardSchema("") }
 
-    @Test fun japaneseAndNineKeyDoNotReceiveAlphabeticPreset() {
+    @Test fun nineKeyDoesNotReceiveAlphabeticPreset() {
         val original = KeysConfigHelper.parseKeyboardYamlSection(defaults, "qwerty")!!["a"]
-        KeysConfigHelper.setActiveKeyboardSchema("japanese")
-        assertEquals(KeysConfigHelper.parseKeyboardYamlSection(defaults, "qwerty_japanese")!!["a"],
-            KeysConfigHelper.getKeyGesture("a", false))
         KeysConfigHelper.setActiveKeyboardSchema("t9")
         assertEquals(LayoutKind.T9, InputProfiles.current("t9").layout.kind)
         assertEquals(original, KeysConfigHelper.getKeyGesture("a", false))

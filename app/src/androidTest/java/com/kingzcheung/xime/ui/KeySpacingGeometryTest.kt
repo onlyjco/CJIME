@@ -99,7 +99,7 @@ class KeySpacingGeometryTest {
     @Test fun realLayoutsUseEqualPaintedGapsAndTheSameKeySizeRatio() {
         data class Mode(val schema: String, val ascii: Boolean = false, val split: Boolean = false)
         val modes = listOf(Mode("rime_ice", true), Mode("rime_ice"), Mode("pinyin_14jian"),
-            Mode("t9_pinyin"), Mode("jaroomaji"), Mode("japanese_kana"), Mode("rime_ice", true, true))
+            Mode("t9_pinyin"), Mode("rime_ice", true, true))
         val mode = mutableStateOf(modes.first())
         val dimensions = mutableStateOf(420 to 280)
         rule.setContent {
@@ -118,8 +118,6 @@ class KeySpacingGeometryTest {
                             .background(Color.Black).testTag("actual-grid")) {
                             val body = Modifier.fillMaxSize()
                             when (mode.value.schema) {
-                                "japanese_kana" -> JapaneseKanaKeyboardLayout({}, {}, Color.Cyan, Color.White, Color.Blue,
-                                    modifier = body, shadowEnabled = false)
                                 "t9_pinyin" -> T9KeyboardLayout({}, callbacks, ui, remember { T9InputController() },
                                     Color.Cyan, Color.White, Color.Blue, modifier = body, shadowEnabled = false, isFloatingMode = true)
                                 else -> KeyboardLayout({}, vm, callbacks, ui, mode.value.ascii, body)
@@ -140,7 +138,6 @@ class KeySpacingGeometryTest {
             rule.waitForIdle()
             val rows = KeysConfigHelper.getKeyRows(current.ascii)
             val labels = when (current.schema) {
-                "japanese_kana" -> listOf("あ", "か", "た")
                 "t9_pinyin" -> listOf("ABC", "DEF", "JKL")
                 else -> listOf(rows[0][0], rows[0][1], rows[1][0]).map {
                     KeysConfigHelper.getKeyDisplayLabel(it, current.ascii, false)

@@ -78,10 +78,6 @@ private fun ThemeSettingsPage(
         rememberKeyboardInputPreferences(false).frostedGlass,
         rememberKeyboardInputPreferences(true).frostedGlass,
     )
-    if (subPage == "icons") {
-        IconSettingsContent(onBack = closeSubPage, onChanged = onThemeChanged)
-        return
-    }
     
     var previewTheme by remember { mutableStateOf<KeyboardColorScheme?>(null) }
     var showGlassSettings by remember { mutableStateOf(false) }
@@ -295,13 +291,6 @@ private fun ThemeSettingsPage(
                 }
             }
             item { KeyboardAppearanceSettings() }
-            item {
-                SettingsSection(title = "桌面图标") {
-                    SettingsItem(icon = Icons.TwoTone.Apps, title = "图标设置",
-                        subtitle = if (com.kingzcheung.xime.ui.theme.IconAppearance.linked) "与视觉样式同步" else "独立选择",
-                        onClick = openIcons, showArrow = true)
-                }
-            }
         }
 
         previewTheme?.let { theme ->
@@ -551,5 +540,14 @@ private fun CustomImageThemeSection(currentThemeId: String, imageTheme: Boolean,
             },
             dismissButton = { TextButton(onClick = { confirmDelete = false }) { Text("取消") } },
         )
+    }
+}
+
+internal fun changeAppearance(context: android.content.Context, onChanged: () -> Unit, change: () -> Unit) {
+    try {
+        change()
+        onChanged()
+    } catch (e: RuntimeException) {
+        com.kingzcheung.xime.util.FileLogger.e("Appearance", "Appearance change failed", e)
     }
 }

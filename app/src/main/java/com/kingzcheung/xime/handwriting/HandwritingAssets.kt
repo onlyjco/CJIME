@@ -15,10 +15,7 @@ import java.io.InputStream
  */
 internal object HandwritingAssets {
     private val packs: Map<String, String> =
-        listOf("hanzi_rare_och.bin", "hanzi_rare_och.json").associateWith { BuiltinModelCatalog.HANDWRITING_RARE } +
-            listOf("kana_default_strokes.json", "kana_default_och.bin", "kana_default_och.json",
-                "japanese_kanji_strokes.json", "japanese_kanji_och.bin", "japanese_kanji_och.json")
-                .associateWith { BuiltinModelCatalog.JAPANESE_HANDWRITING }
+        listOf("hanzi_rare_och.bin", "hanzi_rare_och.json").associateWith { BuiltinModelCatalog.HANDWRITING_RARE }
 
     /** 安装包里有这份（带模型的安装包）。 */
     fun bundled(context: Context, name: String): Boolean =

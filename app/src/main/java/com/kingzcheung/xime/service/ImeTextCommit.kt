@@ -171,9 +171,7 @@ internal class ImeTextCommit(private val service: XimeInputMethodService) {
      * 先结束当前候选，再提交字面内容；手势预览不走此入口。
      */
     internal fun isFullWidthPunctuation(): Boolean {
-        // 全角/半角只作用于中文与日文：英文（ASCII）模式和西班牙、德、法、俄、韩语始终输出半角标点。
-        // 日文的英数模式除外：全角英数、全角空格是日文输入的常用写法，跟随用户的选择。
-        if (service.uiState.value.isAsciiMode && !isJapaneseProfile()) return false
+        if (service.uiState.value.isAsciiMode) return false
         // 英文单词方案（cyime_english）不是 ascii 模式，也是英文，同样只出半角（11-12 反馈：英文键盘被自动转成全角）。
         if (service.uiState.value.inputProfile.language.typesLettersDirectly) return false
         return punctuationWidthChoice()
@@ -184,8 +182,7 @@ internal class ImeTextCommit(private val service: XimeInputMethodService) {
         com.kingzcheung.xime.settings.SettingsPreferences.punctuationFullWidth(service,
             !service.rimeEngine.getOption("ascii_punct"))
 
-    internal fun isJapaneseProfile(): Boolean =
-        service.uiState.value.inputProfile.language == com.kingzcheung.xime.settings.InputLanguage.JAPANESE
+    internal fun isJapaneseProfile(): Boolean = false
 
     /** [hardware] 实体键盘符号保持完整的全角/半角转换；屏幕中文键盘的符号原样上屏。 */
     internal fun keyboardLiteral(text: String, numberPanel: Boolean = false, preserveWidth: Boolean = false,
@@ -195,7 +192,7 @@ internal class ImeTextCommit(private val service: XimeInputMethodService) {
         val chineseKeyboard = !hardware && !state.isAsciiMode &&
             state.inputProfile.language == com.kingzcheung.xime.settings.InputLanguage.CHINESE
         return keyboardLiteralWidth(text, isFullWidthPunctuation(),
-            state.inputProfile.language == com.kingzcheung.xime.settings.InputLanguage.JAPANESE,
+            false,
             numberPanel, preserveWidth, chineseKeyboard)
     }
 
@@ -284,7 +281,7 @@ internal class ImeTextCommit(private val service: XimeInputMethodService) {
         val prefix = compositionCommitPrefix(asTyped, input, candidates.shownPreedit(state.inputProfile), t9,
             usesMergedLetterKeys(state.inputProfile.layout), partial,
             englishDelivered = candidates.pendingEnglishText.isNotEmpty(),
-            japanesePreview = service.japaneseInputController.conversionPreview()) {
+            japanesePreview = null) {
             if (action?.isPluginCandidate == true && !t9) action.commitText
             else engine.conversionPreview().ifEmpty { input }
         }
@@ -359,7 +356,7 @@ internal class ImeTextCommit(private val service: XimeInputMethodService) {
             val values = ContentValues().apply {
                 put(MediaStore.Images.Media.DISPLAY_NAME, imageFile.name)
                 put(MediaStore.Images.Media.MIME_TYPE, mimeType)
-                put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/CyIME")
+                put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/CJIME")
                 put(MediaStore.Images.Media.IS_PENDING, 1)
             }
             val collection = MediaStore.Images.Media.getContentUri(MediaStore.VOLUME_EXTERNAL_PRIMARY)

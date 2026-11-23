@@ -115,11 +115,6 @@ fun ModelLocalContent(
         },
     ) { padding ->
         val localModels = uiState.models.filter { it.isDownloaded }
-        // 带模型的安装包内置拍照识别模型（没有删除按钮）；轻量版下载后和其他模型一样列在下面。
-        val builtinOcr = remember(localModels) {
-            com.kingzcheung.xime.ocr.OcrModelFiles.bundled(context) &&
-                localModels.none { it.model.id == com.kingzcheung.xime.model.BuiltinModelCatalog.OCR_MODEL }
-        }
         // 三段都用设置页统一的分组样式：标题 + 一个圆角面板，行样式一致，说明文字只放在所属分组里。
         val listState = rememberLazyListState()
         LazyColumn(
@@ -132,10 +127,9 @@ fun ModelLocalContent(
             verticalArrangement = Arrangement.spacedBy(16.dp),
         ) {
             item(key = "models") {
-                SettingsSection(title = "已安装模型(${localModels.size + if (builtinOcr) 1 else 0})") {
-                    if (builtinOcr) BuiltinOcrModelRow()
+                SettingsSection(title = "已安装模型(${localModels.size})") {
                     localModels.forEachIndexed { index, item ->
-                        if (builtinOcr || index > 0) ModelRowDivider()
+                        if (index > 0) ModelRowDivider()
                         ModelLocalRow(item = item, autoUpdate = autoUpdate, onDelete = { pendingDelete = item })
                     }
                     if (localModels.isEmpty() && uiState.isLoading) {
@@ -283,16 +277,6 @@ private fun ModelImportSection(
 }
 
 /** 内置 OCR 与下载的模型用同一种行样式，只是没有删除按钮。 */
-@Composable
-private fun BuiltinOcrModelRow() {
-    ModelRow(
-        name = "拍照识别模型",
-        tag = "文字识别",
-        detail = "中文、英文 · 完整版内置，无需下载",
-        modifier = Modifier.testTag("builtin-ocr-model"),
-    )
-}
-
 @Composable
 private fun ModelLocalRow(
     item: ModelItemState,

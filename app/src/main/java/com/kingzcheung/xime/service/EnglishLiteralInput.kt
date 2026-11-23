@@ -20,20 +20,13 @@ internal const val WORD_HYPHEN = "-"
  * 俄语、韩语、越南语不用撇号，中文、日语不走这里。
  */
 internal fun apostropheJoinsWord(language: com.kingzcheung.xime.settings.InputLanguage, pending: String): Boolean =
-    pending.lastOrNull()?.isLetter() == true && (language == com.kingzcheung.xime.settings.InputLanguage.ENGLISH ||
-        com.kingzcheung.xime.settings.LetterLanguage.of(language).let {
-            it != null && it != com.kingzcheung.xime.settings.LetterLanguage.RUSSIAN &&
-                it != com.kingzcheung.xime.settings.LetterLanguage.KOREAN &&
-                it != com.kingzcheung.xime.settings.LetterLanguage.VIETNAMESE
-        })
+    pending.lastOrNull()?.isLetter() == true && language == com.kingzcheung.xime.settings.InputLanguage.ENGLISH
 
 /**
- * 接进正在打的词的符号：撇号见 [apostropheJoinsWord]；连字符只在马来语（叠词 kanak-kanak 很多，打了 kanak- 补全接着出 kanak-kanak），
- * 同样要光标前是这个词的字母。
+ * 接进正在打的词的符号：撇号见 [apostropheJoinsWord]。
  */
 internal fun markJoinsWord(mark: String, language: com.kingzcheung.xime.settings.InputLanguage, pending: String): Boolean = when (mark) {
     WORD_APOSTROPHE -> apostropheJoinsWord(language, pending)
-    WORD_HYPHEN -> language == com.kingzcheung.xime.settings.InputLanguage.MALAY && pending.lastOrNull()?.isLetter() == true
     else -> false
 }
 
@@ -68,23 +61,12 @@ internal fun commitEnglishLetter(
 }
 
 /**
- * 「英文单词」方案（字母先进组字区，从候选里选词上屏）正在打单词，不是它的 ABC 状态：
- * 「首字母大写」「选词后自动加空格」「标点后自动加空格」这些英文开关同样要管（#311：以前只管英文直接输入）。
- */
-internal fun typesEnglishWords(profile: com.kingzcheung.xime.settings.InputProfile, asciiMode: Boolean): Boolean =
-    !asciiMode && profile.language == com.kingzcheung.xime.settings.InputLanguage.ENGLISH &&
-        profile.scheme == com.kingzcheung.xime.settings.InputScheme.WORDS
-
-/**
- * 英文单词方案里首字母是自动大写打出来的，回车上屏后记进英文词记忆时首字母还原成小写（Xyzw 记 xyzw），
+ * 英文直输模式下首字母是自动大写打出来的，记词时首字母还原成小写（Xyzw 记 xyzw），
  * 免得句中再打时也给大写；后面还有别的大写字母（McDonald、NASA）是自己打的，照原样记。
  */
 internal fun spellingWithoutAutoCap(input: String): String =
     if (input.length > 1 && input[0].isUpperCase() && input.drop(1).none { it.isUpperCase() })
         input.replaceFirstChar { it.lowercaseChar() } else input
-
-/** 英文单词方案选词后自动加的空格只跟在词后面：候选里没有字母（标点、数字、符号）不加。 */
-internal fun takesWordsAutoSpace(text: String): Boolean = text.isNotEmpty() && text.any { it.isLetter() } && !text.last().isWhitespace()
 
 /** 「首字母大写」：英文和西、德、法、意、俄语键盘共用这一个开关（键名沿用英文时的旧名，已有的开关状态不变）。 */
 internal const val ENGLISH_SENTENCE_CAPS = "english_sentence_caps"

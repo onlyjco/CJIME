@@ -73,7 +73,7 @@ class LanguageKeyButtonTest {
                 LocalKeyboardInputActions provides KeyboardInputActions(
                     schemas = listOf(
                         SchemaInfo("first", "中文九键", "", "", ""),
-                        SchemaInfo("second", "日语26键", "", "", "", language = com.kingzcheung.xime.settings.InputLanguage.JAPANESE)),
+                        SchemaInfo("second", "粤语26键", "", "", "", language = com.kingzcheung.xime.settings.InputLanguage.CANTONESE)),
                     currentInputModeId = "first", onSwitchSchema = {})) {
                 androidx.compose.material3.MaterialTheme {
                     Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
@@ -121,11 +121,11 @@ class LanguageKeyButtonTest {
         val context = object : ContextWrapper(base) {
             override fun getSharedPreferences(name: String, mode: Int) = preferences.getSharedPreferences()
         }
-        // The isolated store defaults to Chinese/English; explicitly enable the Japanese fixture.
+        // The isolated store defaults to Chinese/English; explicitly enable Cantonese.
         preferences.getSharedPreferences().edit().putStringSet(
             com.kingzcheung.xime.settings.LanguagePreferences.KEY,
             setOf(com.kingzcheung.xime.settings.InputLanguage.CHINESE.id,
-                com.kingzcheung.xime.settings.InputLanguage.JAPANESE.id,
+                com.kingzcheung.xime.settings.InputLanguage.CANTONESE.id,
                 com.kingzcheung.xime.settings.InputLanguage.ENGLISH.id)).commit()
         SettingsPreferences.setKeyboardTheme(context, "transparent_glass")
         val saved = FrostedGlassProfiles(FrostedGlassConfig(true, 7f, .31f, .68f),
@@ -147,7 +147,7 @@ class LanguageKeyButtonTest {
                 LocalKeyboardInputActions provides KeyboardInputActions(
                     schemas = listOf(SchemaInfo("first", "中文九键", "", "", "",
                         language = com.kingzcheung.xime.settings.InputLanguage.CHINESE),
-                        SchemaInfo("second", "日语模式", "", "", "", language = com.kingzcheung.xime.settings.InputLanguage.JAPANESE)),
+                        SchemaInfo("second", "粤语模式", "", "", "", language = com.kingzcheung.xime.settings.InputLanguage.CANTONESE)),
                     currentInputModeId = "first", onSwitchSchema = {})) {
                 MaterialTheme(colorScheme = if (dark) darkColorScheme(surface = darkSurface, onSurface = Color.White)
                     else lightColorScheme(surface = lightSurface, onSurface = Color(0xFF202020))) {
@@ -262,7 +262,7 @@ class LanguageKeyButtonTest {
                 LocalKeyboardInputActions provides KeyboardInputActions(
                     schemas = listOf(
                         SchemaInfo("first", "同名方案", "", "", ""),
-                        SchemaInfo("second", "日语模式", "", "", "", language = com.kingzcheung.xime.settings.InputLanguage.JAPANESE),
+                        SchemaInfo("second", "粤语模式", "", "", "", language = com.kingzcheung.xime.settings.InputLanguage.CANTONESE),
                     ),
                     currentInputModeId = currentModeId,
                     onSwitchSchema = { events += "schema:$it" },

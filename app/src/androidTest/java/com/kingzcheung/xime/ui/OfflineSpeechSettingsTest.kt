@@ -39,18 +39,18 @@ class OfflineSpeechSettingsTest {
     }
     @Test fun eachLanguageSelectsIndependentlyAndShowsOnlyCompatibleModels() = withSavedChoices { manager ->
         screen()
-        val zh = InputLanguage.CHINESE; val ja = InputLanguage.JAPANESE; val en = InputLanguage.ENGLISH
-        rule.onNodeWithTag("speech-finish:ja:sensevoice").assertDoesNotExist()
-        rule.onNodeWithTag("speech-finish:ja:whole").assertDoesNotExist()
-        rule.onNodeWithTag("speech-language:ja").performScrollTo().performClick()
-        choice(ja, SpeechModelCatalog.ZIPFORMER).assertDoesNotExist()
-        if (manager.selection(SpeechModelCatalog.ZIPFORMER_JA).ready) {
-            choice(ja, SpeechModelCatalog.ZIPFORMER_JA).performScrollTo().performClick()
-            assertEquals(SpeechModelCatalog.ZIPFORMER_JA, manager.getSelectedModelId(ja))
+        val zh = InputLanguage.CHINESE; val yue = InputLanguage.CANTONESE; val en = InputLanguage.ENGLISH
+        rule.onNodeWithTag("speech-finish:yue:sensevoice").assertDoesNotExist()
+        rule.onNodeWithTag("speech-finish:yue:whole").assertDoesNotExist()
+        rule.onNodeWithTag("speech-language:yue").performScrollTo().performClick()
+        choice(yue, SpeechModelCatalog.ZIPFORMER).assertDoesNotExist()
+        if (manager.selection(SpeechModelCatalog.SENSEVOICE).ready) {
+            choice(yue, SpeechModelCatalog.SENSEVOICE).performScrollTo().performClick()
+            assertEquals(SpeechModelCatalog.SENSEVOICE, manager.getSelectedModelId(yue))
         } else rule.onNode(hasText("关闭") and hasAnyAncestor(isDialog())).performClick()
-        val japanese = manager.getSelectedModelId(ja)
+        val cantonese = manager.getSelectedModelId(yue)
         rule.onNodeWithTag("speech-language:en").performScrollTo().performClick()
-        choice(en, SpeechModelCatalog.ZIPFORMER_JA).assertDoesNotExist()
+        choice(en, SpeechModelCatalog.ZIPFORMER).assertDoesNotExist()
         if (manager.selection(SpeechModelCatalog.SENSEVOICE).ready) {
             choice(en, SpeechModelCatalog.SENSEVOICE).performScrollTo().performClick()
             assertEquals(SpeechModelCatalog.SENSEVOICE, manager.getSelectedModelId(en))
@@ -64,7 +64,7 @@ class OfflineSpeechSettingsTest {
             }
         } else rule.onNode(hasText("关闭") and hasAnyAncestor(isDialog())).performClick()
         assertEquals(english, manager.getSelectedModelId(en))
-        assertEquals(japanese, manager.getSelectedModelId(ja))
+        assertEquals(cantonese, manager.getSelectedModelId(yue))
         rule.onNodeWithTag("speech-language:zh").performScrollTo()
         val output = File(rule.activity.getExternalFilesDir(null), "speech-eval/model-settings.png")
         output.parentFile?.mkdirs()
@@ -73,7 +73,7 @@ class OfflineSpeechSettingsTest {
         finally { bitmap.recycle() }
     }
     @Test fun senseVoiceCannotCorrectItselfAndDoesNotChangeOtherLanguages() = withSavedChoices { manager ->
-        val japanese = manager.getSelectedModelId(InputLanguage.JAPANESE)
+        val cantonese = manager.getSelectedModelId(InputLanguage.CANTONESE)
         manager.setModel(SpeechModelCatalog.SENSEVOICE, InputLanguage.CHINESE)
         screen()
         rule.onNodeWithTag("speech-language:zh").performScrollTo().performClick()
@@ -83,6 +83,6 @@ class OfflineSpeechSettingsTest {
         rule.onNodeWithTag("speech-finish:zh:sensevoice").assertDoesNotExist()
         rule.onNodeWithTag("speech-finish:zh:none").performScrollTo().assertIsDisplayed()
         rule.onNodeWithTag("speech-finish:zh:whole").performScrollTo().assertIsDisplayed()
-        assertEquals(japanese, manager.getSelectedModelId(InputLanguage.JAPANESE))
+        assertEquals(cantonese, manager.getSelectedModelId(InputLanguage.CANTONESE))
     }
 }

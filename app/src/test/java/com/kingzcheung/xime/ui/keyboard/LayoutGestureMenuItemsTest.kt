@@ -17,14 +17,13 @@ class LayoutGestureMenuItemsTest {
     @Test fun eachLayoutShowsOnlyItsOwnToggles() {
         assertEquals(listOf(ToolbarButton.GLIDE, ToolbarButton.T9_FLICK, ToolbarButton.FLICK_DISC), shown(LayoutKind.T9))
         assertEquals(listOf(ToolbarButton.FOURTEEN_SWIPE, ToolbarButton.FLICK_DISC), shown(LayoutKind.MERGED))
-        assertEquals(listOf(ToolbarButton.KANA_HINTS, ToolbarButton.FLICK_DISC), shown(LayoutKind.KANA_KEYPAD))
         assertEquals(listOf(ToolbarButton.GLIDE), shown(LayoutKind.ALPHABETIC))
         for (kind in listOf(LayoutKind.HANDWRITING, LayoutKind.NUMBER, LayoutKind.STROKE_KEYPAD))
             assertTrue(shown(kind).isEmpty())
     }
 
     @Test fun stateFollowsSettings() {
-        assertEquals(listOf(true, true, false, true, false), ToolbarButton.LAYOUT_GESTURES.map { it.gestureOn(prefs) })
+        assertEquals(listOf(true, true, false, false), ToolbarButton.LAYOUT_GESTURES.map { it.gestureOn(prefs) })
         assertEquals(listOf("flick_direction_disc_v2", "flick_direction_disc"), ToolbarButton.FLICK_DISC.gestureKeys())
     }
 
@@ -57,6 +56,6 @@ class LayoutGestureMenuItemsTest {
     @Test fun arrangeableTogglesAtEndOfDefaultMenu() {
         assertTrue(ToolbarButton.LAYOUT_GESTURES.all { it in ToolbarButton.CUSTOMIZABLE && it in ToolbarButton.TOGGLES })
         val menu = QuickActionLayout.defaultMenu(emptyList())
-        assertEquals(ToolbarButton.LAYOUT_GESTURES.map { it.id }, menu.takeLast(5))
+        assertEquals(ToolbarButton.LAYOUT_GESTURES.map { it.id }, menu.takeLast(4))
     }
 }

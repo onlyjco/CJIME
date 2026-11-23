@@ -57,7 +57,7 @@ internal fun CellDictionaryImportGuide(onDismiss: () -> Unit, onImport: () -> Un
             GuideFormat("Gboard 个人词典(.zip)", "Gboard 导出的压缩包直接导入。")
             GuideFormat("微软拼音(.dctx)", "微软拼音导出的词库文件，声调去掉后导入。")
             GuideText("搜狗 .bin 和微软拼音 .dat 读不了，请先在原输入法里导出成文本。")
-            GuideFormat("JSON(.json)", "CyIME 自己的格式，拼音按字用空格隔开：")
+            GuideFormat("JSON(.json)", "CJIME 自己的格式，拼音按字用空格隔开：")
             GuideExample("{\"format\": \"cyime.dictionary.v1\", \"name\": \"我的词库\",\n" +
                 " \"language\": \"zh\", \"scheme\": \"pinyin\",\n" +
                 " \"entries\": [{\"word\": \"你好\", \"code\": \"ni hao\"}]}")

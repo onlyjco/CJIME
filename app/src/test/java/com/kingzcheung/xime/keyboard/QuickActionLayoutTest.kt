@@ -6,7 +6,7 @@ import org.junit.Test
 
 class QuickActionLayoutTest {
     @Test fun existingToolbarIsKeptAndDefaultMenuSkipsItsEntries() {
-        val toolbar = listOf("schema", "emoji", "ocr", "clipboard")
+        val toolbar = listOf("schema", "emoji", "voice", "clipboard")
         val layout = QuickActionLayout.normalize(toolbar, QuickActionLayout.defaultMenu(toolbar))
         assertEquals(toolbar, layout.toolbar)
         assertEquals(listOf("settings", "float", "sound", "glass", "incognito", "full_shape", "floating", "traditional"), layout.menu.filter { it !in ToolbarButton.LAYOUT_GESTURES.map { g -> g.id } })
@@ -16,9 +16,9 @@ class QuickActionLayoutTest {
     }
 
     @Test fun eachEntryLivesInOnePlaceAndSettingsCannotBeRemoved() {
-        val layout = QuickActionLayout.normalize(listOf("emoji", "emoji", "glass"), listOf("glass", "ocr", "arrange"))
+        val layout = QuickActionLayout.normalize(listOf("emoji", "emoji", "glass"), listOf("glass", "voice", "arrange"))
         assertEquals(listOf("emoji", "glass"), layout.toolbar)
-        assertEquals(listOf("ocr", "settings"), layout.menu)
+        assertEquals(listOf("voice", "settings"), layout.menu)
     }
 
     /** 菜单编辑只列当前键盘会出现的入口；别的键盘专用的入口保存后仍在原来的区和位置。 */
@@ -36,8 +36,8 @@ class QuickActionLayoutTest {
 
     @Test fun enabledPluginButtonGoesIntoMenu() {
         val plugin = "com.example.plugin:open"
-        val menu = listOf("settings", "ocr")
-        assertEquals(listOf("settings", "ocr", plugin),
+        val menu = listOf("settings", "voice")
+        assertEquals(listOf("settings", "voice", plugin),
             QuickActionLayout.withPluginButtons(listOf("emoji"), menu, listOf(plugin)))
         // 已经在工具栏或菜单里的不动，也不重复
         assertEquals(menu, QuickActionLayout.withPluginButtons(listOf(plugin), menu, listOf(plugin)))

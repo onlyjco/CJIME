@@ -13,10 +13,10 @@ class NativeAbiTest {
         assertEquals("x86", NativeAbi.of("i686"))
     }
 
-    @Test fun ocrEngineIsOneVerifiedLibraryForThisAbi() {
-        val version = BuiltinModelCatalog.models.first { it.id == BuiltinModelCatalog.OCR_ENGINE }.resolvedVersion()!!
+    @Test fun speechEngineIsOneVerifiedLibraryForThisAbi() {
+        val version = BuiltinModelCatalog.models.first { it.id == BuiltinModelCatalog.SPEECH_ENGINE }.resolvedVersion()!!
         assert(version.archiveUrl!!.endsWith("-${NativeAbi.current}.tar.bz2"))
-        assertEquals(listOf("libopencv_java4.so"), version.files.map { it.name })
+        assertEquals(listOf(com.kingzcheung.xime.speech.SherpaLibrary.LIBRARY), version.files.map { it.name })
         assert(version.files.single().sha256.length == 64 && version.sha256.length == 64)
     }
 }

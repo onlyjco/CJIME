@@ -63,18 +63,20 @@ import com.kingzcheung.xime.ui.keyboard.legibleForTheme
 
 @Composable
 fun SettingsSection(
-    title: String,
+    title: String? = null,
     /** 设置搜索跳转用的定位名；标题随界面语言翻译时传中文原名，搜索仍能找到这里。 */
-    searchKey: String = title,
+    searchKey: String = title.orEmpty(),
     content: @Composable ColumnScope.() -> Unit
 ) {
     Column {
-        Text(
-            text = title,
-            style = MaterialTheme.typography.labelLarge,
-            color = MaterialTheme.colorScheme.primary,
-            modifier = Modifier.padding(bottom = 8.dp)
-        )
+        if (!title.isNullOrEmpty()) {
+            Text(
+                text = title,
+                style = MaterialTheme.typography.labelLarge,
+                color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(bottom = 8.dp)
+            )
+        }
         Surface(
             modifier = Modifier.fillMaxWidth(),
             shape = RoundedCornerShape(12.dp),
@@ -759,7 +761,7 @@ fun CodeDisplayCard(
                             if (showCodeInInputBox) {
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Text(
-                                        text = "CyIME shu ru fa",
+                                        text = "CJIME shu ru fa",
                                         fontSize = 12.sp,
                                         color = onSurface,
                                         maxLines = 1
@@ -849,7 +851,7 @@ fun CodeDisplayCard(
 fun CodeDisplayCardPreview_SelectedWithCode() {
     XimeTheme {
         CodeDisplayCard(
-            title = "CyIME",
+            title = "CJIME",
             isSelected = true,
             showCodeInInputBox = true,
             onClick = {},
@@ -865,7 +867,7 @@ fun CodeDisplayCardPreview_SelectedWithCode() {
 fun CodeDisplayCardPreview_NotSelectedNoCode() {
     XimeTheme {
         CodeDisplayCard(
-            title = "CyIME",
+            title = "CJIME",
             isSelected = true,
             showCodeInInputBox = false,
             onClick = {},

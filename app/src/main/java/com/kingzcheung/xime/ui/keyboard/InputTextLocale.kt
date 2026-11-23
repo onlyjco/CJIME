@@ -19,8 +19,7 @@ internal fun inputTextLocaleTag(language: InputLanguage, scheme: InputScheme, tr
     when (language) {
         InputLanguage.CHINESE ->
             if (scheme == InputScheme.ZHUYIN || scheme == InputScheme.CANGJIE || traditionalOutput) "zh-TW" else "zh-CN"
-        InputLanguage.JAPANESE -> "ja-JP"
-        InputLanguage.KOREAN -> "ko-KR"
+        InputLanguage.CANTONESE -> "zh-HK"
         else -> null
     }
 

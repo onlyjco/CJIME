@@ -59,15 +59,7 @@ object DefaultModelInstaller {
      * 推荐配置按了「按推荐设置」、「以后再说」或「更多配置」（[SetupGuide.markShown]）之后才照常下载。
      * 以前装好一打开就在后台下手写和语音模型（两三百 MB），用户还没选。老用户升级不受影响；老人包没有推荐配置，照旧。
      */
-    private fun awaitingGuide(context: Context): Boolean {
-        val prefs = preferences(context)
-        if (!prefs.contains(KEY_AWAIT_GUIDE)) {
-            val fresh = !com.kingzcheung.xime.BuildConfig.ELDER && !SettingsPreferences.isSetupCompleted(context) &&
-                !SetupGuide.isShown(context) && prefs.all.keys.none { it.startsWith("handled_") || it.startsWith("pending_") }
-            prefs.edit().putBoolean(KEY_AWAIT_GUIDE, fresh).commit()
-        }
-        return prefs.getBoolean(KEY_AWAIT_GUIDE, false) && !SetupGuide.isShown(context)
-    }
+    private fun awaitingGuide(context: Context): Boolean = false
 
     internal fun isHandled(context: Context, id: String): Boolean = preferences(context).getBoolean("handled_$id", false)
 

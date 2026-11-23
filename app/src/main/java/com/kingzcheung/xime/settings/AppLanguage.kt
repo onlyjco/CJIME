@@ -13,17 +13,16 @@ import com.kingzcheung.xime.platform.AndroidPlatform
  * 系统设置 › 应用 › CyIME › 语言 里改的也是同一个值。Android 12 及更早没有这个机制，界面跟随系统语言；
  * 不自己包 Context 换语言——那样包出来的 Resources 配置是死的，旋转后键盘还拿旧的屏幕方向。
  *
- * 文字在 res/values（简体，默认）、values-b+zh+Hant、values-en、values-ja；系统语言不是这四种时显示简体中文。
+ * 文字在 res/values（简体，默认）、values-b+zh+Hant、values-en；系统语言不是这三种时显示简体中文。
  */
 enum class AppLanguage(val tag: String, val nativeName: String) {
     SYSTEM("", ""),
     SIMPLIFIED_CHINESE("zh-CN", "简体中文"),
     TRADITIONAL_CHINESE("zh-TW", "繁體中文"),
-    ENGLISH("en", "English"),
-    JAPANESE("ja", "日本語");
+    ENGLISH("en", "English");
 
     companion object {
-        /** 系统或别处设的语言标签归到这四种里；认不出的当作跟随系统。 */
+        /** 系统或别处设的语言标签归到这三种里；认不出的当作跟随系统。 */
         fun fromTag(tag: String?): AppLanguage {
             if (tag.isNullOrBlank()) return SYSTEM
             val locale = Locale.forLanguageTag(tag)
@@ -31,7 +30,6 @@ enum class AppLanguage(val tag: String, val nativeName: String) {
                 "zh" -> if (locale.script == "Hant" || locale.script.isEmpty() && locale.country in TRADITIONAL_REGIONS)
                     TRADITIONAL_CHINESE else SIMPLIFIED_CHINESE
                 "en" -> ENGLISH
-                "ja" -> JAPANESE
                 else -> SYSTEM
             }
         }

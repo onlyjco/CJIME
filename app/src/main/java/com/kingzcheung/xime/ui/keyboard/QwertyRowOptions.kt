@@ -77,9 +77,7 @@ internal fun syllableSplitActive(setting: Boolean, ascii: Boolean, profile: com.
  * 打单词时它们打的是撇号 '，接进这个词（what's、l'eau，见 apostropheJoinsWord）。英文单词方案（字母先进组字区）、俄语、韩语、越南语不算。
  */
 internal fun apostropheSplitActive(setting: Boolean, ascii: Boolean, profile: com.kingzcheung.xime.settings.InputProfile): Boolean =
-    setting && (ascii || profile.typesLettersDirectly && profile.language != com.kingzcheung.xime.settings.InputLanguage.RUSSIAN &&
-        profile.language != com.kingzcheung.xime.settings.InputLanguage.KOREAN &&
-        profile.language != com.kingzcheung.xime.settings.InputLanguage.VIETNAMESE)
+    setting && (ascii || profile.typesLettersDirectly)
 
 /** 正在打一个英文（西、德、法、意…）词：光标前是这个词的字母，Shift 键这时是撇号。 */
 internal fun typingWord(pending: String): Boolean = pending.lastOrNull()?.isLetter() == true

@@ -14,8 +14,8 @@ class AppLanguageTest {
         assertEquals(AppLanguage.TRADITIONAL_CHINESE, AppLanguage.fromTag("zh-HK"))
         assertEquals(AppLanguage.TRADITIONAL_CHINESE, AppLanguage.fromTag("zh-Hant"))
         assertEquals(AppLanguage.ENGLISH, AppLanguage.fromTag("en-GB"))
-        assertEquals(AppLanguage.JAPANESE, AppLanguage.fromTag("ja-JP"))
         // 没有翻译的语言当作跟随系统，界面显示简体中文（values 默认）。
+        assertEquals(AppLanguage.SYSTEM, AppLanguage.fromTag("ja-JP"))
         assertEquals(AppLanguage.SYSTEM, AppLanguage.fromTag("fr-FR"))
     }
 

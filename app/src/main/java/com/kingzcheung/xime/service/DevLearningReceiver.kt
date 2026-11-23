@@ -117,16 +117,7 @@ class DevLearningReceiver : BroadcastReceiver() {
                     "restart=${if (putBack.isEmpty()) "no" else "yes"}; " + verify(app, dir)
             }
             "verify" -> background { verify(app, snapshotDir(app)) }
-            "cpu_bench_state" -> {
-                val cpu = com.kingzcheung.xime.runtime.adaptation.CpuBenchmarkRunner.cached(app)
-                val device = com.kingzcheung.xime.runtime.adaptation.DeviceCapabilityProbe.read(app)
-                val verdict = com.kingzcheung.xime.runtime.adaptation.PerformanceTiers.explain(device)
-                report("cpu_bench version=${com.kingzcheung.xime.runtime.adaptation.CpuBenchmark.VERSION} " +
-                    "single_ns=${cpu?.singleNs ?: -1} dual_ns=${cpu?.dualNs ?: -1} " +
-                    "cpus=${com.kingzcheung.xime.runtime.adaptation.CpuBenchmarkRunner.cachedCpus(app).orEmpty()} " +
-                    "tier=${verdict.tier} limit=${verdict.limit} cpu_tier=${verdict.cpuTier ?: "none"} " +
-                    "auto=${com.kingzcheung.xime.settings.PerformanceProfile.autoTier(app) ?: "off"}")
-            }
+            "cpu_bench_state" -> report("cpu_bench removed")
             "perf_state" -> report(com.kingzcheung.xime.settings.PerformanceCosts.Item.entries.joinToString(" ") {
                 "${it.id}=${runCatching { com.kingzcheung.xime.settings.PerformanceCosts.isOn(app, it) }.getOrDefault(false)}"
             })
@@ -278,7 +269,7 @@ class DevLearningReceiver : BroadcastReceiver() {
         /** cell_set runs on its own thread; cell_state reports these. */
         @Volatile var cellApplying = false
         @Volatile var cellLast = "none"
-        const val ACTION = "com.cyletix.cyime.DEV_LEARNING"
+        const val ACTION = "com.onlyjco.cjime.DEV_LEARNING"
         const val TAG = "DevLearning"
         const val SETTINGS_PREFS = "kime_settings"
         const val SETTINGS_FILE = "kime_settings.json"

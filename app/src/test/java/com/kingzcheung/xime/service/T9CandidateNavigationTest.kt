@@ -82,7 +82,7 @@ class T9CandidateNavigationTest {
                 assertSame(it, it.retreatT9Candidate(profile))
             }
         val focused = composing.advanceT9Candidate(profile)
-        listOf(profile.copy(language = InputLanguage.ENGLISH), profile.copy(language = InputLanguage.JAPANESE),
+        listOf(profile.copy(language = InputLanguage.ENGLISH),
             profile.copy(layout = InputLayout.NUMBER), profile.copy(layout = InputLayout.QWERTY),
             profile.copy(scheme = InputScheme.STROKE), profile.handwriting())
             .forEach {

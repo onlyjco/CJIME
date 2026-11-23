@@ -82,7 +82,7 @@ internal object TypingStatsShare {
         val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = colors.muted; alpha = 40 }
 
         var y = pad + 64f
-        canvas.drawText("我的 CyIME 打字速度", pad, y, title)
+        canvas.drawText("我的 CJIME 打字速度", pad, y, title)
         y += 64f
         canvas.drawText("$device · 各输入方式累计", pad, y, sub)
         y = pad + headerHeight
@@ -104,7 +104,7 @@ internal object TypingStatsShare {
             canvas.drawRoundRect(RectF(pad, barTop, pad + w, barTop + 12f), 6f, 6f, bar)
             y += rowHeight
         }
-        canvas.drawText("仅含统计数字，不含输入内容 · CyIME $version", pad, height - pad - 10f, sub)
+        canvas.drawText("仅含统计数字，不含输入内容 · CJIME $version", pad, height - pad - 10f, sub)
         return bitmap
     }
 

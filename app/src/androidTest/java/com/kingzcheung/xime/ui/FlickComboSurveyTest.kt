@@ -73,14 +73,12 @@ class FlickComboSurveyTest {
     @Test fun t9FlickOff() = survey("t9", flick = false, disc = false)
     @Test fun t9FlickOn() = survey("t9", flick = true, disc = false)
     @Test fun t9FlickOnDisc() = survey("t9", flick = true, disc = true)
-    @Test fun kana() = survey("kana", flick = false, disc = false)
-    @Test fun kanaDisc() = survey("kana", flick = false, disc = true)
 
     private fun survey(layout: String, flick: Boolean, disc: Boolean) {
         prefs.edit().putBoolean("t9_flick_letters", flick).putBoolean("flick_direction_disc_v2", disc)
             .putFloat("fourteen_letter_swipe_dp", 24f).putBoolean(SettingsPreferences.KEY_SHOW_PRESS_BUBBLE, false)
             .putBoolean(SettingsPreferences.KEY_SPLIT_KEYBOARD, false).commit()
-        val schema = if (layout == "t9") "t9_pinyin" else "japanese_kana"
+        val schema = "t9_pinyin"
         KeysConfigHelper.setActiveKeyboardSchema(schema)
         val modeState = androidx.compose.runtime.mutableStateOf(modes.first())
         rule.setContent {
@@ -104,8 +102,7 @@ class FlickComboSurveyTest {
                                 floatingScreenHeightDp = mode.screenH),
                                 KeyboardCallbacks(onKeyPress = { text, _ -> commits += "key:$text" },
                                     onCandidateSelect = {}, onCommitText = { commits += "lit:$it" },
-                                    onPreeditKeyInput = { false }, onHideKeyboard = {}, onUpdateToolbarButtons = {},
-                                    onJapaneseKanaAction = { commits += "kana:$it" }),
+                                    onPreeditKeyInput = { false }, onHideKeyboard = {}, onUpdateToolbarButtons = {}),
                                 modifier = if (mode.floating) Modifier.requiredSize(mode.screenW.dp, mode.screenH.dp)
                                     else Modifier.requiredSize(mode.screenW.dp, (height + 44).dp))
                         }
@@ -118,8 +115,7 @@ class FlickComboSurveyTest {
             rule.runOnIdle { modeState.value = mode; commits.clear() }
             rule.waitForIdle()
             val host = rule.onNodeWithTag("host").fetchSemanticsNode().boundsInRoot
-            val node = if (layout == "t9") rule.onAllNodesWithText("JKL", ignoreCase = true, useUnmergedTree = true).onFirst()
-                else rule.onNodeWithTag("kana-key:na")
+            val node = rule.onAllNodesWithText("JKL", ignoreCase = true, useUnmergedTree = true).onFirst()
             val bounds = node.fetchSemanticsNode().boundsInRoot
             val c = bounds.center - host.topLeft
             val unit = with(rule.density) { 1.dp.toPx() }

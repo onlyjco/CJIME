@@ -146,7 +146,7 @@ object DeviceHost {
         if (existing == null && _devices.value.size >= MAX_DEVICES) return null
         val token = token()
         val device = HostedDevice(existing?.deviceId ?: UUID.randomUUID().toString(), clientId,
-            name.filterNot { it.isISOControl() }.take(64).ifBlank { "CyIME 设备" }, hash(token))
+            name.filterNot { it.isISOControl() }.take(64).ifBlank { "CJIME 设备" }, hash(token))
         val updated = listOf(device) + _devices.value.filterNot { it.clientId == clientId }
         saveDevices(updated); _devices.value = updated
         token
@@ -409,7 +409,7 @@ object DeviceHost {
                 val token = request.getString("token")
                 require(token.matches(Regex("[A-Za-z0-9_-]{43}")))
                 val peer = WindowsPeer(UUID.fromString(request.getString("id")).toString(),
-                    request.optString("name").filterNot { it.isISOControl() }.take(64).ifBlank { "CyIME 设备" },
+                    request.optString("name").filterNot { it.isISOControl() }.take(64).ifBlank { "CJIME 设备" },
                     WindowsPairingProtocol.localOrigin(request.getString("origin")),
                     WindowsPairingProtocol.fingerprint(request.getString("fingerprint")), token)
                 if (peer.id == serverId()) return Response(400)
@@ -496,7 +496,7 @@ object DeviceHost {
             return Response(401)
         }
         val clientId = runCatching { UUID.fromString(request.getString("client_id")).toString() }.getOrNull() ?: return Response(400)
-        val name = request.optString("client_name").filterNot { it.isISOControl() }.take(64).ifBlank { "CyIME 设备" }
+        val name = request.optString("client_name").filterNot { it.isISOControl() }.take(64).ifBlank { "CJIME 设备" }
         val existing = _devices.value.firstOrNull { it.clientId == clientId }
         if (existing == null && _devices.value.size >= MAX_DEVICES) return Response(409)
         val token = token()

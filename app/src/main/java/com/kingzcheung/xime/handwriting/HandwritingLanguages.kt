@@ -8,7 +8,7 @@ import com.kingzcheung.xime.settings.InputLanguage
  */
 object HandwritingLanguages {
     fun supports(language: InputLanguage): Boolean =
-        language == InputLanguage.CHINESE || language == InputLanguage.ENGLISH || language == InputLanguage.JAPANESE
+        language == InputLanguage.CHINESE || language == InputLanguage.CANTONESE || language == InputLanguage.ENGLISH
 
     fun recognitionLanguageForKeyboard(language: InputLanguage): InputLanguage? =
         language.takeIf { supports(it) }

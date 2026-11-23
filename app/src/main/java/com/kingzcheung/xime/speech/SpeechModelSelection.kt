@@ -2,7 +2,7 @@ package com.kingzcheung.xime.speech
 
 /** One primary recognizer, optionally followed by SenseVoice. Existing stored IDs remain valid. */
 internal object SpeechModelSelection {
-    val primaryIds = listOf(SpeechModelCatalog.PARAFORMER, SpeechModelCatalog.SENSEVOICE, SpeechModelCatalog.ZIPFORMER, SpeechModelCatalog.ZIPFORMER_JA_INT8, SpeechModelCatalog.ZIPFORMER_JA)
+    val primaryIds = listOf(SpeechModelCatalog.PARAFORMER, SpeechModelCatalog.SENSEVOICE, SpeechModelCatalog.ZIPFORMER)
 
     /**
      * 语音页里能选的主模型。中文 Zipformer 2026-11-03 起不再提供（效果不如 SenseVoice / X-ASR，边说边出字已有 Paraformer）；
@@ -40,7 +40,7 @@ internal object SpeechModelSelection {
         SpeechModelCatalog.ZIPFORMER -> if (enabled) SpeechModelCatalog.ZIPFORMER_TWO_PASS else model
         SpeechModelCatalog.PARAFORMER -> if (enabled) SpeechModelCatalog.TWO_PASS else model
         // SenseVoice is a complete standalone choice and never corrects itself.
-        SpeechModelCatalog.SENSEVOICE, SpeechModelCatalog.ZIPFORMER_JA, SpeechModelCatalog.ZIPFORMER_JA_INT8 -> model
+        SpeechModelCatalog.SENSEVOICE -> model
         else -> error("不支持的语音模型：$model")
     }
 
@@ -112,8 +112,6 @@ internal object SpeechModelSelection {
 
     fun displayName(model: String): String? = when (model) {
         SpeechModelCatalog.ZIPFORMER -> "Zipformer · 中文"
-        SpeechModelCatalog.ZIPFORMER_JA -> "Zipformer · 日语原版"
-        SpeechModelCatalog.ZIPFORMER_JA_INT8 -> "Zipformer · 日语轻量"
         SpeechModelCatalog.PARAFORMER -> "Paraformer · 中英"
         SpeechModelCatalog.SENSEVOICE -> "SenseVoice · 多语言"
         else -> null

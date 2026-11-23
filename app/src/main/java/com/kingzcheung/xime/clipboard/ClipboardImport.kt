@@ -25,7 +25,8 @@ internal object ClipboardImport {
     const val MAX_FILE_BYTES = 16 * 1024 * 1024
 
     private const val TXT_SEPARATOR = "\n\n----------\n\n"
-    private const val MD_TITLE = "# CyIME 剪贴板"
+    private const val MD_TITLE = "# CJIME 剪贴板"
+    private const val LEGACY_MD_TITLE = "# CyIME 剪贴板"
     private val FENCE = Regex("^`{3,}$")
     private val GROUP_SUFFIX = Regex("（分组 (.+)）$")
     private val CODE_SUFFIX = Regex("（编码 (.+)）$")
@@ -34,7 +35,7 @@ internal object ClipboardImport {
         val content = normalize(raw)
         val head = content.trimStart()
         if (head.startsWith("{") || head.startsWith("[")) parseJson(head)?.let { return it }
-        if (head.startsWith(MD_TITLE)) return parseMarkdown(content)
+        if (head.startsWith(MD_TITLE) || head.startsWith(LEGACY_MD_TITLE)) return parseMarkdown(content)
         return parseText(content)
     }
 

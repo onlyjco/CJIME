@@ -1,6 +1,5 @@
 package com.kingzcheung.xime.update
 
-import com.kingzcheung.xime.model.DownloadMirrors
 import kotlinx.serialization.json.Json
 import kotlinx.serialization.json.JsonArray
 import kotlinx.serialization.json.JsonObject
@@ -36,23 +35,12 @@ data class AppReleaseAsset(
  * 再写 app/releases.json（格式和 GitHub 发布列表相同，只有最新一版）。两边的安装包逐字节相同。
  */
 object AppUpdateCatalog {
-    const val RELEASES_API = "https://api.github.com/repos/Cyletix/CyIME/releases?per_page=30"
-    const val RELEASES_PAGE = "https://github.com/Cyletix/CyIME/releases"
-    const val MODELSCOPE_RELEASES = DownloadMirrors.CYIME_MODELSCOPE + "app/releases.json"
-    const val MODELSCOPE_PAGE = "https://www.modelscope.cn/models/Cyletix/cyime-model/files"
+    const val RELEASES_API = "https://api.github.com/repos/onlyjco/CJIME/releases?per_page=30"
+    const val RELEASES_PAGE = "https://github.com/onlyjco/CJIME/releases"
 
-    fun releasesPage(domestic: Boolean): String = if (domestic) MODELSCOPE_PAGE else RELEASES_PAGE
+    fun releasesPage(@Suppress("UNUSED_PARAMETER") domestic: Boolean = false): String = RELEASES_PAGE
 
-    fun githubAssetUrl(tag: String, name: String) = "https://github.com/Cyletix/CyIME/releases/download/$tag/$name"
-
-    fun modelscopeAssetUrl(tag: String, name: String) = DownloadMirrors.CYIME_MODELSCOPE + "app/$tag/$name"
-
-    /** 给安装包补上另一边的同名文件作备用线路。 */
-    fun withMirror(release: AppRelease, fromModelScope: Boolean): AppRelease {
-        val asset = release.asset ?: return release
-        val other = if (fromModelScope) githubAssetUrl(release.tag, asset.name) else modelscopeAssetUrl(release.tag, asset.name)
-        return release.copy(asset = asset.copy(mirrors = (asset.mirrors + other).filter { it != asset.url }.distinct()))
-    }
+    fun githubAssetUrl(tag: String, name: String) = "https://github.com/onlyjco/CJIME/releases/download/$tag/$name"
 
     /**
      * F-Droid 和用它仓库的客户端。从这些商店装的包由商店推送更新：F-Droid 收录规则不许应用绕过商店自己下载安装新版，
@@ -68,13 +56,12 @@ object AppUpdateCatalog {
 
     fun isStoreInstaller(installer: String?): Boolean = installer in STORE_INSTALLERS
 
-    private val androidTag = Regex("""^v?(\d+\.\d+\.\d+)$""")
-    // CyIME-1.14.156-arm64-v8a.apk / CyIME-1.14.156-full-arm64-v8a.apk（1.14.72 里的完整版文件名是 1.14.73）。
-    private val apkName = Regex("""^CyIME-\d+(?:\.\d+)*(-full)?-(.+)\.apk$""")
+    private val androidTag = Regex("""^[Vv]?(\d+\.\d+(?:\.\d+)?)$""")
+    private val apkName = Regex("""^CJIME-[Vv]?\d+(?:\.\d+)*(-full)?-(.+)\.apk$""")
     private val json = Json { ignoreUnknownKeys = true }
 
     fun parseVersion(text: String): List<Int> =
-        Regex("""^v?(\d+(?:\.\d+)*)""").find(text.trim())?.groupValues?.get(1)
+        Regex("""^[Vv]?(\d+(?:\.\d+)*)""").find(text.trim())?.groupValues?.get(1)
             ?.split('.')?.map { it.toIntOrNull() ?: 0 } ?: emptyList()
 
     fun compareVersions(a: String, b: String): Int {
@@ -130,5 +117,5 @@ object AppUpdateCatalog {
 
     /** 下载目录里留下的安装包名对应的版本；用来清掉已经装上的旧包。 */
     fun versionOfApk(fileName: String): String? =
-        Regex("""^CyIME-(\d+(?:\.\d+)*)""").find(fileName)?.groupValues?.get(1)
+        Regex("""^CJIME-[Vv]?(\d+(?:\.\d+)*)""").find(fileName)?.groupValues?.get(1)
 }

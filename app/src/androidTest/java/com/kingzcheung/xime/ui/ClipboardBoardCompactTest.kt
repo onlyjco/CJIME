@@ -239,32 +239,6 @@ class ClipboardBoardCompactTest {
         rule.onNodeWithTag("clipboard-card:${imageKey()}").assertIsDisplayed()
     }
 
-    @Test fun imagesHaveSparseTextureWhilePastingKeepsTheOriginalImage() {
-        showBoard()
-        awaitLoadedImage()
-        rule.onNodeWithTag("clipboard-image-hatch:${imageKey()}", useUnmergedTree = true).assertIsDisplayed()
-        rule.onNodeWithTag("clipboard-image-hatch:text:${pinnedText.id}", useUnmergedTree = true).assertDoesNotExist()
-        val bitmap = rule.onNodeWithTag("clipboard-card:${imageKey()}").captureToImage().asAndroidBitmap()
-        var changed = 0
-        var sampled = 0
-        // Ignore rounded borders and the lock badge, measuring the image itself.
-        for (y in 4 until bitmap.height - 4) for (x in 4 until bitmap.width - 30) {
-            val pixel = bitmap.getPixel(x, y)
-            val difference = maxOf(abs(android.graphics.Color.red(pixel) - android.graphics.Color.red(IMAGE_COLOR)),
-                abs(android.graphics.Color.green(pixel) - android.graphics.Color.green(IMAGE_COLOR)),
-                abs(android.graphics.Color.blue(pixel) - android.graphics.Color.blue(IMAGE_COLOR)))
-            if (difference > 3) changed++
-            sampled++
-        }
-        assertTrue("Lines must be visible but leave most image pixels unchanged: $changed/$sampled",
-            changed > sampled * .01f && changed < sampled * .15f)
-        val output = File(InstrumentationRegistry.getInstrumentation().targetContext.getExternalFilesDir(null),
-            "clipboard-image-texture.png")
-        output.outputStream().use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
-        rule.onNodeWithTag("clipboard-card:${imageKey()}").performClick()
-        rule.runOnIdle { assertEquals(listOf(image), pastedImages) }
-    }
-
     private fun showBoard() {
         rule.setContent {
             CompositionLocalProvider(

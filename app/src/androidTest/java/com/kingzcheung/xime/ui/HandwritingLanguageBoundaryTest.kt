@@ -19,7 +19,7 @@ class HandwritingLanguageBoundaryTest {
     @get:Rule val rule = createComposeRule()
 
     @Test fun unsupportedLanguageHasNoChineseCanvasAndReturnActionStaysReachable() {
-        var language by mutableStateOf(InputLanguage.JAPANESE)
+        var language by mutableStateOf(InputLanguage.UNSPECIFIED)
         var exits = 0
         rule.setContent {
             val density = LocalDensity.current.density
@@ -30,13 +30,10 @@ class HandwritingLanguageBoundaryTest {
                 }
             }
         }
-        for (lang in listOf(InputLanguage.JAPANESE, InputLanguage.UNSPECIFIED)) {
-            rule.runOnIdle { language = lang }
-            rule.onNodeWithTag("handwriting-canvas").assertDoesNotExist()
-            rule.onNodeWithTag("handwriting-unavailable").assertExists()
-            rule.onNodeWithText("选择输入方案").performScrollTo().assertIsDisplayed().performClick()
-        }
-        rule.runOnIdle { assertEquals(2, exits) }
+        rule.onNodeWithTag("handwriting-canvas").assertDoesNotExist()
+        rule.onNodeWithTag("handwriting-unavailable").assertExists()
+        rule.onNodeWithText("选择输入方案").performScrollTo().assertIsDisplayed().performClick()
+        rule.runOnIdle { assertEquals(1, exits) }
     }
 
     @Test fun englishTypingShowsChineseHandwritingAndLanguageChangesKeepTheBoundary() {
@@ -51,7 +48,7 @@ class HandwritingLanguageBoundaryTest {
         rule.onNodeWithText("英文手写").assertExists()
         rule.onNodeWithTag("handwriting-unavailable").assertDoesNotExist()
 
-        rule.runOnIdle { language = InputLanguage.JAPANESE }
+        rule.runOnIdle { language = InputLanguage.UNSPECIFIED }
         rule.onNodeWithTag("handwriting-canvas").assertDoesNotExist()
         rule.onNodeWithTag("handwriting-unavailable").assertExists()
 

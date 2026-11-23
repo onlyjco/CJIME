@@ -20,7 +20,7 @@ object KeyboardPanelLaunch {
 
     private const val EXPIRE_MS = 5_000L
 
-    internal const val PREVIEW_EDITOR = "com.cyletix.cyime.settings.preview"
+    internal const val PREVIEW_EDITOR = "com.onlyjco.cjime.settings.preview"
     internal enum class Example(val option: String) {
         Keyboard(PREVIEW_EDITOR), Candidates("$PREVIEW_EDITOR/candidates"), Associations("$PREVIEW_EDITOR/associations"), Hardware("$PREVIEW_EDITOR/hardware"),
         Letters("$PREVIEW_EDITOR/letters"), Keypad("$PREVIEW_EDITOR/keypad"), DoublePinyin("$PREVIEW_EDITOR/double-pinyin");
@@ -30,7 +30,7 @@ object KeyboardPanelLaunch {
             if (this != Letters && this != Keypad && this != DoublePinyin) return null
             fun matches(profile: InputProfile) = when (this) {
                 Letters -> profile.layout.kind == LayoutKind.ALPHABETIC
-                Keypad -> profile.layout.kind in setOf(LayoutKind.T9, LayoutKind.MERGED, LayoutKind.KANA_KEYPAD)
+                Keypad -> profile.layout.kind in setOf(LayoutKind.T9, LayoutKind.MERGED)
                 DoublePinyin -> profile.scheme == InputScheme.DOUBLE_PINYIN && profile.layout.kind in setOf(LayoutKind.ALPHABETIC, LayoutKind.MERGED)
                 else -> false
             }

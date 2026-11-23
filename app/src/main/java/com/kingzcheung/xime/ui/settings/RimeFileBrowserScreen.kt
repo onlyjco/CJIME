@@ -65,23 +65,17 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
-import androidx.compose.ui.viewinterop.AndroidView
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.text.BasicTextField
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.unit.sp
 import com.kingzcheung.xime.settings.ExportMode
 import com.kingzcheung.xime.settings.ExportResult
 import com.kingzcheung.xime.settings.KeysConfigHelper
 import com.kingzcheung.xime.settings.RimeExportManager
 import com.kingzcheung.xime.settings.SchemaManager
-import io.github.rosemoe.sora.event.ContentChangeEvent
-import io.github.rosemoe.sora.langs.textmate.TextMateColorScheme
-import io.github.rosemoe.sora.langs.textmate.TextMateLanguage
-import io.github.rosemoe.sora.langs.textmate.registry.FileProviderRegistry
-import io.github.rosemoe.sora.langs.textmate.registry.GrammarRegistry
-import io.github.rosemoe.sora.langs.textmate.registry.ThemeRegistry
-import io.github.rosemoe.sora.langs.textmate.registry.model.ThemeModel
-import io.github.rosemoe.sora.langs.textmate.registry.provider.AssetsFileResolver
-import io.github.rosemoe.sora.widget.CodeEditor
-import io.github.rosemoe.sora.widget.component.Magnifier
-import org.eclipse.tm4e.core.registry.IThemeSource
 import java.io.File
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -345,8 +339,6 @@ private fun YamlEditor(file: File, onDeleted: () -> Unit, onBack: () -> Unit) {
     val context = LocalContext.current
     var isEditing by remember { mutableStateOf(false) }
     var isModified by remember { mutableStateOf(false) }
-    var editor by remember { mutableStateOf<CodeEditor?>(null) }
-    var textLength by remember { mutableIntStateOf(0) }
     var showDeleteConfirm by remember { mutableStateOf(false) }
     // xime.yaml / xime.custom.yaml 是 CyIME 自己的键盘配置，Rime 不读：保存或删除后马上重读，
     // 不用再去点「应用方案更改」（那一步会重新部署整个 Rime）。删除后页面就退出，不挂在页面协程上。
@@ -365,11 +357,11 @@ private fun YamlEditor(file: File, onDeleted: () -> Unit, onBack: () -> Unit) {
             ""
         }
     }
+    var contentText by remember(initialContent) { mutableStateOf(initialContent) }
 
     fun save() {
-        val content = editor?.text?.toString() ?: return
         try {
-            file.writeText(content, Charsets.UTF_8)
+            file.writeText(contentText, Charsets.UTF_8)
             isModified = false
             reloadKeyboardConfig()
             com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, if (keyboardConfig) "已保存，键盘已更新" else "已保存", Toast.LENGTH_SHORT).show()
@@ -402,27 +394,6 @@ private fun YamlEditor(file: File, onDeleted: () -> Unit, onBack: () -> Unit) {
         )
     }
 
-    val textmateReady = remember {
-        try {
-            val appCtx = context.applicationContext
-            FileProviderRegistry.getInstance().addFileProvider(AssetsFileResolver(appCtx.assets))
-            val themeReg = ThemeRegistry.getInstance()
-            themeReg.loadTheme(
-                ThemeModel(
-                    IThemeSource.fromInputStream(
-                        FileProviderRegistry.getInstance().tryGetInputStream("textmate/themes/light.json"),
-                        "light.json", null
-                    ), "Light"
-                )
-            )
-            themeReg.setTheme("Light")
-            GrammarRegistry.getInstance().loadGrammars("textmate/languages.json")
-            true
-        } catch (_: Exception) {
-            false
-        }
-    }
-
     Scaffold(
         topBar = {
             TopAppBar(
@@ -452,7 +423,6 @@ private fun YamlEditor(file: File, onDeleted: () -> Unit, onBack: () -> Unit) {
                     }
                     IconButton(onClick = {
                         isEditing = !isEditing
-                        editor?.editable = isEditing
                     }) {
                         Icon(
                             if (isEditing) Icons.Default.Visibility else Icons.Default.Edit,
@@ -482,34 +452,22 @@ private fun YamlEditor(file: File, onDeleted: () -> Unit, onBack: () -> Unit) {
                 .padding(innerPadding)
                 .background(MaterialTheme.colorScheme.surfaceContainerLowest)
         ) {
-            AndroidView(
-                factory = { ctx ->
-                    CodeEditor(ctx).apply {
-                        editable = isEditing
-                        typefaceText = Typeface.MONOSPACE
-                        setText(initialContent)
-                        setTextSize(12f)
-                        tabWidth = 4
-                        isLineNumberEnabled = true
-                        isWordwrap = false
-                        isHighlightCurrentLine = false
-                        nonPrintablePaintingFlags = 0
-                        getComponent(Magnifier::class.java).setEnabled(false)
-
-                        if (textmateReady) {
-                            colorScheme = TextMateColorScheme.create(ThemeRegistry.getInstance())
-                            setEditorLanguage(TextMateLanguage.create("source.yaml", false))
-                        }
-
-                        subscribeEvent(ContentChangeEvent::class.java) { _, _ ->
-                            textLength = text.toString().length
-                            isModified = text.toString() != initialContent
-                        }
-
-                        editor = this
-                    }
+            BasicTextField(
+                value = contentText,
+                onValueChange = {
+                    contentText = it
+                    isModified = (it != initialContent)
                 },
-                modifier = Modifier.fillMaxSize()
+                readOnly = !isEditing,
+                textStyle = TextStyle(
+                    fontFamily = FontFamily.Monospace,
+                    fontSize = 12.sp,
+                    color = MaterialTheme.colorScheme.onSurface
+                ),
+                modifier = Modifier
+                    .fillMaxSize()
+                    .padding(16.dp)
+                    .verticalScroll(rememberScrollState())
             )
         }
     }

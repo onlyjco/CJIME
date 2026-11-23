@@ -149,28 +149,7 @@ object LauncherIcons {
 
     fun apply(context: Context, style: VisualStyle, framed: Boolean = IconAppearance.framed,
               themeId: String = com.kingzcheung.xime.settings.SettingsPreferences.getKeyboardTheme(context)) {
-        val pm = context.packageManager
-        val target = if (IconAppearance.followTheme) themeComponent(context, ThemeIconColors.forTheme(themeId))
-            else component(context, style, framed)
-        val candidates = VisualStyle.entries.flatMap { candidate -> listOf(true, false).map { component(context, candidate, it) } } +
-            ThemeIconColors.ids.map { themeComponent(context, it) }
-        val changes = candidates.map { name ->
-            name to if (name == target) PackageManager.COMPONENT_ENABLED_STATE_ENABLED else PackageManager.COMPONENT_ENABLED_STATE_DISABLED
-        }.filter { (name, state) -> pm.getComponentEnabledSetting(name) != state }
-        if (changes.isEmpty()) return
-        val disabled = changes.filter { it.second == PackageManager.COMPONENT_ENABLED_STATE_DISABLED }.mapTo(HashSet()) { it.first }
-        if (AndroidPlatform.batchComponentState) {
-            pm.setComponentEnabledSettings(changes.map { (name, state) ->
-                PackageManager.ComponentEnabledSetting(name, state, PackageManager.DONT_KILL_APP)
-            })
-        } else {
-            // Never disable the last launcher entry before its replacement is available.
-            pm.setComponentEnabledSetting(target, PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
-            changes.filter { it.first != target }.forEach { (name, state) ->
-                pm.setComponentEnabledSetting(name, state, PackageManager.DONT_KILL_APP)
-            }
-        }
-        reopenIfHosted(context, disabled, target)
+        // 桌面图标固定为单个 MainActivity，不切换组件别名。
     }
 
     /**

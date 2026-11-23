@@ -12,7 +12,7 @@ import com.kingzcheung.xime.settings.InputLanguage
 internal object ApostropheCompletion {
     const val APOSTROPHE = '\''
 
-    fun elides(language: InputLanguage): Boolean = language == InputLanguage.FRENCH || language == InputLanguage.ITALIAN
+    fun elides(language: InputLanguage): Boolean = false
 
     suspend fun complete(typed: String, language: InputLanguage, lookup: suspend (String) -> List<String>): List<String> {
         if (APOSTROPHE !in typed) return lookup(typed)

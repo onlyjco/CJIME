@@ -33,7 +33,6 @@ import androidx.compose.material.icons.twotone.BugReport
 import androidx.compose.material.icons.twotone.Code
 import androidx.compose.material.icons.twotone.Description
 import androidx.compose.material.icons.twotone.EmojiEmotions
-import androidx.compose.material.icons.twotone.Favorite
 import androidx.compose.material.icons.twotone.NewReleases
 import androidx.compose.material.icons.twotone.PersonOutline
 import androidx.compose.material.icons.twotone.PrivacyTip
@@ -91,7 +90,12 @@ object AppInfo {
     
     val dependencies = listOf(
         LicenseItem(
-            name = "CyIME(由 Cyletix 维护开发)",
+            name = "CJIME(由 onlyjco 维护开发)",
+            license = "GPL-3.0",
+            url = "https://github.com/onlyjco/CJIME/blob/main/LICENSE"
+        ),
+        LicenseItem(
+            name = "CyIME(CJIME 基于它开发)",
             license = "GPL-3.0",
             url = "https://github.com/Cyletix/CyIME/blob/main/LICENSE"
         ),
@@ -159,7 +163,6 @@ fun AboutContent(
     onBack: () -> Unit,
     onNavigateToPrivacy: () -> Unit,
     onNavigateToLicenses: () -> Unit,
-    onNavigateToCredits: () -> Unit = {},
     onNavigateToReleaseNotes: () -> Unit = {},
     onNavigateToLogViewer: () -> Unit = {},
     onNavigateToHandwritingCapture: () -> Unit = {},
@@ -170,7 +173,6 @@ fun AboutContent(
     var verboseLoggingEnabled by remember {
         mutableStateOf(SettingsPreferences.isVerboseLoggingEnabled(context))
     }
-    var launchAdEgg by remember { mutableStateOf(SettingsPreferences.isLaunchAdEggEnabled(context)) }
     
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
@@ -215,14 +217,14 @@ fun AboutContent(
                         horizontalAlignment = Alignment.CenterHorizontally
                     ) {
                         Text(
-                            text = "CyIME",
+                            text = "CJIME",
                             fontSize = 28.sp,
                             fontWeight = FontWeight.Bold,
                             color = MaterialTheme.colorScheme.primary
                         )
                         Spacer(modifier = Modifier.height(4.dp))
                         Text(
-                            text = "Cyletix 开发的 Android 输入法。拼音、九键、双拼、五笔、仓颉、注音、日语、英文都能打；词库、手写、语音、拍照识字和实时字幕都在手机上运行，不联网也能全部使用。以 GNU GPLv3 开源，致谢与许可见下方。",
+                            text = "基于CyIME制作，由onlyjco维护。拼音、九键、双拼、五笔、仓颉、注音、英文都能打；词库、手写、语音和实时字幕都在手机上运行，不联网也能全部使用。以 GNU GPLv3 开源，许可见下方。",
                             fontSize = 13.sp,
                             color = MaterialTheme.colorScheme.onSurfaceVariant
                         )
@@ -265,16 +267,16 @@ fun AboutContent(
             
             // 作者与源代码使用同一种完整卡片。
                 AboutLinkCard(
-                    title = "Cyletix · 维护与开发",
-                    subtitle = "github.com/Cyletix",
+                    title = "onlyjco · 维护与开发",
+                    subtitle = "github.com/onlyjco",
                     icon = Icons.TwoTone.PersonOutline,
-                    onClick = { uriHandler.openUri("https://github.com/Cyletix") },
+                    onClick = { uriHandler.openUri("https://github.com/onlyjco") },
                 )
                 AboutLinkCard(
-                    title = "CyIME 源代码",
-                    subtitle = "github.com/Cyletix/CyIME",
+                    title = "CJIME 源代码",
+                    subtitle = "github.com/onlyjco/CJIME",
                     icon = Icons.TwoTone.Code,
-                    onClick = { uriHandler.openUri("https://github.com/Cyletix/CyIME") },
+                    onClick = { uriHandler.openUri("https://github.com/onlyjco/CJIME") },
                 )
 
                 AppUpdateSection()
@@ -286,16 +288,6 @@ fun AboutContent(
                             icon = Icons.TwoTone.NewReleases,
                             title = "更新内容",
                             onClick = onNavigateToReleaseNotes
-                        )
-                        HorizontalDivider(
-                            modifier = Modifier.padding(start = 56.dp),
-                            thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                        )
-                        SettingsItem(
-                            icon = Icons.TwoTone.Favorite,
-                            title = "鸣谢",
-                            onClick = onNavigateToCredits
                         )
                         HorizontalDivider(
                             modifier = Modifier.padding(start = 56.dp),
@@ -322,17 +314,6 @@ fun AboutContent(
                             thickness = 0.5.dp,
                             color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                         )
-                        // 使用文档从设置首页收到这里（内容较旧，少有人点）。
-                        SettingsItem(
-                            icon = Icons.TwoTone.Description,
-                            title = "使用文档",
-                            onClick = { uriHandler.openUri("https://github.com/Cyletix/CyIME/blob/main/docs/usage.md") }
-                        )
-                        HorizontalDivider(
-                            modifier = Modifier.padding(start = 56.dp),
-                            thickness = 0.5.dp,
-                            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                        )
                         SettingsItem(
                             icon = Icons.TwoTone.BugReport,
                             title = "日志查看器",
@@ -348,25 +329,6 @@ fun AboutContent(
                             title = "存储空间",
                             onClick = onNavigateToStorageSpace
                         )
-                        // 彩蛋（用户 11-15）：默认关；老人包不放。刚打开时马上放一遍。
-                        if (!BuildConfig.ELDER) {
-                            HorizontalDivider(
-                                modifier = Modifier.padding(start = 56.dp),
-                                thickness = 0.5.dp,
-                                color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                            )
-                            SettingsToggleItem(
-                                icon = Icons.TwoTone.EmojiEmotions,
-                                title = "启用开屏广告",
-                                subtitle = "",
-                                checked = launchAdEgg,
-                                onCheckedChange = { enabled ->
-                                    launchAdEgg = enabled
-                                    SettingsPreferences.setLaunchAdEggEnabled(context, enabled)
-                                    if (enabled) LaunchAdEgg.preview()
-                                }
-                            )
-                        }
                         if (BuildConfig.DEBUG) {
                             HorizontalDivider(
                                 modifier = Modifier.padding(start = 56.dp),
@@ -532,7 +494,7 @@ fun PrivacyPolicyContent(
                             .padding(16.dp)
                     ) {
                         Text(
-                            text = "CyIME隐私策略",
+                            text = "CJIME隐私策略",
                             fontSize = 18.sp,
                             fontWeight = FontWeight.Bold
                         )
@@ -540,12 +502,12 @@ fun PrivacyPolicyContent(
                         
                         PrivacySection(
                             title = "数据收集",
-                            content = "CyIME 默认使用本地输入与识别。主动启用在线语音或其他联网服务时，相应音频或文本会发送给您选择的服务商。手写贡献和贡献滑行轨迹须同意 CC0 1.0 才能向魔搭上传。手写包含题目、笔迹、时间、识别结果（如有）、机型、版本及随机编号。滑行只在「贡献滑行轨迹」页开启贡献时发送题目、布局、轨迹及随机编号，平时打字不记录。贡献样本可公开使用。在「贡献词库」页分享或上传时，只有列表里勾选的词、拼音和次数，用于改进 CyIME 词库。平时手写和打字的原文不会上传。"
+                            content = "CJIME 默认使用本地输入与识别。主动启用在线语音或其他联网服务时，相应音频或文本会发送给您选择的服务商。手写贡献和贡献滑行轨迹须同意 CC0 1.0 才能向魔搭上传。手写包含题目、笔迹、时间、识别结果（如有）、机型、版本及随机编号。滑行只在「贡献滑行轨迹」页开启贡献时发送题目、布局、轨迹及随机编号，平时打字不记录。贡献样本可公开使用。在「贡献词库」页分享或上传时，只有列表里勾选的词、拼音和次数，用于改进 CJIME 词库。平时手写和打字的原文不会上传。"
                         )
                         
                         PrivacySection(
                             title = "本地存储",
-                            content = "CyIME 默认在本地存储设置、词库和剪贴板历史。主动启用剪贴板同步插件时，剪贴板内容会按插件配置传输；备份只导出到您选择的本地文件。您可以随时清除本地数据。"
+                            content = "CJIME 默认在本地存储设置、词库和剪贴板历史。主动启用剪贴板同步插件时，剪贴板内容会按插件配置传输；备份只导出到您选择的本地文件。您可以随时清除本地数据。"
                         )
                         
                         PrivacySection(
@@ -565,7 +527,7 @@ fun PrivacyPolicyContent(
                         
                         PrivacySection(
                             title = "开源",
-                            content = "CyIME是开源软件，源代码公开可审计。您可以在 GitHub 上查看完整源代码。"
+                            content = "CJIME是开源软件，源代码公开可审计。您可以在 GitHub 上查看完整源代码。"
                         )
                         
                         Spacer(modifier = Modifier.height(16.dp))

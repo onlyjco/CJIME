@@ -17,32 +17,17 @@ internal class SherpaSpeechEngine(context: Context, val selection: AsrModelManag
     private var finalizer: OfflineRecognizer? = null
     private var stream: OnlineStream? = null
     private var vad: Vad? = null
-    private var japaneseVad: Vad? = null // Refinement worker only; capture owns the other VAD.
-    private val japanese get() = SpeechModelCatalog.isJapaneseZipformer(selection.mode)
     private val paraformer get() = selection.first?.modelType == "paraformer"
     override val hasRefinement get() = selection.first != null && selection.secondDir != null
     override val isStreaming get() = online != null
-    override val maxSegmentMs get() = if (japanese) 20000 else super.maxSegmentMs
-    override val minimumPauseMs get() = if (japanese) 1000 else super.minimumPauseMs
-    override val hasRollingPreview get() = japanese
     override val lockedChinese get() = selection.recognitionLanguage == "zh"
     // Quiet speech validated by VAD must not be vetoed by a recent louder phrase's RMS.
-    override val useEnergyPause get() = !japanese && !paraformer
+    override val useEnergyPause get() = !paraformer
     override val resetDetectorOnPause get() = paraformer
-    override val decodeTimeoutMs get() = if (japanese) JapaneseZipformerDecoding.decodeTimeoutMs else super.decodeTimeoutMs
     init {
         try {
             val first = selection.first
-            if (japanese) {
-                val dir = checkNotNull(selection.firstDir)
-                val info = checkNotNull(first)
-                offline = OfflineRecognizer(config = OfflineRecognizerConfig(modelConfig = OfflineModelConfig(
-                    transducer = OfflineTransducerModelConfig(requireFile(dir, info.encoderFile),
-                        requireFile(dir, info.decoderFile), requireFile(dir, info.joinerFile)),
-                    tokens = requireFile(dir, "tokens.txt"), numThreads = 2, provider = "cpu"),
-                    decodingMethod = "greedy_search"))
-                japaneseVad = Vad(context.assets, japaneseVadConfig())
-            } else if (first != null) {
+            if (first != null) {
                 val dir = selection.firstDir!!
                 fun path(name: String) = requireFile(dir, name)
                 fun model(encoder: String) = if (first.modelType == "paraformer") OnlineModelConfig(
@@ -70,14 +55,13 @@ internal class SherpaSpeechEngine(context: Context, val selection: AsrModelManag
             // Beside a streaming model it loads in the background (prepareRefinement), so the first words
             // do not wait for it: 2026-10-30, sherpa-onnx 1.13.8 on x86, SenseVoice int8 takes 1.2–2.2 s to load.
             if (selection.secondDir != null && selection.finalizerDir == null) {
-                if (japanese) punctuator = createSenseVoice(selection.secondDir)
-                else if (online == null) offline = createSenseVoice(selection.secondDir)
-            } else if (selection.finalizerDir != null && online == null && !japanese) {
+                if (online == null) offline = createSenseVoice(selection.secondDir)
+            } else if (selection.finalizerDir != null && online == null) {
                 // SenseVoice alone with X-ASR downloaded: X-ASR decodes every Chinese sentence, so it loads now
                 // (instead of SenseVoice) and the first pause does not wait for it.
                 finalizer = createXasr(selection.finalizerDir)
             }
-            vad = Vad(context.assets, if (japanese) japaneseVadConfig() else VadModelConfig(sileroVadModelConfig = SileroVadModelConfig(
+            vad = Vad(context.assets, VadModelConfig(sileroVadModelConfig = SileroVadModelConfig(
                 model = "speech/silero_vad.onnx", threshold = .6f, minSilenceDuration = .064f,
                 minSpeechDuration = .15f, windowSize = 512, maxSpeechDuration = 30f)))
         } catch (error: Throwable) { close(); throw error }
@@ -124,30 +108,6 @@ internal class SherpaSpeechEngine(context: Context, val selection: AsrModelManag
     }
     override fun refine(samples: FloatArray): String {
         val recognizer = refiner()
-        if (japanese) return JapaneseZipformerDecoding.decode(samples, recognize = { padded ->
-            val s = recognizer.createStream()
-            try {
-                s.acceptWaveform(padded, 16000)
-                recognizer.decode(s)
-                val r = recognizer.getResult(s)
-                JapaneseZipformerDecoding.Output(r.text, r.tokens.toList(), r.timestamps.toList())
-            } finally { s.release() }
-        }, speech = { pcm ->
-            val v = checkNotNull(japaneseVad)
-            v.reset()
-            val spans = mutableListOf<Pair<Double, Double>>()
-            fun drain() { while (!v.empty()) {
-                val segment = v.front()
-                spans.add(segment.start / 16000.0 to (segment.start + segment.samples.size) / 16000.0)
-                v.pop()
-            } }
-            for (offset in pcm.indices step 512) {
-                v.acceptWaveform(pcm.copyOfRange(offset, minOf(offset + 512, pcm.size)).copyOf(512))
-                drain()
-            }
-            v.flush(); drain()
-            spans
-        })
         val s = recognizer.createStream()
         try {
             s.acceptWaveform(samples, 16000)
@@ -157,7 +117,6 @@ internal class SherpaSpeechEngine(context: Context, val selection: AsrModelManag
         } finally { s.release() }
     }
     override fun refinePunctuated(samples: FloatArray): String {
-        if (japanese) return refine(samples)
         val xasr = selection.finalizerDir?.let { dir -> finalizer ?: createXasr(dir).also { finalizer = it } }
         val recognizer = xasr ?: refiner()
         val s = recognizer.createStream()
@@ -169,16 +128,6 @@ internal class SherpaSpeechEngine(context: Context, val selection: AsrModelManag
         } finally { s.release() }
     }
     override fun refineRich(samples: FloatArray): RichTranscript {
-        if (japanese) {
-            val words = refine(samples)
-            val marks = punctuator ?: return RichTranscript(words, "ja")
-            val s = marks.createStream()
-            return try {
-                s.acceptWaveform(samples, 16000)
-                marks.decode(s)
-                RichTranscript(com.kingzcheung.xime.speech.caption.projectPunctuation(words, marks.getResult(s).text), "ja")
-            } finally { s.release() }
-        }
         val recognizer = refiner()
         val s = recognizer.createStream()
         try {
@@ -188,37 +137,24 @@ internal class SherpaSpeechEngine(context: Context, val selection: AsrModelManag
             return RichTranscript(result.text, result.lang, result.event, result.tokens, result.timestamps)
         } finally { s.release() }
     }
-    /** Captions without a streaming model (English SenseVoice, Japanese Zipformer) re-read the sentence so far. */
+    /** Captions without a streaming model (English SenseVoice) re-read the sentence so far. */
     override val hasCaptionPreview get() = online == null && offline != null
 
     override fun preview(samples: FloatArray): String {
         val recognizer = checkNotNull(offline)
-        if (!japanese) {
-            val s = recognizer.createStream()
-            return try {
-                s.acceptWaveform(samples, 16000)
-                recognizer.decode(s)
-                val r = recognizer.getResult(s)
-                cleanSenseVoiceText(r.text, r.lang)
-            } finally { s.release() }
-        }
         val s = recognizer.createStream()
-        try {
-            val padded = FloatArray(samples.size + JapaneseZipformerDecoding.paddingSamples * 2)
-            samples.copyInto(padded, JapaneseZipformerDecoding.paddingSamples)
-            s.acceptWaveform(padded, 16000)
+        return try {
+            s.acceptWaveform(samples, 16000)
             recognizer.decode(s)
             val r = recognizer.getResult(s)
-            return JapaneseZipformerDecoding.spaced(JapaneseZipformerDecoding.Output(r.text, r.tokens.toList(), r.timestamps.toList()))
+            cleanSenseVoiceText(r.text, r.lang)
         } finally { s.release() }
     }
     override fun reset() { stream?.release(); stream = null; vad?.reset() }
-    /** 阶梯释放后在第一次定稿时重新加载 SenseVoice；日语模型本身就是离线识别器，不在此释放。 */
     private fun refiner(): OfflineRecognizer = offline ?: run {
-        check(!japanese)
         createSenseVoice(checkNotNull(selection.secondDir)).also { offline = it }
     }
-    override val refinementLoaded: Boolean get() = japanese || online == null ||
+    override val refinementLoaded: Boolean get() = online == null ||
         (if (selection.finalizerDir != null) finalizer != null else selection.secondDir == null || offline != null)
     override fun prepareRefinement() {
         if (refinementLoaded) return
@@ -229,7 +165,7 @@ internal class SherpaSpeechEngine(context: Context, val selection: AsrModelManag
             "${(System.nanoTime() - loadingAt) / 1_000_000} ms")
     }
     override fun releaseRefinement(): Boolean {
-        if (japanese || selection.first == null || selection.secondDir == null) return false
+        if (selection.first == null || selection.secondDir == null) return false
         if (offline == null && finalizer == null) return false
         offline?.release(); offline = null
         finalizer?.release(); finalizer = null
@@ -249,10 +185,7 @@ internal class SherpaSpeechEngine(context: Context, val selection: AsrModelManag
         // Runs only at a pause/stop, beside the one streaming thread; two threads shorten the final wait.
         tokens = requireFile(dir, "tokens.txt"), numThreads = 2,
     )))
-    override fun close() { reset(); online?.release(); online = null; offline?.release(); offline = null; finalizer?.release(); finalizer = null; punctuator?.release(); punctuator = null; vad?.release(); vad = null; japaneseVad?.release(); japaneseVad = null }
-    private fun japaneseVadConfig() = VadModelConfig(sileroVadModelConfig = SileroVadModelConfig(
-        model = "speech/silero_vad.onnx", threshold = .5f, minSilenceDuration = .2f,
-        minSpeechDuration = .15f, windowSize = 512, maxSpeechDuration = 30f))
+    override fun close() { reset(); online?.release(); online = null; offline?.release(); offline = null; finalizer?.release(); finalizer = null; punctuator?.release(); punctuator = null; vad?.release(); vad = null }
     private fun requireFile(dir: File, name: String): String = File(dir, name).also {
         require(it.isFile && it.length() > 0) { "语音模型文件缺失：$name" }
     }.absolutePath

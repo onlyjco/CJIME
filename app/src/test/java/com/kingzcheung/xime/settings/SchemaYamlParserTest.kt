@@ -45,24 +45,24 @@ class SchemaYamlParserTest {
               language: zh_Hans_CN
         """.trimIndent())
         assertEquals(InputLanguage.CHINESE, SchemaManager.parseSchemaYaml(file)!!.toSchemaInfo().profile.language)
-        file.writeText(file.readText().replace("zh_Hans_CN", "ja-JP"))
-        assertEquals(InputLanguage.JAPANESE, SchemaManager.parseSchemaYaml(file)!!.toSchemaInfo().profile.language)
-        file.writeText(file.readText().replace("language: ja-JP", ""))
+        file.writeText(file.readText().replace("zh_Hans_CN", "yue"))
+        assertEquals(InputLanguage.CANTONESE, SchemaManager.parseSchemaYaml(file)!!.toSchemaInfo().profile.language)
+        file.writeText(file.readText().replace("language: yue", ""))
         assertEquals(InputLanguage.UNSPECIFIED, SchemaManager.parseSchemaYaml(file)!!.toSchemaInfo().profile.language)
     }
 
     @Test fun `imported profile carries explicit language and scheme into UI`() {
         val file = writeSchema("""
             schema:
-              schema_id: my_romaji
-              name: 我的日语配置
-              language: ja
-              input_scheme: romaji
+              schema_id: my_cantonese
+              name: 我的粤拼配置
+              language: yue
+              input_scheme: pinyin
         """.trimIndent())
         val entry = SchemaManager.parseSchemaYaml(file)!!.toSchemaInfo()
-        assertEquals(InputLanguage.JAPANESE, entry.profile.language)
-        assertEquals(InputScheme.ROMAJI, entry.profile.scheme)
-        assertEquals(EngineProfile.Rime("my_romaji"), entry.profile.engineProfile)
+        assertEquals(InputLanguage.CANTONESE, entry.profile.language)
+        assertEquals(InputScheme.PINYIN, entry.profile.scheme)
+        assertEquals(EngineProfile.Rime("my_cantonese"), entry.profile.engineProfile)
     }
 
     @get:Rule

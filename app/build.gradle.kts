@@ -16,7 +16,6 @@ apply(from = "build-logic/tasks-speech.gradle.kts")
 apply(from = "build-logic/tasks-bundled-models.gradle.kts")
 apply(from = "build-logic/tasks-builtin-sync.gradle.kts")
 apply(from = "build-logic/tasks-plugin-dev.gradle.kts")
-apply(from = "build-logic/tasks-japanese.gradle.kts")
 apply(from = "build-logic/tasks-offline-translate.gradle.kts")
 apply(from = "build-logic/tasks-chinese.gradle.kts")
 apply(from = "build-logic/tasks-word-association.gradle.kts")
@@ -72,9 +71,6 @@ android {
     if (providers.gradleProperty("bundleModels").orNull == "true") {
         sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/bundled-model-assets").get().asFile)
     }
-    sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/japanese-azookey-assets").get().asFile)
-    // libCyAzooKey.so per ABI (tasks-japanese.gradle.kts), loaded by the Japanese Rime translator.
-    sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/azookey-jniLibs").get().asFile)
     // libcytranslate.so (arm64-v8a, x86_64; tasks-offline-translate.gradle.kts): offline translation engine.
     sourceSets.getByName("main").jniLibs.srcDir(layout.buildDirectory.dir("generated/translate-jniLibs").get().asFile)
     sourceSets.getByName("main").assets.srcDir(layout.buildDirectory.dir("generated/chinese-assets").get().asFile)
@@ -99,14 +95,14 @@ android {
         // 安装身份（对外）与源码 namespace（内部）分离：
         // applicationId 使用 CyIME 自己的包名，namespace 保留 com.kingzcheung.xime，
         // 以便继续跟踪上游、避免大规模移动源码目录。
-        applicationId = "com.cyletix.cyime"
+        applicationId = "com.onlyjco.cjime"
         minSdk = libs.versions.androidMinSdk.get().toInt()
         targetSdk = libs.versions.androidTargetSdk.get().toInt()
         // 按发布批次定号：兼容修复升 PATCH，兼容功能升 MINOR 并归零 PATCH。
         // 不兼容变更升 MAJOR；日常编辑不逐次升号。完整规则见 docs/packaging.md。
         // versionCode 是独立递增的交付序号；同批普通版与内置版共用。
-        versionCode = 20261529
-        versionName = "1.15.101-personal.40"
+        versionCode = 1
+        versionName = "V1.0"
 
 
         // Isolated Compose rendering on a local x86 emulator; ordinary device tests keep the full app.
@@ -229,43 +225,15 @@ android {
     // 九键长句重排已停用（t9_pinyin.schema.yaml），两种包都不再带这个模型；源文件只留给电脑回放对照。
     // Keep vocabulary and licenses; both editions offer the large grammar separately.
     androidResources.ignoreAssetsPatterns.add("t9_sentence.onnx")
-    // 拍照识别模型（约 21 MB）：轻量版用到时再下载（模型目录 ocr-ppocr-v5，国内魔搭、海外 GitHub）；
-    // 带模型的完整版、老人包、朋友包照旧内置，不联网也能识别。
-    if (providers.gradleProperty("bundleModels").orNull != "true")
-        androidResources.ignoreAssetsPatterns.add("<dir>ppocr-v5")
-    // 内置的拍照识别模型不压缩存放（只多约 3 MB 下载）：识别时直接映射安装包，手机上不再解出第二份（OcrModelFiles）。
-    // 语音（SenseVoice）和九键词组模型不这样做：不压缩会让完整版下载各多约 76 MB（2026-11-02 决定保持压缩、解压一份）。
-    // 声纹和手写模型保持解压：模型管理（是否装好、删除、设置向导跳过）和手写模板、训练页都按 models/ 下的文件路径读，
-    // 为省 7–27 MB 改这些地方不值得。
-    androidResources.noCompress.addAll(listOf("ch_PP-OCRv5_det_mobile.onnx", "ch_PP-OCRv5_rec_mobile.onnx"))
-    // 拍照识别引擎 OpenCV（arm64 约 9 MB）同理：轻量版用到时和模型一起下载（模型目录 ocr-engine，ocr/OcrEngine.kt），
-    // 带模型的安装包照旧内置。它要的 libc++_shared.so 留在包里。离线包（assembleOffline）也必须带 bundleModels。
-    if (providers.gradleProperty("bundleModels").orNull != "true")
-        packaging.jniLibs.excludes.add("**/libopencv_java4.so")
-    // 语音引擎 libsherpa-onnx-jni.so（arm64 约 8.6 MB）同理：轻量版和语音模型一起下载（模型目录 speech-engine，
+    // 语音引擎 libsherpa-onnx-jni.so（arm64 约 8.6 MB）：轻量版和语音模型一起下载（模型目录 speech-engine，
     // speech/SherpaLibrary.kt；sherpa 类里的加载调用在 tasks-speech.gradle.kts 改写），带模型的安装包照旧内置。
     if (providers.gradleProperty("bundleModels").orNull != "true")
         packaging.jniLibs.excludes.add("**/libsherpa-onnx-jni.so")
-    // 手写大模板（1.16）：生僻字模板（约 4.4 MB）跟汉字手写模型一起下载（模型目录 handwriting-rare），
-    // 日语假名、日文汉字模板（约 5.6 MB）装「日语」插件时下载（japanese-handwriting），见 handwriting/HandwritingAssets.kt。
-    // japanese_kanji.json（贡献页的常用度表）和 latin_default_strokes.json 留在包里。带模型的安装包照旧内置。
+    // 手写大模板（1.16）：生僻字模板（约 4.4 MB）跟汉字手写模型一起下载（模型目录 handwriting-rare）
     if (providers.gradleProperty("bundleModels").orNull != "true")
         listOf(
             "hanzi_rare_och.bin", "hanzi_rare_och.json",
-            "kana_default_strokes.json", "kana_default_och.bin", "kana_default_och.json",
-            "japanese_kanji_strokes.json", "japanese_kanji_och.bin", "japanese_kanji_och.json",
         ).forEach { androidResources.ignoreAssetsPatterns.add(it) }
-    // 日语词库（assets/azookey，约 18 MB）和转换引擎 libCyAzooKey.so（约 6 MB）：轻量版不带，装「日语」插件时下载
-    // （settings/JapanesePack.kt）；带模型的安装包（完整版、朋友包、离线包）照旧内置。日语方案 rime_japanese 很小，留在包里。
-    if (providers.gradleProperty("bundleModels").orNull != "true") {
-        androidResources.ignoreAssetsPatterns.add("<dir>azookey")
-        packaging.jniLibs.excludes.add("**/libCyAzooKey.so")
-    }
-    // The elder package carries no Japanese dictionaries and no letter-language (Spanish, German…) schemas (elder-pack-spec.md).
-    if (providers.gradleProperty("elderEdition").orNull == "true") {
-        listOf("<dir>rime_japanese", "<dir>azookey", "<dir>rime_letters").forEach { androidResources.ignoreAssetsPatterns.add(it) }
-        packaging.jniLibs.excludes.add("**/libCyAzooKey.so")
-    }
     ndkVersion = "29.0.14206865"
 
     // F-Droid 一致性验证：不在 APK 中写入依赖元数据（Dependency metadata 签名块）。
@@ -299,7 +267,7 @@ android {
 }
 
 android.applicationVariants.all {
-    val appName = "CyIME"
+    val appName = "CJIME"
     outputs.all {
         val abi = filters.find { it.filterType.toString() == "ABI" }?.identifier ?: "universal"
         val buildLabel = if (buildType.name == "debug") "-debug" else ""
@@ -376,12 +344,8 @@ dependencies {
 
     // ZXing for QR code generation
     implementation("com.google.zxing:core:3.5.4")
-    // Bundled OCR works without Play Services or a first-use model download.
+    // ONNX runtime for Speech and Handwriting models
     implementation("com.microsoft.onnxruntime:onnxruntime-android:1.28.0")
-    implementation("org.opencv:opencv:4.12.0")
-    implementation("androidx.camera:camera-camera2:1.6.2")
-    implementation("androidx.camera:camera-lifecycle:1.6.2")
-    implementation("androidx.camera:camera-view:1.6.2")
 
     implementation(libs.kotlinx.serialization.json)
 
@@ -389,10 +353,6 @@ dependencies {
     implementation(libs.androidx.room3.runtime)
     ksp(libs.androidx.room3.compiler)
 
-    // Sora Code Editor for YAML viewing/editing
-    implementation(platform("io.github.rosemoe:editor-bom:0.24.6"))
-    implementation("io.github.rosemoe:editor")
-    implementation("io.github.rosemoe:language-textmate")
     coreLibraryDesugaring("com.android.tools:desugar_jdk_libs:2.1.5")
 
     debugImplementation(libs.androidx.compose.ui.tooling)

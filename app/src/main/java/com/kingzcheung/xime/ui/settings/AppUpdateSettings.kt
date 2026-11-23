@@ -107,7 +107,7 @@ internal fun AppUpdateSection() {
                     is AppUpdateState.Available -> startDownload(current.release)
                     is AppUpdateState.Downloading -> AppUpdater.cancelDownload()
                     is AppUpdateState.ReadyToInstall -> if (!AppUpdater.install(context, current.file)) {
-                        com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, "请允许 CyIME 安装应用，回来后再点一次「检查更新」", Toast.LENGTH_LONG).show()
+                        com.kingzcheung.xime.ui.i18n.UiToast.makeText(context, "请允许 CJIME 安装应用，回来后再点一次「检查更新」", Toast.LENGTH_LONG).show()
                     }
                     is AppUpdateState.Failed -> current.release?.let { startDownload(it) } ?: AppUpdater.check(context)
                     else -> AppUpdater.check(context)
@@ -170,7 +170,7 @@ internal fun AppUpdateHomeNotice(release: AppRelease, onOpen: () -> Unit) {
     SettingsSection(title = "版本更新") {
         SettingsItem(
             icon = Icons.TwoTone.SystemUpdate,
-            title = "CyIME ${release.version} 可以更新",
+            title = "CJIME ${release.version} 可以更新",
             subtitle = "现在是 ${BuildConfig.VERSION_NAME}，点这里到「关于」下载安装",
             status = "新版本",
             statusTone = SettingsStatusTone.OK,
@@ -188,7 +188,7 @@ internal fun ReleaseNotesHomeNotice(onOpen: () -> Unit, onDismiss: () -> Unit) {
             Box(Modifier.weight(1f)) {
                 SettingsItem(
                     icon = Icons.TwoTone.NewReleases,
-                    title = "已更新到 CyIME ${BuildConfig.VERSION_NAME}",
+                    title = "已更新到 CJIME ${BuildConfig.VERSION_NAME}",
                     subtitle = "点这里看这一版改了什么",
                     onClick = onOpen,
                     searchKey = "已更新提示",

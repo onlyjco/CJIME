@@ -97,7 +97,7 @@ fun ReleaseNotesContent(onBack: () -> Unit) {
                 ReleaseNotes.expandedVersions(list.map { it.version }, current, seenBefore)
             }
             if (list.none { it.version == current }) {
-                SettingsSection(title = "CyIME $current") {
+                SettingsSection(title = "CJIME $current") {
                     SettingsListRow("这一版的说明没有带在安装包里", "点这里打开发布页查看",
                         Modifier.clickable { uriHandler.openUri(releasesPage) }) { OpenIcon() }
                 }
@@ -140,7 +140,7 @@ private fun ReleaseNoteCard(note: ReleaseNote, current: String, initiallyExpande
             ) {
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
-                        Text("CyIME ${note.version}", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
+                        Text("CJIME ${note.version}", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
                         val tag = when {
                             note.version == current -> "当前版本"
                             newer -> "比当前版本新"

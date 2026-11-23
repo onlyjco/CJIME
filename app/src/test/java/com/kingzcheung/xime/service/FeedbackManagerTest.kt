@@ -233,11 +233,10 @@ class FeedbackManagerTest {
 
     @Test fun `feedback actions retain semantic types across keyboard layouts`() {
         mapOf(
-            "a" to KeyFeedbackType.CHARACTER, "あ" to KeyFeedbackType.CHARACTER,
+            "a" to KeyFeedbackType.CHARACTER,
             "2" to KeyFeedbackType.NUMBER, "，" to KeyFeedbackType.SYMBOL,
             "space" to KeyFeedbackType.SPACE, "enter" to KeyFeedbackType.ENTER,
             "clear_all" to KeyFeedbackType.DELETE, "ime_switch" to KeyFeedbackType.MODE_SWITCH,
-            "japanese_convert" to KeyFeedbackType.MODIFIER, "japanese_left" to KeyFeedbackType.NAVIGATION,
             "select_arrow_right" to KeyFeedbackType.NAVIGATION, "select_paragraph_start" to KeyFeedbackType.NAVIGATION,
             "copy" to KeyFeedbackType.EDITING, "toolbar" to KeyFeedbackType.TOOLBAR,
             "cursor_step" to KeyFeedbackType.CURSOR_STEP,

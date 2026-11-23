@@ -3,7 +3,8 @@ name: Build and Release APK
 on:
   push:
     tags:
-      - 'v*.*.*'
+      - 'v*.*'
+      - 'V*.*'
 
 permissions:
   contents: write
@@ -105,7 +106,7 @@ jobs:
         run: |
           ./gradlew assembleRelease --no-daemon
           mkdir -p app/build/outputs/apk/distribution
-          cp app/build/outputs/apk/release/CyIME-*.apk app/build/outputs/apk/distribution/
+          cp app/build/outputs/apk/release/CJIME-*.apk app/build/outputs/apk/distribution/
 
       - name: Required offline edition gate
         uses: reactivecircus/android-emulator-runner@v2
@@ -118,7 +119,7 @@ jobs:
       - name: Build offline Release APKs
         run: |
           ./gradlew assembleRelease -PbundleModels=true -PpythonExecutable=python3 --no-daemon
-          cp app/build/outputs/apk/release/CyIME-*-full-*.apk app/build/outputs/apk/distribution/
+          cp app/build/outputs/apk/release/CJIME-*-full-*.apk app/build/outputs/apk/distribution/
 
       - name: Build Plugin XIPKs (Unsigned)
         run: bash scripts/build-plugins.sh
@@ -126,7 +127,7 @@ jobs:
       - name: Verify APK signatures
         run: |
           APKSIGNER=$(ls "$ANDROID_HOME"/build-tools/*/apksigner | tail -1)
-          for apk in app/build/outputs/apk/distribution/CyIME-*.apk; do
+          for apk in app/build/outputs/apk/distribution/CJIME-*.apk; do
             OUT=$("$APKSIGNER" verify --verbose --min-sdk-version 23 --print-certs "$apk")
             # vivo OriginOS rejects APKs without a v1 (JAR) signature as 「安装包缺乏开发者证书」.
             # --min-sdk-version 23: for minSdk >= 24 apksigner skips v1 and always reports it false.
@@ -142,7 +143,7 @@ jobs:
       - name: Find APKs and plugin XIPKs
         id: find_apks
         run: |
-          MAIN_APKS=$(find app/build/outputs/apk/distribution -name "CyIME-*.apk" -type f | sort | tr '\n' ',' | sed 's/,$//')
+          MAIN_APKS=$(find app/build/outputs/apk/distribution -name "CJIME-*.apk" -type f | sort | tr '\n' ',' | sed 's/,$//')
           PLUGIN_XIPKS=$(find build/plugin-release -name "*.xipk" -type f | sort | tr '\n' ',' | sed 's/,$//')
 
           echo "main_apks=$MAIN_APKS" >> $GITHUB_OUTPUT
@@ -158,7 +159,7 @@ jobs:
       - name: Create Release
         uses: softprops/action-gh-release@v3
         with:
-          name: CyIME ${{ steps.get_version.outputs.VERSION }}
+          name: CJIME ${{ steps.get_version.outputs.VERSION }}
           generate_release_notes: false
           files: |
             ${{ steps.find_apks.outputs.main_apks }}

@@ -646,27 +646,6 @@ class VoiceRecognitionHandlerFinishTest {
         verify(mockInputConnection, never()).setComposingText(any(), anyInt())
     }
 
-    @Test fun `Japanese English Japanese switches request matching recognizers without ending recording`() {
-        currentState = currentState.copy(currentSchemaId = "japanese", isAsciiMode = false)
-        startToolbar()
-        onPartial("句号")
-        currentState = currentState.copy(isAsciiMode = true)
-        handler.onInputLanguageChanged()
-        onPartial("句号，問題")
-        assertEquals("句号 問題", editor.toString())
-        currentState = currentState.copy(isAsciiMode = false)
-        handler.onInputLanguageChanged()
-        onPartial("句号，問題，続く")
-        assertEquals("句号 問題 続く", editor.toString())
-        assertRecordingContinuesIn(InputLanguage.JAPANESE)
-        verify(mockManager).switchRecognitionLanguage(InputLanguage.ENGLISH)
-        verify(mockManager).switchRecognitionLanguage(InputLanguage.JAPANESE)
-        handler.finishRecognition()
-        onResult("句号，問題，続く。")
-        assertEquals("句号 問題 続く", editor.toString())
-        assertEquals(1, voiceCompleteCount)
-    }
-
     @Test fun `language change in same editor rejects pending voice text and final timeout`() {
         startToolbar(); onPartial("已有文字")
         handler.finishRecognition()
@@ -737,21 +716,6 @@ class VoiceRecognitionHandlerFinishTest {
         onResult("hello句号 world!")
         assertEquals("hello。world", editor.toString())
         assertEquals(1, voiceCompleteCount)
-    }
-
-    @Test fun `English side of Japanese pair starts English model and switches both ways`() {
-        currentState = currentState.copy(currentSchemaId = "japanese", isAsciiMode = true)
-        startToolbar()
-        onPartial("hello")
-        repeat(4) {
-            currentState = currentState.copy(isAsciiMode = !currentState.isAsciiMode)
-            handler.onInputLanguageChanged()
-        }
-        onPartial("hello world")
-        assertEquals("hello world", editor.toString())
-        assertRecordingContinuesIn(InputLanguage.ENGLISH)
-        verify(mockManager, times(2)).switchRecognitionLanguage(InputLanguage.JAPANESE)
-        verify(mockManager, times(2)).switchRecognitionLanguage(InputLanguage.ENGLISH)
     }
 
     @Test fun `a standalone English profile still starts its English recognizer`() {

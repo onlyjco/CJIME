@@ -73,27 +73,27 @@ class LanguageSettingsOrderTest {
         LanguagePreferences.initialize(context)
         assertEquals(setOf("zh", "en"), prefs.getStringSet(LanguagePreferences.KEY, emptySet()))
 
-        prefs.edit().putStringSet(LanguagePreferences.KEY, setOf("zh", "ja")).commit()
-        assertEquals(setOf(InputLanguage.CHINESE, InputLanguage.JAPANESE, InputLanguage.ENGLISH), LanguagePreferences.enabled(context))
+        prefs.edit().putStringSet(LanguagePreferences.KEY, setOf("zh", "yue")).commit()
+        assertEquals(setOf(InputLanguage.CHINESE, InputLanguage.CANTONESE, InputLanguage.ENGLISH), LanguagePreferences.enabled(context))
         LanguagePreferences.initialize(context)
-        assertEquals(setOf("zh", "ja", "en"), prefs.getStringSet(LanguagePreferences.KEY, emptySet()))
+        assertEquals(setOf("zh", "yue", "en"), prefs.getStringSet(LanguagePreferences.KEY, emptySet()))
     }
 
-    @Test fun oldJapaneseOnlyChoiceKeepsChineseOffAndAddsRequiredEnglish() {
+    @Test fun oldCantoneseOnlyChoiceKeepsChineseOffAndAddsRequiredEnglish() {
         val context = isolatedContext()
         val prefs = SettingsPreferences.getPrefsPublic(context)
-        prefs.edit().putStringSet(LanguagePreferences.KEY, setOf("ja")).commit()
+        prefs.edit().putStringSet(LanguagePreferences.KEY, setOf("yue")).commit()
         LanguagePreferences.initialize(context)
-        assertEquals(setOf("ja", "en"), prefs.getStringSet(LanguagePreferences.KEY, emptySet()))
-        assertEquals(setOf(InputLanguage.JAPANESE, InputLanguage.ENGLISH), LanguagePreferences.enabled(context))
-        assertEquals(listOf(InputLanguage.JAPANESE, InputLanguage.ENGLISH), InputModes.languageOrder(context))
+        assertEquals(setOf("yue", "en"), prefs.getStringSet(LanguagePreferences.KEY, emptySet()))
+        assertEquals(setOf(InputLanguage.CANTONESE, InputLanguage.ENGLISH), LanguagePreferences.enabled(context))
+        assertEquals(listOf(InputLanguage.CANTONESE, InputLanguage.ENGLISH), InputModes.languageOrder(context))
 
         prefs.edit().putStringSet(LanguagePreferences.KEY, setOf("en")).commit()
         assertEquals(setOf(InputLanguage.ENGLISH), LanguagePreferences.enabled(context))
         assertEquals(listOf(InputLanguage.ENGLISH), InputModes.languageOrder(context))
         val choices = InputModes.languageChoices(listOf(
             SchemaInfo("rime_ice", "中文26键", "", "", ""),
-            SchemaInfo("japanese", "日语", "", "", "")),
+            SchemaInfo("jyut6ping3", "粤拼", "", "", "")),
             "rime_ice", emptyMap(), InputModes.languageOrder(context))
         assertEquals(listOf(InputModes.ENGLISH), choices.map { it.schemaId })
     }

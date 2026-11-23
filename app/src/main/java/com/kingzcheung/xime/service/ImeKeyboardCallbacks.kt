@@ -131,15 +131,12 @@ internal fun rememberImeKeyboardCallbacks(
                     val semicolonCode = key == ";" && service.keyRouter.semicolonIsCode()
                     // 第三方方案字母表里的符号（声笔的 ; ' , . /）是编码键：交给按键队列送进 Rime（#87）。
                     val schemeCode = if (numberPanel) null else service.keyRouter.schemeCodeKey(key)
-                    // 日语 26 键的长音键（键面 ー）送 -：和字母一样进罗马字转换（ko-hi- → コーヒー），不当标点直接上屏。
-                    val choonpu = !numberPanel && japaneseChoonpuIsCode(key, service.uiState.value.isAsciiMode,
-                        service.uiState.value.inputProfile)
                     // 注音键盘的轻声 ˙ 是修饰符号，不能按标点上屏（见 zhuyinKeyIsCode）。
                     val zhuyinKey = !numberPanel && zhuyinKeyIsCode(key, service.uiState.value.isAsciiMode,
                         service.uiState.value.inputProfile)
                     if (schemeCode != null) {
                         service.keyRouter.handleKeyPress(schemeCode, false)
-                    } else if (choonpu || zhuyinKey) {
+                    } else if (zhuyinKey) {
                         service.keyRouter.handleKeyPress(key, false)
                     } else if (!numberPanel && !separator && !semicolonCode && isLiteralPunctuation(key)) {
                         service.textCommit.commitLiteralText(key)
@@ -152,14 +149,6 @@ internal fun rememberImeKeyboardCallbacks(
                     }
                 }
             },
-            onJapaneseKanaAction = kana@{ action ->
-                if (service.inputReadiness.ticket() == null) return@kana
-                val input = (action as? com.kingzcheung.xime.ui.keyboard.JapaneseKanaAction.Input)?.romaji
-                if (input in listOf(",", ".", "?", "!", "/", "(", ")")) {
-                    val punctuation = when (input) { "," -> "、"; "." -> "。"; "/" -> "・"; else -> input!! }
-                    service.textCommit.commitLiteralText(punctuation)
-                } else service.schemaController.handleJapaneseKanaAction(action)
-            },
             onKeyPressDown = { key ->
                 com.kingzcheung.xime.stats.TypingStats.onKeyDown(key)
                 if (key == "delete") service.predictionManager.cancelForDeletePress()
@@ -171,6 +160,9 @@ internal fun rememberImeKeyboardCallbacks(
             },
             onCandidateSelect = { index ->
                 service.keyRouter.selectCandidate(index)
+            },
+            onCandidateSelectWithoutFeedback = { index ->
+                service.keyRouter.selectCandidate(index, feedback = false)
             },
             onNextCandidate = service.keyRouter::highlightNextCandidate,
             onPreviousCandidate = service.keyRouter::highlightPreviousCandidate,
@@ -438,6 +430,9 @@ internal fun rememberImeKeyboardCallbacks(
             onGlobalCandidateSelect = { globalIndex ->
                 service.keyRouter.selectCandidateGlobal(globalIndex)
             },
+            onGlobalCandidateSelectWithoutFeedback = { globalIndex ->
+                service.keyRouter.selectCandidateGlobal(globalIndex, feedback = false)
+            },
             onGlobalCandidateDelete = { globalIndex ->
                 service.keyRouter.deleteCandidateGlobal(globalIndex)
             },
@@ -457,9 +452,7 @@ internal fun rememberImeKeyboardCallbacks(
             onExtendCandidateStrip = { service.extendCandidateStrip() },
             onSingleCharFilterOn = { service.loadSingleCharacterCandidates() },
             onCursorMove = { direction ->
-                if (service.schemaController.moveJapaneseReadingCaret(direction)) {
-                    service.feedbackManager.cursorStepFeedback(view)
-                } else if (service.keyboardCallbacks?.onPreeditCursorMove?.invoke("preedit_cursor:$direction") == true) {
+                if (service.keyboardCallbacks?.onPreeditCursorMove?.invoke("preedit_cursor:$direction") == true) {
                     service.feedbackManager.cursorStepFeedback(view)
                 } else service.schemaController.moveEditorCursor(direction, spaceCursorSelecting(service)) {
                     service.feedbackManager.cursorStepFeedback(view)
@@ -467,8 +460,7 @@ internal fun rememberImeKeyboardCallbacks(
             },
             onCursorMoveVertical = { steps ->
                 val edge = if (steps < 0) "start" else "end"
-                if (!service.schemaController.moveJapaneseReadingCaret(if (steps < 0) -Int.MAX_VALUE / 2 else Int.MAX_VALUE / 2) &&
-                    service.keyboardCallbacks?.onPreeditCursorMove?.invoke("preedit_cursor:$edge") != true)
+                if (service.keyboardCallbacks?.onPreeditCursorMove?.invoke("preedit_cursor:$edge") != true)
                     service.schemaController.moveEditorCursorVertical(steps, spaceCursorSelecting(service)) {
                         service.feedbackManager.cursorStepFeedback(view)
                     }

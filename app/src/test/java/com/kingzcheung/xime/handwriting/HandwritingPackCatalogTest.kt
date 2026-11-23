@@ -22,7 +22,7 @@ class HandwritingPackCatalogTest {
         MessageDigest.getInstance("SHA-256").digest(file.readBytes()).joinToString("") { "%02x".format(it) }
 
     @Test fun downloadedTemplatesAreTheAssetFiles() {
-        for (id in listOf(BuiltinModelCatalog.HANDWRITING_RARE, BuiltinModelCatalog.JAPANESE_HANDWRITING)) {
+        for (id in listOf(BuiltinModelCatalog.HANDWRITING_RARE)) {
             for (f in files(id)) {
                 val asset = File(assets, f.name)
                 assertTrue("$id ${f.name}", asset.isFile)
@@ -33,10 +33,9 @@ class HandwritingPackCatalogTest {
     }
 
     @Test fun lightBuildLeavesOutExactlyTheDownloadedTemplates() {
-        val downloaded = (files(BuiltinModelCatalog.HANDWRITING_RARE) + files(BuiltinModelCatalog.JAPANESE_HANDWRITING))
+        val downloaded = files(BuiltinModelCatalog.HANDWRITING_RARE)
             .map { it.name }.toSet()
         for (name in downloaded) assertTrue(name, gradle.contains("\"$name\""))
-        // 贡献页的常用度表、英文字母模板留在包里。
-        assertTrue(!gradle.contains("\"japanese_kanji.json\"") && !gradle.contains("\"latin_default_strokes.json\""))
+        assertTrue(!gradle.contains("\"latin_default_strokes.json\""))
     }
 }

@@ -185,7 +185,7 @@ class LogViewerViewModel(application: Application) : AndroidViewModel(applicatio
                 )
                 _events.emit(LogViewerEvent.ShareFile(
                     uri = uri,
-                    subject = "CyIME 日志 - ${file.name}",
+                    subject = "CJIME 日志 - ${file.name}",
                     mimeType = "text/plain"
                 ))
             } catch (e: Exception) {

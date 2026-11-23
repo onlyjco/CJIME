@@ -19,7 +19,7 @@ class HardwareCandidateNavigationTest {
         HardwareCandidateSnapshot(1, profile, state, english)
 
     @Test fun chineseAndJapaneseCompositionNavigateAndConfirmWithoutMovingTheEditor() {
-        for (language in listOf(InputLanguage.CHINESE, InputLanguage.JAPANESE)) {
+        for (language in listOf(InputLanguage.CHINESE, InputLanguage.CANTONESE)) {
             val navigation = HardwareCandidateNavigation()
             val source = snapshot().copy(profile = profile.copy(language = language))
             assertEquals(HardwareCandidateDecision.Highlight(1), navigation.decide(HardwareCandidateKey.RIGHT, source, true))
@@ -154,7 +154,7 @@ class HardwareCandidateNavigationTest {
         val source = snapshot()
         for (changed in listOf(
             source.copy(editor = 2),
-            source.copy(profile = profile.copy(language = InputLanguage.JAPANESE)),
+            source.copy(profile = profile.copy(language = InputLanguage.CANTONESE)),
             source.copy(state = composition.copy(engineRevision = 5)),
             source.copy(state = composition.copy(inputText = "ce")),
             source.copy(state = composition.copy(candidates = composition.candidates.reversed())),

@@ -1,5 +1,7 @@
 package com.kingzcheung.xime.runtime.adaptation
 
+data class CpuMeasurement(val singleNs: Long = 0, val dualNs: Long = 0, val version: Int = 0)
+
 /** Monotonic timestamps; null means unavailable, never a zero-cost/high-performance device. */
 data class DeviceCapabilities(
     val sampledAtMs: Long,

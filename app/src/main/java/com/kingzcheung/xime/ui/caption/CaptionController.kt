@@ -183,9 +183,7 @@ class CaptionController(context: Context) : CaptionInferenceClient.Listener {
                 val chosen = language
                 val mode = captionMode(chosen)
                 main.post {
-                    // Chinese: SenseVoice corrects; English: it is the model; Japanese never uses it.
-                    refinementReady = chosen == CaptionLanguage.JAPANESE || usesSenseVoice(mode)
-                    // Only Chinese has a streaming model to offer; the others re-read the sentence instead.
+                    refinementReady = usesSenseVoice(mode)
                     streamingReady = chosen != CaptionLanguage.CHINESE || mode != SpeechModelCatalog.SENSEVOICE
                 }
                 val speakerPath = speakerModelFile()?.absolutePath.orEmpty()
@@ -645,12 +643,11 @@ class CaptionController(context: Context) : CaptionInferenceClient.Listener {
     fun missingModel(language: CaptionLanguage): Pair<String, String>? = when (language) {
         CaptionLanguage.CHINESE -> if (ready(SpeechModelCatalog.TWO_PASS) || ready(SpeechModelCatalog.SENSEVOICE) ||
             ready(SpeechModelCatalog.PARAFORMER)) null else SpeechModelCatalog.PARAFORMER to "226 MB"
-        CaptionLanguage.JAPANESE -> if (ready(SpeechModelCatalog.ZIPFORMER_JA_INT8) || ready(SpeechModelCatalog.ZIPFORMER_JA)) null
-            else SpeechModelCatalog.ZIPFORMER_JA_INT8 to "153 MB"
+        CaptionLanguage.CANTONESE -> if (senseVoiceReady()) null else SpeechModelCatalog.SENSEVOICE to "228 MB"
         CaptionLanguage.ENGLISH -> if (senseVoiceReady()) null else SpeechModelCatalog.SENSEVOICE to "228 MB"
     }
 
-    // One state per language: picking English while Japanese downloads must not show Japanese's
+    // One state per language: picking English while Cantonese downloads must not show Cantonese's
     // progress, or its "done", on the English banner.
     private val languageDownloads = mutableStateMapOf<CaptionLanguage, ModelDownloadState>()
     fun languageDownload(language: CaptionLanguage): ModelDownloadState = languageDownloads[language] ?: ModelDownloadState.Idle
@@ -671,8 +668,8 @@ class CaptionController(context: Context) : CaptionInferenceClient.Listener {
     }
 
     private fun captionMode(language: CaptionLanguage): String = when (language) {
-        CaptionLanguage.JAPANESE -> listOf(SpeechModelCatalog.ZIPFORMER_JA_INT8, SpeechModelCatalog.ZIPFORMER_JA).firstOrNull { ready(it) }
-            ?: error("日语字幕要先下载日语语音模型（153 MB）")
+        CaptionLanguage.CANTONESE -> SpeechModelCatalog.SENSEVOICE.takeIf { ready(it) }
+            ?: error("粤语字幕要先下载 SenseVoice（228 MB）")
         CaptionLanguage.ENGLISH -> SpeechModelCatalog.SENSEVOICE.takeIf { ready(it) }
             ?: error("英语字幕要先下载 SenseVoice（228 MB）")
         CaptionLanguage.CHINESE -> chineseMode()
@@ -776,7 +773,7 @@ class CaptionController(context: Context) : CaptionInferenceClient.Listener {
         const val SESSION_STRIDE = 1_000_000_000_000_000L
         const val MAX_LINES = 400
         private const val AUTO_SAVE_DELAY_MS = 3_000L
-        const val SAVE_FOLDER = "CyIME字幕"
+        const val SAVE_FOLDER = "CJIME字幕"
         val FONT_SP = intArrayOf(24, 32, 44)
         val FONT_LABEL = arrayOf("大", "特大", "巨大")
         /** Okabe-Ito colour-blind safe palette: orange, sky blue, bluish green, blue, vermillion, reddish purple, yellow, grey. */

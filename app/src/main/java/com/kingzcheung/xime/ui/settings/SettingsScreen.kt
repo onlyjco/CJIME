@@ -117,7 +117,6 @@ fun SettingsScreen(
                     onNavigateToDictionary = { navController.navigate(SettingsRoutes.Dictionary) },
                     onNavigateToPlugins = { navController.navigate(SettingsRoutes.Plugins) },
                     onNavigateToModelLocal = { navController.navigate(SettingsRoutes.ModelLocal) },
-                    onNavigateToHandwritingTraining = { navController.navigate(SettingsRoutes.HandwritingTraining) },
                     onNavigateToSmartPrediction = { navController.navigate(SettingsRoutes.SmartPrediction) },
                     onNavigateToSpeechToText = { navController.navigate(SettingsRoutes.SpeechToText) },
                     onNavigateToAbout = { navController.navigate(SettingsRoutes.About) },
@@ -255,10 +254,6 @@ fun SettingsScreen(
                 onBack = { navController.popBackStack() }
             )
         }
-        composable(SettingsRoutes.Performance) {
-            PerformanceSettingsContent(onBack = { navController.popBackStack() },
-                onOpenSetupGuide = { navController.navigate(SettingsRoutes.SetupGuide) })
-        }
         composable(SettingsRoutes.KeyEffect) {
             KeyEffectSettingsContent(
                 onBack = { navController.popBackStack() }
@@ -278,16 +273,12 @@ fun SettingsScreen(
                     onNavigate = { navController.navigate(it) })
             }
         }
-        composable(SettingsRoutes.GlideContribute) {
-            GlideContributeScreen(onBack = { navController.popBackStack() })
-        }
         composable(SettingsRoutes.SmartPrediction) {
             SmartPredictionSettingsContent(onBack = { navController.popBackStack() })
         }
         composable(SettingsRoutes.SpeechToText) {
             SpeechToTextSettingsContent(
                 onBack = { navController.popBackStack() },
-                onNavigateToSetupGuide = { navController.navigate(SettingsRoutes.SetupGuide) },
                 onNavigateToPluginSettings = { pluginId ->
                     navController.navigate("${SettingsRoutes.PluginSettings}/$pluginId")
                 },
@@ -296,12 +287,8 @@ fun SettingsScreen(
         composable(SettingsRoutes.Dictionary) {
             DictionarySettingsContent(
                 onBack = { navController.popBackStack() },
-                onCellDictionaries = { navController.navigate(SettingsRoutes.CellDictionaries) },
-                onContribute = { navController.navigate(SettingsRoutes.DictContribute) }
+                onCellDictionaries = { navController.navigate(SettingsRoutes.CellDictionaries) }
             )
-        }
-        composable(SettingsRoutes.DictContribute) {
-            DictContributeScreen(onBack = { navController.popBackStack() })
         }
         composable(SettingsRoutes.CellDictionaries) {
             CellDictionarySettingsContent(onBack = { navController.popBackStack() })
@@ -337,23 +324,16 @@ fun SettingsScreen(
                 onBack = { navController.popBackStack() },
                 onNavigateToPrivacy = { navController.navigate(SettingsRoutes.Privacy) },
                 onNavigateToLicenses = { navController.navigate(SettingsRoutes.Licenses) },
-                onNavigateToCredits = { navController.navigate(SettingsRoutes.Credits) },
                 onNavigateToReleaseNotes = { navController.navigate(SettingsRoutes.ReleaseNotes) },
                 onNavigateToLogViewer = { navController.navigate(SettingsRoutes.LogViewer) },
                 onNavigateToStorageSpace = { navController.navigate(SettingsRoutes.StorageSpace) }
             )
         }
-        composable(SettingsRoutes.SetupGuide) {
-            SetupGuideScreen(firstRun = false, onDone = { navController.popBackStack() },
-                onOpenPerformance = { navController.navigate(SettingsRoutes.Performance) },
-                onOpenRoute = { navController.navigate(it) })
-        }
         composable(SettingsRoutes.StorageSpace) {
             StorageSpaceScreen(
                 onBack = { navController.popBackStack() },
                 onNavigateToPlugins = { navController.navigate(SettingsRoutes.Plugins) },
-                onNavigateToModels = { navController.navigate(SettingsRoutes.ModelLocal) },
-                onNavigateToPerformance = { navController.navigate(SettingsRoutes.Performance) }
+                onNavigateToModels = { navController.navigate(SettingsRoutes.ModelLocal) }
             )
         }
         composable(SettingsRoutes.LogViewer) {
@@ -363,25 +343,7 @@ fun SettingsScreen(
         }
         composable(SettingsRoutes.Handwriting) {
             HandwritingSettingsContent(onBack = { navController.popBackStack() },
-                onOpenModels = { navController.navigate(SettingsRoutes.ModelLocal) },
-                onOpenTraining = { navController.navigate(SettingsRoutes.HandwritingTraining) },
-                onOpenContribute = { navController.navigate(SettingsRoutes.HandwritingContribute) })
-        }
-        composable(SettingsRoutes.HandwritingContribute) {
-            HandwritingTrainingScreen(
-                onBack = { navController.popBackStack() },
-                contribute = true,
-            )
-        }
-        composable(SettingsRoutes.HandwritingTraining) {
-            val context = androidx.compose.ui.platform.LocalContext.current
-            HandwritingTrainingScreen(
-                onBack = { navController.popBackStack() },
-                // 上次停在贡献题就接着写贡献题
-                contribute = androidx.compose.runtime.remember {
-                    com.kingzcheung.xime.handwriting.training.HandwritingContribution.lastOpened(context)
-                },
-            )
+                onOpenModels = { navController.navigate(SettingsRoutes.ModelLocal) })
         }
         composable(SettingsRoutes.Privacy) {
             PrivacyPolicyContent(
@@ -392,9 +354,6 @@ fun SettingsScreen(
             LicensesContent(
                 onBack = { navController.popBackStack() }
             )
-        }
-        composable(SettingsRoutes.Credits) {
-            CreditsContent(onBack = { navController.popBackStack() })
         }
         composable(SettingsRoutes.ReleaseNotes) {
             ReleaseNotesContent(onBack = { navController.popBackStack() })

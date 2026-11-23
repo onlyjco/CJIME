@@ -174,9 +174,6 @@ class MainActivity : ComponentActivity() {
         val openFragment = intent?.getStringExtra("open_fragment")
         val openPluginId = intent?.getStringExtra("open_plugin_id")
         val openPluginSettings = intent?.getBooleanExtra(EXTRA_OPEN_PLUGIN_SETTINGS, false) == true
-        // 启动广告彩蛋（默认关）：只在正常打开设置时放，分享文件、跳到具体页面时不挡。
-        val launchAdAllowed = com.kingzcheung.xime.ui.settings.LaunchAdEgg.allowedAtLaunch(
-            BuildConfig.ELDER, intent?.action, openFragment, openPluginId)
 
         com.kingzcheung.xime.model.DefaultModelInstaller.start(applicationContext)
 
@@ -184,7 +181,6 @@ class MainActivity : ComponentActivity() {
             val context = this
             val setupCompleted = SettingsPreferences.isSetupCompleted(context)
             var showWizard by remember { mutableStateOf(!setupCompleted) }
-            var showGuide by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(false) }
             var wizardToSettings by remember { mutableStateOf(false) }
             var darkMode by remember { mutableIntStateOf(SettingsPreferences.getEffectiveDarkMode(context)) }
             var keyboardTheme by remember { mutableStateOf(SettingsPreferences.getKeyboardTheme(context)) }
@@ -238,8 +234,6 @@ class MainActivity : ComponentActivity() {
                                 onNavigateToSchemaSettings = { wizardToSettings = true },
                                 onCompleted = {
                                     showWizard = false
-                                    // 老人包按规格固定配置，不在首次设置后弹出推荐配置。
-                                    showGuide = !BuildConfig.ELDER && !com.kingzcheung.xime.model.SetupGuide.isShown(context)
                                 }
                             )
                             if (wizardToSettings) {
@@ -253,13 +247,6 @@ class MainActivity : ComponentActivity() {
                                 )
                             }
                         }
-                    } else if (showGuide) {
-                        com.kingzcheung.xime.ui.settings.SetupGuideScreen(firstRun = true, onDone = { showGuide = false },
-                            // 「更多配置」里的跳转：收起引导，在设置里打开那一页（返回落到设置首页）。
-                            onOpenRoute = { route ->
-                                showGuide = false
-                                settingsNavigationRequest = SettingsNavigationRequest(route, (settingsNavigationRequest?.id ?: 0) + 1)
-                            })
                     } else {
                         SettingsScreen(
                             initialRoute = openFragment,
@@ -292,9 +279,6 @@ class MainActivity : ComponentActivity() {
                                 )
                             )
                     )
-
-                    // 启动广告彩蛋：盖在最上面，5 秒或点「跳过」后收掉。
-                    com.kingzcheung.xime.ui.settings.LaunchAdEasterEgg(launchAdAllowed, blocked = showWizard || showGuide)
                 }
             }
         }}

@@ -1,4 +1,4 @@
-# CyIME 界面英文表：中文原文<TAB>英文。中文原文就是源码里的字面量（转义 \n \t \\，模板写成 {0} {1}…）。
+# CJIME 界面英文表：中文原文<TAB>英文。中文原文就是源码里的字面量（转义 \n \t \\，模板写成 {0} {1}…）。
 # 英文界面时设置等页面的 Text 按这张表显示英文，查不到的照原样显示中文。机制见 app/src/main/java/com/kingzcheung/xime/ui/i18n/UiTranslations.kt。
 # 英文写成 = 的是有意留中文的（示例候选词、成语、文件格式、给对面人看的快捷回复等）。
 # 新加的设置文字：python tools/i18n/extract_ui_strings.py --missing 列出还没翻的，补在这里。
@@ -95,8 +95,8 @@ color_schemes:\n  {0}:\n    name: "自定义背景 {1}"\n    keyboard_background
 图片	Images
 内容不能为空	Content can't be empty
 这条记录已不存在，修改内容仍保留在表单中	This record no longer exists; your edits are kept in the form
-CyIME剪贴板-{0}.{1}	=
-\# CyIME 剪贴板（{0} 导出，{1} 条）\n	=
+CJIME剪贴板-{0}.{1}	=
+\# CJIME 剪贴板（{0} 导出，{1} 条）\n	=
 固定内容	=
 历史记录	=
 （分组 {0}）	=
@@ -112,7 +112,7 @@ CyIME剪贴板-{0}.{1}	=
 ，{0} 条已经有了，没再加	, {0} already existed and were skipped
 ，还有 {0} 条剪贴板放不下，没有导入	, {0} didn't fit in the clipboard and weren't imported
 ，按数量上限和保留时间删掉了较早的 {0} 条	, the oldest {0} were removed by the count limit and retention time
-\# CyIME 剪贴板	=
+\# CJIME 剪贴板	=
 \## 固定内容	=
 \## 历史记录	=
 无痕模式开着：复制的内容不记进键盘剪贴板，粘贴照常能用。在键盘菜单点「无痕」可以关掉	Incognito mode is on: copied content isn't saved to the keyboard clipboard, but pasting still works. Tap “Incognito” in the keyboard menu to turn it off
@@ -127,24 +127,24 @@ CyIME剪贴板-{0}.{1}	=
 螢幕截圖	=
 螢幕擷取畫面	=
 手机与电脑剪贴板同步失败，之后会逐渐拉长间隔自动重试。	Phone–computer clipboard sync failed. It will retry automatically at increasing intervals.
-CyIME 设备	CyIME device
+CJIME 设备	CJIME device
 已开启，同一 Wi-Fi 的其他设备可连接本机	On. Other devices on the same Wi-Fi can connect to this phone
 无法开启本机连接，请稍后重试	Can't start the local connection. Please try again later
 未连接 Wi-Fi，无法显示二维码	Not on Wi-Fi, so the QR code can't be shown
 保存失败	Save failed
 已连接 {0}	Connected to {0}
-没有连上支持隔空输入的电脑（电脑端 CyIME 需开着手机互联并更新到新版）	No computer that supports remote typing is connected (CyIME on the computer needs phone link on and the latest version)
+没有连上支持隔空输入的电脑（电脑端 CJIME 需开着手机互联并更新到新版）	No computer that supports remote typing is connected (CJIME on the computer needs phone link on and the latest version)
 {0} 已撤销配对，请重新连接	{0} revoked the pairing. Please reconnect
 {0} 关了「接收手机内容」或暂停了这台手机	{0} turned off “Receive from phone” or paused this phone
-{0} 上的 CyIME 版本太旧，不支持隔空输入	CyIME on {0} is too old for remote typing
+{0} 上的 CJIME 版本太旧，不支持隔空输入	CJIME on {0} is too old for remote typing
 这段太长，最多 64 KiB	This text is too long (max 64 KiB)
-两端版本不匹配，请更新 CyIME	Versions don't match. Please update CyIME
+两端版本不匹配，请更新 CJIME	Versions don't match. Please update CJIME
 {0} 暂时无法输入（{1}）	{0} can't type right now ({1})
 连不上 {0}	Can't reach {0}
 连不上电脑	Can't reach the computer
 已配对 {0}，同网自动重连	Paired with {0}; reconnects automatically on the same network
 配对凭据无法读取，请重新配对；原记录已保留	Can't read the pairing credentials. Please pair again; the old record is kept
-发现电脑但无法解析地址，请更新电脑端或使用扫码连接	Found a computer but couldn't resolve its address. Update CyIME on the computer or connect by QR code
+发现电脑但无法解析地址，请更新电脑端或使用扫码连接	Found a computer but couldn't resolve its address. Update CJIME on the computer or connect by QR code
 正在连接 {0}…	Connecting to {0}…
 附近设备发现失败（{0}），正在重试；也可以扫码连接	Nearby device discovery failed ({0}). Retrying; you can also connect by QR code
 无法开始发现，正在重试；请检查局域网连接	Can't start discovery. Retrying; please check your local network
@@ -155,7 +155,7 @@ CyIME 设备	CyIME device
 {0} 暂未连通 · {1}	{0} not reachable yet · {1}
 已连接 {0}，新地址保存失败；稍后自动重试	Connected to {0}, but saving the new address failed; will retry automatically
 {0} 不在当前网络，已切换到 {1}	{0} isn't on this network; switched to {1}
-正在寻找附近电脑 · 请在 Windows CyIME 开启手机互联，并连接同一 Wi-Fi	Looking for nearby computers · Turn on phone link in CyIME for Windows and join the same Wi-Fi
+正在寻找附近电脑 · 请在 Windows CJIME 开启手机互联，并连接同一 Wi-Fi	Looking for nearby computers · Turn on phone link in CJIME for Windows and join the same Wi-Fi
 正在重新寻找附近电脑…	Looking for nearby computers again…
 已取消连接，可重新选择电脑或扫码连接	Connection canceled. Choose a computer again or connect by QR code
 正在寻找附近电脑	Looking for nearby computers
@@ -174,18 +174,18 @@ CyIME 设备	CyIME device
 电脑未允许连接（{0}），请开启加密连接和附近发现	The computer didn't allow the connection ({0}). Turn on encrypted connections and nearby discovery
 无法连接电脑	Can't connect to the computer
 二维码内容过长	QR code content is too long
-CyIME 电脑	CyIME computer
+CJIME 电脑	CJIME computer
 电脑响应过大	The computer's response is too large
 请先连接电脑	Connect a computer first
 连接已更改	Connection changed
 电脑未确认收到相同文字	The computer didn't confirm receiving the same text
-电脑端需要更新，当前版本没有连接状态接口	CyIME on the computer needs an update; this version has no connection status API
+电脑端需要更新，当前版本没有连接状态接口	CJIME on the computer needs an update; this version has no connection status API
 电脑暂时无法连接（{0}）	Can't connect to the computer right now ({0})
 电脑已撤销配对，请重新连接	The computer revoked the pairing. Please reconnect
 电脑已暂停此方向的剪贴板同步	The computer paused clipboard sync in this direction
 电脑刚复制了新内容，稍后重试	The computer just copied something new; try again shortly
 文字过长，最多同步 64 KiB	Text too long; up to 64 KiB can be synced
-两端剪贴板格式不匹配，请更新 CyIME	Clipboard formats don't match. Please update CyIME
+两端剪贴板格式不匹配，请更新 CJIME	Clipboard formats don't match. Please update CJIME
 电脑剪贴板正被占用，稍后重试	The computer's clipboard is busy; try again shortly
 电脑暂时无法同步（{0}）	Can't sync with the computer right now ({0})
 通讯录变化监听失败：{0}	Contacts change listener failed: {0}
@@ -284,7 +284,7 @@ Zipformer · 中文	Zipformer · Chinese
 被 v3-ls-tri-jue1105-c3 取代（只修了「觉的」）。	Replaced by v3-ls-tri-jue1105-c3 (only fixed “觉的”).
 旧格式，内容与新版相同；可删除后改装新版以节省空间。	Old format with the same content as the new one; you can delete it and install the new version to save space.
 词组模型(精简，105 MB)	Phrase model (compact, 105 MB)
-完整版剪枝后的小一半版本，九键、26 键全拼和双拼的整句都用它；九键整句首选约低 3 个百分点，26 键长句和完整版一样；和完整版二选一，安装后重新启动输入法生效。CyIME 自行训练。	A pruned version about half the size of the full one, used for whole sentences in 9-key, QWERTY full pinyin and Shuangpin. 9-key sentence top picks are about 3 points lower; QWERTY long sentences are the same as full. Choose either this or the full one. Takes effect after restarting the keyboard. Trained by CyIME.
+完整版剪枝后的小一半版本，九键、26 键全拼和双拼的整句都用它；九键整句首选约低 3 个百分点，26 键长句和完整版一样；和完整版二选一，安装后重新启动输入法生效。CJIME 自行训练。	A pruned version about half the size of the full one, used for whole sentences in 9-key, QWERTY full pinyin and Shuangpin. 9-key sentence top picks are about 3 points lower; QWERTY long sentences are the same as full. Choose either this or the full one. Takes effect after restarting the keyboard. Trained by CJIME.
 九键语法增强(已停用)	9-key grammar boost (retired)
 已停用：九键词组模型更准、更小，请改装词组模型；装了词组模型后它不再起作用，会自动删除。来源：RIME-LMDG，CC-BY-4.0。	Retired: the 9-key phrase model is more accurate and smaller, please install it instead. Once the phrase model is installed this has no effect and is deleted automatically. Source: RIME-LMDG, CC-BY-4.0.
 九键长句增强(已停用)	9-key long-sentence boost (retired)
@@ -406,7 +406,6 @@ fu 也出“湖”，hu 也出“福”	fu also gives “湖”, hu also gives �
 现在没联网，要下载的 {0} 连上网后自动下载。	You're offline; {0} to download will download automatically when online.
 现在用的是移动数据，要下载的 {0} 会等连上 Wi-Fi 再下。	You're on mobile data; {0} to download will wait for Wi-Fi.
 关掉{0}	Turn off {0}
-，按「性能与省电」里的表约省 {0} MB 内存	, saving about {0} MB of memory per the table in “Performance & battery”
 。以后想开，在设置里各自的开关打开。	. To turn them on later, use each one's switch in Settings.
 字幕要用它听别人说话。	Captions use it to hear other people.
 你停下来后，用它把刚才那句再认一遍，改掉错字、加上标点。	After you stop, it re-recognizes the last sentence to fix typos and add punctuation.
@@ -482,7 +481,7 @@ Zipformer · 日语原版	Zipformer · Japanese original
 只中文滑行	Chinese glide only
 中文、英文都滑行	Glide for Chinese and English
 未允许相机，可稍后重试	Camera not allowed; try again later
-请先选择 CyIME 输入法	Please select CyIME as the keyboard first
+请先选择 CJIME 输入法	Please select CJIME as the keyboard first
 移动或缩放图片，将文字放入中间框	Move or zoom the image to put the text in the center frame
 无法读取图片，请重新选择	Can't read the image. Please choose again
 正在识别…	Recognizing…
@@ -519,7 +518,7 @@ Zipformer · 日语原版	Zipformer · Japanese original
 下载	Download
 需要先下载拍照识别模型	Download the photo recognition model first
 无效画面	Invalid frame
-Device: CyIME {0} | {1} | 厂商：{2} | {3} | 系统编译号：{4}\nPlatform: {5}	Device: CyIME {0} | {1} | Manufacturer: {2} | {3} | Build number: {4}\nPlatform: {5}
+Device: CJIME {0} | {1} | 厂商：{2} | {3} | 系统编译号：{4}\nPlatform: {5}	Device: CJIME {0} | {1} | Manufacturer: {2} | {3} | Build number: {4}\nPlatform: {5}
 系统编译号：{0}\nPlatform: {1}	Build number: {0}\nPlatform: {1}
 手势区/可点区 inset，固定键盘可贴底	Gesture/tappable insets; fixed keyboard can sit at the bottom
 调整键盘时屏蔽系统边缘手势	Block system edge gestures while resizing the keyboard
@@ -597,7 +596,7 @@ WS 连接失败	WS connection failed
 正在加载输入法引擎...	Loading input engine...
 初始化失败	Initialization failed
 非官方安装包	Unofficial installer
-这个 CyIME 不是作者签名发布的，可能被人改过。输入法能看到你打的每个字，请卸载后从官方下载页重新安装。	This CyIME wasn't signed and released by the author and may have been modified. A keyboard can see everything you type, so please uninstall it and reinstall from the official download page.
+这个 CJIME 不是作者签名发布的，可能被人改过。输入法能看到你打的每个字，请卸载后从官方下载页重新安装。	This CJIME wasn't signed and released by the author and may have been modified. A keyboard can see everything you type, so please uninstall it and reinstall from the official download page.
 去下载	Download
 知道了	Got it
 语音会话尚未启动	Voice session not started
@@ -698,7 +697,7 @@ candidate_transform(T9) 连续失败 {0} 次，禁用当前实例的变换；重
 逗号	=
 句号	=
 问号	=
-CyIME 不是官方安装包，可能被人改过，请从官方下载页重装	This CyIME isn't an official build and may have been modified. Please reinstall from the official download page
+CJIME 不是官方安装包，可能被人改过，请从官方下载页重装	This CJIME isn't an official build and may have been modified. Please reinstall from the official download page
 正在加载键盘配置...	Loading keyboard settings...
 正在准备词库，首次使用需要稍候...	Preparing the dictionary; the first time takes a moment...
 输入会话未就绪	Input session not ready
@@ -718,18 +717,17 @@ Clipboard sync plugin {0} 未声明同步协议，拒绝启动	=
 事例	=
 隔空输入：说的话发到	Remote typing: speech goes to
 电脑	computer
-{0} 上当前不是 CyIME 输入框，已放到电脑剪贴板，按 Ctrl+V 粘贴	The focused field on {0} isn't a CyIME field; it's on the computer clipboard, press Ctrl+V to paste
+{0} 上当前不是 CJIME 输入框，已放到电脑剪贴板，按 Ctrl+V 粘贴	The focused field on {0} isn't a CJIME field; it's on the computer clipboard, press Ctrl+V to paste
 没发到电脑：{0}。这句已复制到手机剪贴板	Not sent to the computer: {0}. The sentence was copied to the phone clipboard
 简体中文	=
 繁體中文	=
-日本語	=
 放大	Zoom in
 缩小	Zoom out
 平移	Pan
 组合	Combined
 无法保存设置	Can't save the setting
 备份文件过大	Backup file is too large
-所选文件不是 CyIME 备份	The selected file isn't a CyIME backup
+所选文件不是 CJIME 备份	The selected file isn't a CJIME backup
 写入设置失败	Failed to write settings
 无法创建恢复目录	Can't create the restore folder
 无法清理旧词库文件: {0}	Can't clean up old dictionary files: {0}
@@ -810,7 +808,7 @@ Clipboard sync plugin {0} 未声明同步协议，拒绝启动	=
 旅游词汇大全	Travel terms
 日剧、动漫大全	Japanese dramas & anime
 汽车词汇大全	Automotive terms
-\# Internal compilation dependency of imported English words; not an input mode. Managed by CyIME.\nschema:\n  schema_id: {0}\n  name: 导入词库英文依赖\n  version: "1"\nengine:\n  processors: [speller, selector, express_editor]\n  segmentors: [abc_segmentor]\n  translators: [table_translator]\nspeller:\n  alphabet: "{1}"\n  algebra: []\ntranslator:\n  dictionary: {2}\n  enable_completion: false\n  enable_sentence: false\n	=
+\# Internal compilation dependency of imported English words; not an input mode. Managed by CJIME.\nschema:\n  schema_id: {0}\n  name: 导入词库英文依赖\n  version: "1"\nengine:\n  processors: [speller, selector, express_editor]\n  segmentors: [abc_segmentor]\n  translators: [table_translator]\nspeller:\n  alphabet: "{1}"\n  algebra: []\ntranslator:\n  dictionary: {2}\n  enable_completion: false\n  enable_sentence: false\n	=
 搜狗暂时无法下载，可从来源页下载后导入	Sogou can't be downloaded right now; download it from the source page and import it
 下载内容为空	Downloaded content is empty
 词库文件过大	Dictionary file is too large
@@ -840,7 +838,7 @@ SCEL 和 JSON 词库最大 16 MB	SCEL and JSON dictionaries can be at most 16 MB
 词库更新条数过多	Too many dictionary update entries
 主词库更新有重复条目	Main dictionary update has duplicate entries
 无效或重复的词库更新条目	Invalid or duplicate dictionary update entry
-\# CyIME 词库在线更新 revision 	=
+\# CJIME 词库在线更新 revision 	=
 ，由 scripts/dict/publish_word_updates.py 生成\n	=
 主词库更新条目格式有误：{0}	Main dictionary update entry is malformed: {0}
 中文26键	Chinese QWERTY
@@ -853,7 +851,7 @@ Cyletix10（实验）	Cyletix10 (experimental)
 缺少已安装词典：{0}	Missing installed dictionary: {0}
 五笔86（Rime 官方）	Wubi 86 (official Rime)
 Rime / 王永民	Rime / Wang Yongmin
-Rime 官方五笔86，支持拼音反查；仅下载本方案和词库，基础依赖已随 CyIME 提供。	Official Rime Wubi 86 with pinyin lookup; downloads only this scheme and its dictionary, base dependencies come with CyIME.
+Rime 官方五笔86，支持拼音反查；仅下载本方案和词库，基础依赖已随 CJIME 提供。	Official Rime Wubi 86 with pinyin lookup; downloads only this scheme and its dictionary, base dependencies come with CJIME.
 形码	Shape-based
 拼音	Pinyin
 固定 Rime 官方提交；仅下载五笔86方案和词库，不带其他方案或应用设置。	Pinned to an official Rime commit; downloads only the Wubi 86 scheme and dictionary, no other schemes or app settings.
@@ -876,7 +874,7 @@ name: 雾凇拼音	=
 默认雾凇词库 · 支持市场同名更新	Default rime-ice dictionary · updates from the market under the same name
 共享日语词库 · 支持市场同名方案更新	Shared Japanese dictionary · updates from the market under the same name
 文件太大，请改用分享	File too large; please use Share instead
-这些词只用于改进 CyIME 词库，整理出的词库会随 CyIME 公开发布。发送前可逐词取消。魔搭接收勾选的词、拼音、次数、方案、应用版本及独立随机编号；原始贡献按此用途处理，公开的是汇总后的词库。	These words are only used to improve CyIME's dictionary, and the compiled dictionary is published with CyIME. You can untick any word before sending. ModelScope receives the ticked words, pinyin, counts, scheme, app version and a separate random ID; raw contributions are handled for this purpose only, and only the aggregated dictionary is published.
+这些词只用于改进 CJIME 词库，整理出的词库会随 CJIME 公开发布。发送前可逐词取消。魔搭接收勾选的词、拼音、次数、方案、应用版本及独立随机编号；原始贡献按此用途处理，公开的是汇总后的词库。	These words are only used to improve CJIME's dictionary, and the compiled dictionary is published with CJIME. You can untick any word before sending. ModelScope receives the ticked words, pinyin, counts, scheme, app version and a separate random ID; raw contributions are handled for this purpose only, and only the aggregated dictionary is published.
 发送前可逐词取消。魔搭接收勾选的词、拼音、次数、方案、应用版本及独立随机编号；原始贡献按此用途处理，公开的是汇总后的词库。	You can untick any word before sending. ModelScope receives the ticked words, pinyin, counts, scheme, app version and a separate random ID; raw contributions are handled for this purpose only, and only the aggregated dictionary is published.
 词库还没准备好	Dictionary isn't ready yet
 读不到用户词库	Can't read the user dictionary
@@ -892,20 +890,20 @@ name: 雾凇拼音	=
 导入的词库「{0}」	Imported dictionary “{0}”
 （未开启）	 (off)
 我的短语	My phrases
-  description: |\n    CyIME 双拼方案（由键位表生成），词库、符号与按键排列和小鹤双拼相同。\n	=
+  description: |\n    CJIME 双拼方案（由键位表生成），词库、符号与按键排列和小鹤双拼相同。\n	=
 小鹤双拼方案缺少 schema_id	Xiaohe Shuangpin scheme is missing schema_id
 小鹤双拼方案缺少 prism	Xiaohe Shuangpin scheme is missing prism
 cyime_particle_shortcuts:\n  exact: ["{0} 来了"]	=
-{0}{1}\n{2}\nschema:\n  schema_id: {3}\n  language: zh\n  input_scheme: double_pinyin\n  name: {4}\n  version: "1"\n  description: |\n    CyIME 双拼方案（由键位表生成）的九键版本：每个字按它的两个双拼键所在的数字键输入。\n  dependencies:\n    - cyime_t9_english\n\nswitches:\n  - name: ascii_mode\n    reset: 0\n    states: [ 中文, 西文 ]\n  - name: full_shape\n    states: [ 半角, 全角 ]\n  - name: ascii_punct\n    reset: 0\n    states: [ 。，, ．， ]\n\nengine:\n  processors:\n    - t9_processor\n    - ascii_composer\n    - recognizer\n    - key_binder\n    - speller\n    - punctuator\n    - selector\n    - navigator\n    - express_editor\n  segmentors:\n    - ascii_segmentor\n    - matcher\n    - abc_segmentor\n    - punct_segmentor\n    - fallback_segmentor\n  translators:\n    - punct_translator\n    - script_translator\n    - t9_english_translator@t9_english\n  filters:\n    - cyime_candidate_policy\n    - t9_filter\n    - uniquifier\n\nspeller:\n  alphabet: zyxwvutsrqponmlkjihgfedcba9876543210{5}\n  initials: zyxwvutsrqponmlkjihgfedcba9876543210\n  delimiter: " '"\n  algebra:\n{6}\ntranslator:\n  dictionary: rime_ice\n  prism: {7}\n  max_homophones: 32\n  spelling_hints: 100\n  always_show_comments: true\n  comment_format: []\n\nt9:\n  # 左侧拼音栏的读音由输入法按本方案的两个键算（NineKeyFuzzyReadings），引擎只负责点选后锁定；\n  # 以前写 none，没开模糊音时双拼九键没有拼音栏，选不了读音（11-15）。候选上方按双拼两键一字显示拼音。\n  left_panel_mode: pinyin\n  double_pinyin: true\n  isDisplayOriginalPreedit: false\n\ncyime:\n  candidate_policy: true\n\npunctuator:\n  import_preset: default\n\nrecognizer:\n  patterns:\n    punct: "^/([0-9]|10|[A-Za-z]*?){8}"\n\nkey_binder:\n  bindings:\n    - { when: has_menu, accept: 1, send: apostrophe }\n\neditor:\n  bindings:\n    space: confirm\n\nt9_english:\n  dictionary: cyime_t9_english\n  enable_completion: false\n  enable_sentence: false\n  enable_user_dict: true\n  initial_quality: 0.2\n  comment_format: []\n  digit_suffixes: false\n  completion_limit: 3\n	=
-  description: |\n    CyIME 双拼方案（由键位表生成）的 14 键版本，词库和按键排列与 14 键小鹤双拼相同。\n	=
+{0}{1}\n{2}\nschema:\n  schema_id: {3}\n  language: zh\n  input_scheme: double_pinyin\n  name: {4}\n  version: "1"\n  description: |\n    CJIME 双拼方案（由键位表生成）的九键版本：每个字按它的两个双拼键所在的数字键输入。\n  dependencies:\n    - cyime_t9_english\n\nswitches:\n  - name: ascii_mode\n    reset: 0\n    states: [ 中文, 西文 ]\n  - name: full_shape\n    states: [ 半角, 全角 ]\n  - name: ascii_punct\n    reset: 0\n    states: [ 。，, ．， ]\n\nengine:\n  processors:\n    - t9_processor\n    - ascii_composer\n    - recognizer\n    - key_binder\n    - speller\n    - punctuator\n    - selector\n    - navigator\n    - express_editor\n  segmentors:\n    - ascii_segmentor\n    - matcher\n    - abc_segmentor\n    - punct_segmentor\n    - fallback_segmentor\n  translators:\n    - punct_translator\n    - script_translator\n    - t9_english_translator@t9_english\n  filters:\n    - cyime_candidate_policy\n    - t9_filter\n    - uniquifier\n\nspeller:\n  alphabet: zyxwvutsrqponmlkjihgfedcba9876543210{5}\n  initials: zyxwvutsrqponmlkjihgfedcba9876543210\n  delimiter: " '"\n  algebra:\n{6}\ntranslator:\n  dictionary: rime_ice\n  prism: {7}\n  max_homophones: 32\n  spelling_hints: 100\n  always_show_comments: true\n  comment_format: []\n\nt9:\n  # 左侧拼音栏的读音由输入法按本方案的两个键算（NineKeyFuzzyReadings），引擎只负责点选后锁定；\n  # 以前写 none，没开模糊音时双拼九键没有拼音栏，选不了读音（11-15）。候选上方按双拼两键一字显示拼音。\n  left_panel_mode: pinyin\n  double_pinyin: true\n  isDisplayOriginalPreedit: false\n\ncyime:\n  candidate_policy: true\n\npunctuator:\n  import_preset: default\n\nrecognizer:\n  patterns:\n    punct: "^/([0-9]|10|[A-Za-z]*?){8}"\n\nkey_binder:\n  bindings:\n    - { when: has_menu, accept: 1, send: apostrophe }\n\neditor:\n  bindings:\n    space: confirm\n\nt9_english:\n  dictionary: cyime_t9_english\n  enable_completion: false\n  enable_sentence: false\n  enable_user_dict: true\n  initial_quality: 0.2\n  comment_format: []\n  digit_suffixes: false\n  completion_limit: 3\n	=
+  description: |\n    CJIME 双拼方案（由键位表生成）的 14 键版本，词库和按键排列与 14 键小鹤双拼相同。\n	=
 14 键小鹤双拼方案缺少 schema_id	14-key Xiaohe Shuangpin scheme is missing schema_id
 14 键小鹤双拼方案缺少 prism	14-key Xiaohe Shuangpin scheme is missing prism
-  description: |\n    CyIME 双拼方案（由键位表生成）在自建布局「{0}」上的版本，词库与 26 键双拼相同。\n	=
+  description: |\n    CJIME 双拼方案（由键位表生成）在自建布局「{0}」上的版本，词库与 26 键双拼相同。\n	=
 双拼方案缺少 schema_id	Shuangpin scheme is missing schema_id
 双拼方案缺少 prism	Shuangpin scheme is missing prism
 方案名称需要 1 至 32 个字	Scheme names need 1–32 characters
 方案编号无效	Invalid scheme ID
-\# CyIME 双拼方案生成：	=
+\# CJIME 双拼方案生成：	=
 {0} 还没有按键	{0} has no key yet
 {0} 不能用 {1} 键：{2} 本身是声母	{0} can't use the {1} key: {2} is itself an initial
 zh、ch、sh 需要三个不同的键	zh, ch and sh need three different keys
@@ -1081,7 +1079,7 @@ AI 模型	AI models
 仅配置文件	Config files only
 完整备份	Full backup
 分享文件	Share file
-CyIME配置-{0}.zip	=
+CJIME配置-{0}.zip	=
 词库超过 25 万条，请拆分后导入	Dictionary has more than 250,000 entries; please split it before importing
 词库词条结构损坏	Dictionary entry structure is damaged
 词库没有可用词条	Dictionary has no usable entries
@@ -1171,7 +1169,7 @@ zhuan 也出“装”，zhuang 也出“专”	zhuan also gives “装”, zhuan
 文件校验失败(sha256 不匹配)，文件可能不完整	File check failed (sha256 mismatch); the file may be incomplete
 压缩包不存在，请先下载	Archive doesn't exist; download it first
 {0}(已被 {1} 使用)	{0} (used by {1})
-CyIME 内置目录(远程索引暂不可用)	CyIME built-in catalog (remote index unavailable)
+CJIME 内置目录(远程索引暂不可用)	CJIME built-in catalog (remote index unavailable)
 当前语音后端尚未声明{0}支持，请使用本地多语言模型	The current voice backend doesn't declare {0} support yet; please use the local multilingual model
 所选{0}语音模型尚未完整下载，请在模型管理中下载	The selected {0} voice model isn't fully downloaded; download it in model management
 当前方案未标注语言，请在「已安装的方案」里给它选语言	The current scheme has no language set; choose its language in “Installed schemes”
@@ -1277,8 +1275,8 @@ SenseVoice · 多语言	SenseVoice · Multilingual
 首选 	Top pick 
 使用 {0} 天	{0} days of use
 {0} 字	{0} chars
-我的 CyIME 打字速度(	My CyIME typing speed (
-仅含统计数字，不含输入内容 · CyIME 	Statistics only, no typed content · CyIME 
+我的 CJIME 打字速度(	My CJIME typing speed (
+仅含统计数字，不含输入内容 · CJIME 	Statistics only, no typed content · CJIME 
 离线翻译模型还没下载	Offline translation model not downloaded yet
 离线翻译失败	Offline translation failed
 离线翻译出错：{0}	Offline translation error: {0}
@@ -1317,7 +1315,7 @@ SenseVoice · 多语言	SenseVoice · Multilingual
 字幕_	=
 下载/{0}/{1}	=
 电视	TV
-CyIME字幕	=
+CJIME字幕	=
 特大	Extra large
 巨大	Huge
 这是我	This is me
@@ -1390,7 +1388,7 @@ CyIME字幕	=
 下载 SenseVoice（228 MB）	Download SenseVoice (228 MB)
 打电话、微信视频时也想看字幕？开启后通话中会自动在屏幕底部显示	Want captions during phone and WeChat video calls too? Once on, they appear at the bottom of the screen during calls
 去开启通话字幕	Turn on call captions
-以后要用，可以在系统设置 → 无障碍里打开“CyIME 通话字幕”	To use it later, turn on “CyIME call captions” in System settings → Accessibility
+以后要用，可以在系统设置 → 无障碍里打开“CJIME 通话字幕”	To use it later, turn on “CJIME call captions” in System settings → Accessibility
 还没有声纹模型，暂时分不出是谁在说	No voiceprint model yet, so speakers can't be told apart
 下载声纹模型（27 MB）	Download the voiceprint model (27 MB)
 已开始新的一段，刚才的字幕已保存	Started a new section; the previous captions are saved
@@ -1453,20 +1451,18 @@ M月d日 HH:mm	=
 自己写（可以用手写键盘）	Type your own (handwriting keyboard works too)
 紧急求助	Emergency help
 拨打120	Call 120
-Xime(CyIME 基于它开发)	Xime (CyIME is built on it)
+Xime(CJIME 基于它开发)	Xime (CJIME is built on it)
 关于	About
-Cyletix 开发的 Android 输入法。拼音、九键、双拼、五笔、仓颉、注音、日语、英文都能打；词库、手写、语音、拍照识字和实时字幕都在手机上运行，不联网也能全部使用。以 GNU GPLv3 开源，致谢与许可见下方。	An Android keyboard developed by Cyletix. Type pinyin, 9-key, Shuangpin, Wubi, Cangjie, Zhuyin, Japanese and English; dictionaries, handwriting, voice, photo text recognition and live captions all run on the phone and work fully offline. Open source under GNU GPLv3; credits and licenses below.
+基于CyIME制作，由onlyjco维护。拼音、九键、双拼、五笔、仓颉、注音、英文都能打；词库、手写、语音和实时字幕都在手机上运行，不联网也能全部使用。以 GNU GPLv3 开源，许可见下方。	Based on CyIME, maintained by onlyjco. Type pinyin, 9-key, Shuangpin, Wubi, Cangjie, Zhuyin and English; dictionaries, handwriting, voice and live captions all run on the phone and work fully offline. Open source under GNU GPLv3; licenses below.
 版本 {0} ({1})	Version {0} ({1})
 构建: {0}	Build: {0}
 查看最新版本	Check for the latest version
-Cyletix · 维护与开发	Cyletix · Maintainer & developer
-CyIME 源代码	CyIME source code
+onlyjco · 维护与开发	onlyjco · Maintainer & developer
+CJIME 源代码	CJIME source code
 信息与工具	Info & tools
 更新内容	What's new
-鸣谢	Credits
 隐私策略	Privacy policy
 开源许可证	Open source licenses
-使用文档	Documentation
 日志查看器	Log viewer
 存储空间	Storage
 启动广告（彩蛋）	Launch ad (Easter egg)
@@ -1475,11 +1471,11 @@ CyIME 源代码	CyIME source code
 设备信息	Device info
 系统版本	System version
 设备型号	Device model
-CyIME隐私策略	CyIME privacy policy
+CJIME隐私策略	CJIME privacy policy
 数据收集	Data collection
-CyIME 默认使用本地输入与识别。主动启用在线语音或其他联网服务时，相应音频或文本会发送给您选择的服务商。手写贡献和贡献滑行轨迹须同意 CC0 1.0 才能向魔搭上传。手写包含题目、笔迹、时间、识别结果（如有）、机型、版本及随机编号。滑行只在「贡献滑行轨迹」页开启贡献时发送题目、布局、轨迹及随机编号，平时打字不记录。贡献样本可公开使用。在「贡献词库」页分享或上传时，只有列表里勾选的词、拼音和次数，用于改进 CyIME 词库。平时手写和打字的原文不会上传。	CyIME uses on-device input and recognition by default. When you turn on online voice or other network services, the related audio or text is sent to the provider you choose. Handwriting and glide-path contributions require agreeing to CC0 1.0 before uploading to ModelScope. Handwriting includes prompts, strokes, timing, recognition results (if any), device model, version and a random ID. Glide data is only sent when contribution is turned on in “Contribute glide paths”, with prompts, layout, paths and a random ID; everyday typing isn't recorded. Contributed samples may be used publicly. When sharing or uploading from “Contribute dictionary”, only the ticked words, pinyin and counts in the list are sent, to improve CyIME's dictionary. What you normally handwrite and type is never uploaded.
+CJIME 默认使用本地输入与识别。主动启用在线语音或其他联网服务时，相应音频或文本会发送给您选择的服务商。手写贡献和贡献滑行轨迹须同意 CC0 1.0 才能向魔搭上传。手写包含题目、笔迹、时间、识别结果（如有）、机型、版本及随机编号。滑行只在「贡献滑行轨迹」页开启贡献时发送题目、布局、轨迹及随机编号，平时打字不记录。贡献样本可公开使用。在「贡献词库」页分享或上传时，只有列表里勾选的词、拼音和次数，用于改进 CJIME 词库。平时手写和打字的原文不会上传。	CJIME uses on-device input and recognition by default. When you turn on online voice or other network services, the related audio or text is sent to the provider you choose. Handwriting and glide-path contributions require agreeing to CC0 1.0 before uploading to ModelScope. Handwriting includes prompts, strokes, timing, recognition results (if any), device model, version and a random ID. Glide data is only sent when contribution is turned on in “Contribute glide paths”, with prompts, layout, paths and a random ID; everyday typing isn't recorded. Contributed samples may be used publicly. When sharing or uploading from “Contribute dictionary”, only the ticked words, pinyin and counts in the list are sent, to improve CJIME's dictionary. What you normally handwrite and type is never uploaded.
 本地存储	Local storage
-CyIME 默认在本地存储设置、词库和剪贴板历史。主动启用剪贴板同步插件时，剪贴板内容会按插件配置传输；备份只导出到您选择的本地文件。您可以随时清除本地数据。	CyIME stores settings, dictionaries and clipboard history locally by default. When you turn on a clipboard sync plugin, clipboard content is transferred as that plugin is configured; backups are only exported to local files you choose. You can clear local data at any time.
+CJIME 默认在本地存储设置、词库和剪贴板历史。主动启用剪贴板同步插件时，剪贴板内容会按插件配置传输；备份只导出到您选择的本地文件。您可以随时清除本地数据。	CJIME stores settings, dictionaries and clipboard history locally by default. When you turn on a clipboard sync plugin, clipboard content is transferred as that plugin is configured; backups are only exported to local files you choose. You can clear local data at any time.
 网络权限	Network permission
 网络权限用于下载输入方案和模型、检查和下载新版本，以及您主动启用的在线服务。检查更新只向 GitHub 查询版本号，不发送输入内容；只有您点「检查更新」或打开「自动检查更新」时才联网查询，新版本由系统安装程序安装。本地 Rime、手写和离线语音模型在设备上运行。	Network permission is used to download input schemes and models, check for and download new versions, and for online services you turn on. Update checks only ask GitHub for the version number and never send what you type; they go online only when you tap “Check for updates” or turn on “Check for updates automatically”, and new versions are installed by the system installer. Local Rime, handwriting and offline voice models run on the device.
 输入内容	Typed content
@@ -1487,19 +1483,20 @@ CyIME 默认在本地存储设置、词库和剪贴板历史。主动启用剪�
 剪贴板	Clipboard
 剪贴板历史默认保存在本地；同步功能由您启用的插件提供。您可以随时查看、删除或清除本地记录。	Clipboard history is stored locally by default; sync is provided by plugins you turn on. You can view, delete or clear local records at any time.
 开源	Open source
-CyIME是开源软件，源代码公开可审计。您可以在 GitHub 上查看完整源代码。	CyIME is open-source software; its source code is public and auditable. You can view the full source code on GitHub.
+CJIME是开源软件，源代码公开可审计。您可以在 GitHub 上查看完整源代码。	CJIME is open-source software; its source code is public and auditable. You can view the full source code on GitHub.
 更新日期：2026年9月23日	Last updated: September 23, 2026
-CyIME(由 Cyletix 维护开发)	CyIME (maintained and developed by Cyletix)
+CJIME(由 onlyjco 维护开发)	CJIME (maintained and developed by onlyjco)
+CyIME(CJIME 基于它开发)	CyIME (CJIME is based on it)
 检查更新	Check for updates
-请允许 CyIME 安装应用，回来后再点一次「检查更新」	Please allow CyIME to install apps, then come back and tap “Check for updates” again
+请允许 CJIME 安装应用，回来后再点一次「检查更新」	Please allow CJIME to install apps, then come back and tap “Check for updates” again
 自动检查更新	Check for updates automatically
 更新后提示更新内容	Show what's new after updating
 用移动数据下载？	Download on mobile data?
 现在用的是移动数据，{0} {1} 安装包约 {2}。	You're on mobile data; the {0} {1} installer is about {2}.
 等 Wi-Fi	Wait for Wi-Fi
-CyIME {0} 可以更新	CyIME {0} is available
+CJIME {0} 可以更新	CJIME {0} is available
 现在是 {0}，点这里到「关于」下载安装	You have {0}. Tap here to download and install it from “About”
-已更新到 CyIME {0}	Updated to CyIME {0}
+已更新到 CJIME {0}	Updated to CJIME {0}
 点这里看这一版改了什么	Tap here to see what changed in this version
 不再提示这一版	Don't remind me about this version
 完整版	Full
@@ -1537,7 +1534,7 @@ CyIME {0} 可以更新	CyIME {0} is available
 包含剪贴板历史	Include clipboard history
 没固定的剪贴板记录也备份	Also back up unpinned clipboard records
 操作	Actions
-CyIME备份-{0}.zip	=
+CJIME备份-{0}.zip	=
 导出备份	Export backup
 备份已导出	Backup exported
 (含个人词库与学习数据)	 (with personal dictionary and learning data)
@@ -1563,7 +1560,7 @@ CyIME备份-{0}.zip	=
 搜狗、QQ 输入法导出的「词 拼音」文本一般可以直接导入。	“word pinyin” text exported from Sogou or QQ input usually imports directly.
 你好 ni hao\nnihao 你好\n'shang'hai 上海\n计算机\tji suan ji\t100\nTeam Spirit	=
 Rime 词典(.dict.yaml)	Rime dictionary (.dict.yaml)
-CyIME 自己的格式，拼音按字用空格隔开：	CyIME's own format, with pinyin separated by spaces per character:
+CJIME 自己的格式，拼音按字用空格隔开：	CJIME's own format, with pinyin separated by spaces per character:
 {"format": "cyime.dictionary.v1", "name": "我的词库",\n "language": "zh", "scheme": "pinyin",\n	=
  "language": "zh", "scheme": "pinyin",\n "entries": [{"word": "你好", "code": "ni hao"}]}	=
  "entries": [{"word": "你好", "code": "ni hao"}]}	=
@@ -1668,7 +1665,6 @@ CyIME 自己的格式，拼音按字用空格隔开：	CyIME's own format, with 
 下方角标提示	Bottom corner hints
 显示按键左下角的小符号	Show the small symbol at the bottom left of keys
 完整清单	Full list
-GitHub 上的 README「鸣谢」	“Credits” in the README on GitHub
 每个依赖、语料、模型的作者、用途和许可证	Author, use and license of every dependency, corpus and model
 点一项打开它的主页。	Tap an item to open its home page.
 输入引擎	Input engine
@@ -1713,7 +1709,7 @@ Firefox 翻译模型	Firefox translation models
 首道双拼键位	Shoudao Shuangpin key map
 小鹤双拼键位	Xiaohe Shuangpin key map
 开发基础	Foundation
-CyIME 基于它开发	CyIME is built on it
+CJIME 基于它开发	CJIME is built on it
 调整图片	Adjust image
 当前：{0}	Current: {0}
 铺满	Fill
@@ -2140,8 +2136,8 @@ Ctrl(左下角 !@# 键)	Ctrl (the !@# key at bottom left)
 调整尺寸	Resize
 编辑排列	Edit order
 显示键盘	Show keyboard
-选择 CyIME	Select CyIME
-启用 CyIME	Enable CyIME
+选择 CJIME	Select CJIME
+启用 CJIME	Enable CJIME
 打「加号」「问号」「括号」这类符号名时，在词后面多出对应的符号(+、？、（）)，词本身的位置不变。	When you type symbol names like “加号” “问号” “括号”, the matching symbol (+, ？, （）) is added after the word, without moving the word itself.
 加号	=
 打 xita、pi、alpha 这类字母名时，第 3 个候选给出希腊字母(θ、π、α)，前两个词不变。	When you type letter names like xita, pi, alpha, the 3rd candidate gives the Greek letter (θ, π, α); the first two words stay.
@@ -2205,7 +2201,7 @@ settings-fold:语言键切换方式	=
 点击下方按钮一键减速	Tap the button below to slow it down
 点了 {0} 下，什么都不会发生	Tapped {0} times; nothing will happen
 今日已有 9999 人领取！！！机不可失！！！	9,999 people claimed today!!! Don't miss out!!!
-彩蛋：这是画出来的假广告。CyIME 没有广告，这一页不联网、不收集任何东西。在「关于 CyIME」里可以关掉。	Easter egg: this is a drawn fake ad. CyIME has no ads; this page doesn't go online or collect anything. You can turn it off in “About CyIME”.
+彩蛋：这是画出来的假广告。CJIME 没有广告，这一页不联网、不收集任何东西。在「关于 CJIME」里可以关掉。	Easter egg: this is a drawn fake ad. CJIME has no ads; this page doesn't go online or collect anything. You can turn it off in “About CJIME”.
 跳过 {0}	Skip {0}
 ★★★ 系统紧急通知 ★★★	★★★ URGENT SYSTEM NOTICE ★★★
 恭喜您中奖了!!	Congratulations, you won!!
@@ -2401,7 +2397,7 @@ APP 版本要求	Required app version
 没有匹配的方案	No matching schemes
 作者：{0}	Author: {0}
 来源：{0}	Source: {0}
-来自 CyIME 官方源	From the official CyIME source
+来自 CJIME 官方源	From the official CJIME source
 共 {0} 个方案({1}	{0} schemes ({1}
  · 更新于 {0}	 · updated {0}
 已内置，不用下载	Built in, no download needed
@@ -2511,7 +2507,6 @@ SenseVoice 校正	SenseVoice correction
 设备过热，系统在降频，凉下来再点重测	The device is overheating and throttled; let it cool down and tap Retest
 本机测不了 CPU	CPU can't be tested on this device
 \n总开销：	\nTotal cost: 
-性能与省电	Performance & battery
 本机：{0}	This device: {0}
 档位	Tier
 自动(推荐)	Auto (recommended)
@@ -2560,7 +2555,7 @@ CPU 未测	CPU not tested
 入口：键盘工具栏 › {0}	Entry: keyboard toolbar › {0}
 入口：键盘菜单 › {0}	Entry: keyboard menu › {0}
 入口：键盘菜单 › 排列，把「{0}」拖进工具栏或菜单	Entry: keyboard menu › Order; drag “{0}” into the toolbar or menu
-需要 CyIME {0} 或更高版本	Needs CyIME {0} or later
+需要 CJIME {0} 或更高版本	Needs CJIME {0} or later
 装好后键盘菜单里有「字幕」，设置在这个插件的那一页。不用联网。	Once installed, “Captions” is in the keyboard menu, with settings on this plugin's page. No internet needed.
 装好后日语出现在键盘的语言切换里。	Once installed, Japanese appears in the keyboard's language switching.
 要下载日语词库和转换引擎（约 {0}）。	Downloads the Japanese dictionary and conversion engine (about {0}).
@@ -2784,7 +2779,7 @@ CommentDisplayCard - 显示注释	=
 主题与外观	Theme & appearance
 其他设置	Other settings
 配置选择	Setup choices
-关于 CyIME	About CyIME
+关于 CJIME	About CJIME
 数字键盘左栏符号	Number pad left column symbols
 拖到候选选词的距离	Distance to drag onto candidates
 滑动触发距离	Swipe trigger distance
@@ -3096,7 +3091,7 @@ CPU 实测 	CPU benchmark
 设置向导	Setup wizard
 按顺序完成下面三项，即可开始输入。	Complete the three steps below in order to start typing.
 待启用	To enable
-在系统输入法列表中打开 CyIME，返回后会自动检查。	Turn on CyIME in the system keyboard list; it's checked automatically when you come back.
+在系统输入法列表中打开 CJIME，返回后会自动检查。	Turn on CJIME in the system keyboard list; it's checked automatically when you come back.
 去系统设置启用	Enable in system settings
 准备输入方案	Prepare input schemes
 准备中	Preparing
@@ -3106,17 +3101,17 @@ CPU 实测 	CPU benchmark
 重试准备	Retry preparation
 用全拼、双拼还是五笔，26 键、14 键还是九键，完成后下一页会问你。	Full pinyin, Shuangpin or Wubi, QWERTY, 14-key or 9-key: the next page asks once this is done.
 选择其他方案(可选)	Choose other schemes (optional)
-切换到 CyIME	Switch to CyIME
+切换到 CJIME	Switch to CJIME
 已切换	Switched
 待切换	To switch
-启用并准备完成后，在输入法选择器中选中 CyIME。	Once enabled and prepared, choose CyIME in the keyboard picker.
-去系统设置选择 CyIME	Choose CyIME in system settings
+启用并准备完成后，在输入法选择器中选中 CJIME。	Once enabled and prepared, choose CJIME in the keyboard picker.
+去系统设置选择 CJIME	Choose CJIME in system settings
 仍用输入法选择框	Use the keyboard picker anyway
 ✓ 设置成功，可以开始输入了	✓ All set; you can start typing
 开始使用	Get started
 完成三项后即可开始使用	Start once all three steps are done
-vivo / iQOO(OriginOS)的输入法选择框可能是空的。请点下面按钮打开系统输入法设置，在「默认输入法」(或「当前输入法」)里选 CyIME；如果打开的页面里没有，就进	On vivo / iQOO (OriginOS) the keyboard picker may be empty. Tap the button below to open the system keyboard settings and choose CyIME under “Default keyboard” (or “Current keyboard”); if it's not on that page, go to
-在「默认输入法」(或「当前输入法」)里选 CyIME；如果打开的页面里没有，就进「设置 → 系统管理(或更多设置)→ 语言与输入法 → 默认输入法」，也可以在设置顶部搜索「默认输入法」。	choose CyIME under “Default keyboard” (or “Current keyboard”); if it's not on that page, go to “Settings → System management (or More settings) → Languages & input → Default keyboard”, or search “Default keyboard” at the top of settings.
+vivo / iQOO(OriginOS)的输入法选择框可能是空的。请点下面按钮打开系统输入法设置，在「默认输入法」(或「当前输入法」)里选 CJIME；如果打开的页面里没有，就进	On vivo / iQOO (OriginOS) the keyboard picker may be empty. Tap the button below to open the system keyboard settings and choose CJIME under “Default keyboard” (or “Current keyboard”); if it's not on that page, go to
+在「默认输入法」(或「当前输入法」)里选 CJIME；如果打开的页面里没有，就进「设置 → 系统管理(或更多设置)→ 语言与输入法 → 默认输入法」，也可以在设置顶部搜索「默认输入法」。	choose CJIME under “Default keyboard” (or “Current keyboard”); if it's not on that page, go to “Settings → System management (or More settings) → Languages & input → Default keyboard”, or search “Default keyboard” at the top of settings.
 「设置 → 系统管理(或更多设置)→ 语言与输入法 → 默认输入法」，也可以在设置顶部搜索「默认输入法」。	“Settings → System management (or More settings) → Languages & input → Default keyboard”, or search “Default keyboard” at the top of settings.
 加一格	Add a slot
 第 {0} 格	Slot {0}
@@ -3146,7 +3141,6 @@ vivo / iQOO(OriginOS)的输入法选择框可能是空的。请点下面按钮�
 按键与手势 › 长按空格	Keys & gestures › Hold space
 说话时收起成悬浮条，发完消息或回到这个应用会自动接着听	Collapse to the floating bar while speaking; listening resumes after you send or return to the same app
 不知道怎么选	Not sure what to choose
-语音模型是否常驻、空闲多久释放，在「性能与省电」中设置。	Whether voice models stay resident and how long until release when idle are set in “Performance & battery”.
 自定义接口	Custom API
 收起接口配置	Hide API settings
 修改接口配置	Edit API settings
@@ -3229,9 +3223,9 @@ API 密钥	API key
 {0} 篇	{0}
 {0} 小时 {1} 分钟	{0} h {1} min
 关闭后停止计数，已有数据保留	When off, counting stops and existing data is kept
-仅含统计数字，不含输入内容 · CyIME {0}	Statistics only, no typed content · CyIME {0}
+仅含统计数字，不含输入内容 · CJIME {0}	Statistics only, no typed content · CJIME {0}
 分享打字速度	Share typing speed
-我的 CyIME 打字速度	My CyIME typing speed
+我的 CJIME 打字速度	My CJIME typing speed
 {0} · 各输入方式累计	{0} · totals by input method
 暂无数据	No data yet
 需先打开「新短信验证码自动复制」	Turn on “Auto-copy new SMS verification codes” first
@@ -3267,8 +3261,8 @@ API 密钥	API key
 从图片识别	Read from image
 关灯	Light off
 开灯	Light on
-对准电脑 CyIME 的配对二维码，识别后自动连接	Point at the pairing QR code in CyIME on the computer; connects automatically once read
-已识别二维码，但不是 CyIME 配对码；请打开电脑的“手机与电脑互联”	A QR code was read, but it isn't a CyIME pairing code; open “Phone & PC link” on the computer
+对准电脑 CJIME 的配对二维码，识别后自动连接	Point at the pairing QR code in CJIME on the computer; connects automatically once read
+已识别二维码，但不是 CJIME 配对码；请打开电脑的“手机与电脑互联”	A QR code was read, but it isn't a CJIME pairing code; open “Phone & PC link” on the computer
 配对码格式不完整或版本不支持，请在电脑刷新二维码	Pairing code incomplete or unsupported version; refresh the QR code on the computer
 图片中未识别到二维码，请保留完整二维码和四周白边	No QR code found in the image; keep the whole QR code with its white border
 正在下载补全词表 {0}%…	Downloading word list {0}%…
@@ -3280,7 +3274,7 @@ API 密钥	API key
 下载更新失败：{0}	Update download failed: {0}
 从 {0} 下载失败：{1}	Download from {0} failed: {1}
 下载的安装包打不开，请重新下载	The downloaded installer can't be opened; please download again
-下载的文件不是 CyIME 安装包	The downloaded file isn't a CyIME installer
+下载的文件不是 CJIME 安装包	The downloaded file isn't a CJIME installer
 下载的安装包不比现在装的新，不用更新	The downloaded installer isn't newer than the installed one; no update needed
 安装包的签名和现在装的不一样，不能覆盖安装	The installer's signature differs from the installed app, so it can't install over it
 找不到系统安装程序	System installer not found
@@ -3303,7 +3297,7 @@ GitHub 暂时限制了查询次数，过一会儿再试	GitHub is temporarily li
 ，跳过 {0} 行（单字或没有拼音）	, {0} lines skipped (single characters or no pinyin)
 已导入「{0}」{1} 个词{2}，点「应用更改」后生效	Imported “{0}” with {1} words{2}; tap “Apply changes” to use it
 已导入「{0}」{1} 个词{2}，其中 {3} 个笔画编码的词只给笔画输入用，点「应用更改」后生效	Imported “{0}” with {1} words{2}; {3} of them have stroke codes and are for stroke input only. Tap “Apply changes” to use it
-CyIME 日志 - {0}	CyIME log - {0}
+CJIME 日志 - {0}	CJIME log - {0}
 分享失败: {0}	Sharing failed: {0}
 已安装，重新启动输入法后生效	Installed; takes effect after restarting the keyboard
 模型下载完成	Model downloaded
@@ -3316,7 +3310,7 @@ CyIME 日志 - {0}	CyIME log - {0}
 安装失败：{0}	Install failed: {0}
 安装失败：未知错误	Install failed: unknown error
 内置方案不可删除	Built-in schemes can't be deleted
-CyIME 内置资源	CyIME built-in resources
+CJIME 内置资源	CJIME built-in resources
 未获取到方案（来源：{0}），请检查网络后刷新	No schemes received (source: {0}); check your network and refresh
 未获取到方案（来源：{0}）	No schemes received (source: {0})
 刷新未获取到方案，已保留当前列表	Refresh got no schemes; the current list is kept
@@ -3384,7 +3378,7 @@ sha256 校验不通过，文件可能不完整，请重新下载	sha256 check fa
 按键耗时	Key latency
 慢键耗时 (P95)	Slow-key latency (P95)
 {0}，{1} +{2}。实际耗时随词库内容变化。	{0}, {1} +{2}. Actual latency varies with dictionary content.
-CyIME 词库	CyIME dictionary
+CJIME 词库	CJIME dictionary
 手机版、电脑版都能直接导入	Imports directly on both the phone and PC versions
 每行 词、拼音、次数，Tab 隔开，UTF-8	One word, pinyin and count per line, tab-separated, UTF-8
 Rime 词典	Rime dictionary
@@ -3398,7 +3392,7 @@ QQ 输入法 › 词库 › 导入	QQ input › Dictionary › Import
 百度手机版	Baidu (mobile)
 百度输入法手机版 › 词库 › 导入	Baidu input for mobile › Dictionary › Import
 Gboard › 词典 › 个人词典 › 导入	Gboard › Dictionary › Personal dictionary › Import
-\# CyIME 导出的词库\n---\nname: cyime_export\nversion: "1"\nsort: by_weight\n...\n	=
+\# CJIME 导出的词库\n---\nname: cyime_export\nversion: "1"\nsort: by_weight\n...\n	=
 词库文件不见了，请重新导入	The dictionary file is missing; import it again
 微软拼音词库超过 32 MB，请拆分后导入	The Microsoft Pinyin dictionary is larger than 32 MB; split it before importing
 {0}{1}\nschema:\n  schema_id: {2}\n  name: 双拼停顿纠错索引\n  version: '1'\ntranslator:\n  dictionary: rime_ice\n  prism: {3}\n  enable_user_dict: false\n  enable_correction: true\n	=
@@ -3490,7 +3484,7 @@ DeepSeek 单次最多识别 120 秒录音	DeepSeek recognizes at most 120 second
 讯飞听写连接提前结束	iFlytek dictation connection ended early
 讯飞已提前结束本段听写	iFlytek ended this dictation segment early
 启用开屏广告	Enable splash ad
-CyIME 默认使用本地输入与识别。主动启用在线语音或其他联网服务时，相应音频或文本会发送给您选择的服务商。手写贡献和贡献滑行轨迹须同意 CC0 1.0 才能向魔搭上传。手写包含题目、笔迹、时间、识别结果（如有）、机型、版本及随机编号。滑行只在「贡献滑行轨迹」页开启贡献时发送题目、布局、轨迹及随机编号，平时打字不记录。贡献样本可公开使用。在「贡献词库」页分享或上传时，只有列表里勾选的词、拼音和次数，用于改进 CyIME 词库。聊天语料页在本机列出学过的词句和最近的选词对照。分享或上传仅包含勾选的文字及该行显示的搭配次数或输入编码、当时的首选、方案和布局。上传至魔搭时另带独立随机贡献编号，用于改进词库、整句输入和联想。平时手写和打字的原文不会自动上传。	CyIME uses on-device input and recognition by default. When you turn on online voice or other network services, the related audio or text is sent to the provider you choose. Handwriting and glide-path contributions require agreeing to CC0 1.0 before uploading to ModelScope. Handwriting includes prompts, strokes, timing, recognition results (if any), device model, version and a random ID. Glide data is only sent when contribution is turned on in “Contribute glide paths”, with prompts, layout, paths and a random ID; everyday typing isn't recorded. Contributed samples may be used publicly. When sharing or uploading from “Contribute dictionary”, only the ticked words, pinyin and counts in the list are sent, to improve CyIME's dictionary. The chat corpus page lists words and sentences learned on this device and recent selections. Sharing or uploading includes only the ticked text plus the pair count or input code shown on that row, the first candidate at the time, the scheme and the layout. Uploads to ModelScope also carry a separate random contribution ID, used to improve the dictionary, sentence input and prediction. What you normally handwrite and type is never uploaded automatically.
+CJIME 默认使用本地输入与识别。主动启用在线语音或其他联网服务时，相应音频或文本会发送给您选择的服务商。手写贡献和贡献滑行轨迹须同意 CC0 1.0 才能向魔搭上传。手写包含题目、笔迹、时间、识别结果（如有）、机型、版本及随机编号。滑行只在「贡献滑行轨迹」页开启贡献时发送题目、布局、轨迹及随机编号，平时打字不记录。贡献样本可公开使用。在「贡献词库」页分享或上传时，只有列表里勾选的词、拼音和次数，用于改进 CJIME 词库。聊天语料页在本机列出学过的词句和最近的选词对照。分享或上传仅包含勾选的文字及该行显示的搭配次数或输入编码、当时的首选、方案和布局。上传至魔搭时另带独立随机贡献编号，用于改进词库、整句输入和联想。平时手写和打字的原文不会自动上传。	CJIME uses on-device input and recognition by default. When you turn on online voice or other network services, the related audio or text is sent to the provider you choose. Handwriting and glide-path contributions require agreeing to CC0 1.0 before uploading to ModelScope. Handwriting includes prompts, strokes, timing, recognition results (if any), device model, version and a random ID. Glide data is only sent when contribution is turned on in “Contribute glide paths”, with prompts, layout, paths and a random ID; everyday typing isn't recorded. Contributed samples may be used publicly. When sharing or uploading from “Contribute dictionary”, only the ticked words, pinyin and counts in the list are sent, to improve CJIME's dictionary. The chat corpus page lists words and sentences learned on this device and recent selections. Sharing or uploading includes only the ticked text plus the pair count or input code shown on that row, the first candidate at the time, the scheme and the layout. Uploads to ModelScope also carry a separate random contribution ID, used to improve the dictionary, sentence input and prediction. What you normally handwrite and type is never uploaded automatically.
 Gboard 个人词典(.zip)	Gboard personal dictionary (.zip)
 微软拼音(.dctx)	Microsoft Pinyin (.dctx)
 微软拼音导出的词库文件，声调去掉后导入。	Dictionary file exported from Microsoft Pinyin; tones are removed on import.
@@ -3503,7 +3497,7 @@ Gboard 个人词典(.zip)	Gboard personal dictionary (.zip)
 {0} · 耗时增幅估计 {1} · 需下载	{0} · Est. latency increase {1} · Download needed
 {0} · 耗时增幅估计 {1} · 应用后生效	{0} · Est. latency increase {1} · Takes effect after applying
 {0} · 耗时增幅估计 {1}	{0} · Est. latency increase {1}
-CyIME词库-{0}-{1}.{2}	=
+CJIME词库-{0}-{1}.{2}	=
 正在上传…	Uploading…
 上传（{0}）	Upload ({0})
 勾选愿意贡献的内容，用于改进整句候选和联想。上传至魔搭时只发送勾选行中显示的数据，并附随机贡献编号。	Tick what you're willing to contribute to improve sentence candidates and prediction. Uploads to ModelScope send only the data shown in ticked rows, with a random contribution ID.
@@ -3777,7 +3771,7 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 当前设置的效果	Effect of the current settings
 录屏时能录到按键音	Key sounds are included in screen recordings
 录音只存在本机，用来改进断句和模型；最多留 300 段或 500 MB，不会上传。	Recordings stay on this device to improve sentence breaks and models; up to 300 clips or 500 MB, never uploaded.
-总会备份设置、主题、布局和固定的剪贴板记录；不含插件、模型、剪贴板图片和密码。	Always includes settings, themes, layouts and pinned clipboard items; not plugins, models, clipboard images or passwords.
+总会备份设置、主题、布局、收藏夹、打字统计和固定的剪贴板记录；不含插件、离线模型、最近剪贴板图片与剪贴板密码。仅在勾选上方隐私数据时才带出在线语音密钥。	Always backs up settings, theme, layout, favorites, typing stats and pinned clipboard entries; excludes plugins, offline models, recent clipboard images and saved passwords. Online voice keys are included only when personal data above is checked.
 所有布局的按键一起改。	Applies to keys on all layouts.
 所有键盘共用	Applies to all keyboards
 打 @ 后给出 gmail.com 等常用后缀	After @, suggest common domains like gmail.com
@@ -3843,7 +3837,7 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 正在编辑「{0}」这一套。	Editing the “{0}” set.
 每写一笔就识别，不用等停顿	Recognize after every stroke without waiting for a pause
 每次停顿时再认一遍	Re-check at every pause
-每次的字幕自动存到“下载/CyIME字幕”	Save each session's captions to “Download/CyIME字幕”
+每次的字幕自动存到“下载/CJIME字幕”	Save each session's captions to “Download/CJIME字幕”
 每行「词⇥拼音⇥权重」。	One “word⇥pinyin⇥weight” per line.
 每行一个词，词和拼音用空格、Tab 或逗号隔开。各输入法导出的文本一般可以直接导入。	One word per line, word and Pinyin separated by a space, tab or comma. Text exported from other keyboards usually works as is.
 每行一条：错词 空格 正词。	One per line: wrong word, space, correct word.
@@ -3891,7 +3885,7 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 背景图片缓慢移动，省电时停止	The background image moves slowly; stops in battery saver
 自动查找同一 Wi-Fi 下的电脑，首次连接要核对连接码。	Finds computers on the same Wi-Fi; check the code the first time.
 自动：宽时显示，窄时隐藏	Auto: show when there's room, hide when narrow
-自造词、词频和个人词库，属于隐私数据	Your own words, word frequencies and personal dictionary; private data
+自造词、词频、个人词库及在线语音配置（含接口密钥，请注意妥善保管备份）	Custom words, frequencies, personal dictionaries and online voice config (includes API keys; keep backup safe)
 英文、中文、九键滑行	English, Chinese and 9-key glide typing
 英文打 , . ? ! 后自动加一个空格	Add a space after , . ? ! in English
 英文打出短语编码时，候选里给出「我的短语」	Typing a phrase code in English suggests the entry from “My phrases”
@@ -3952,6 +3946,6 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 长按输入上方角标。	Long-press types the top hint.
 隐藏的角标照样能输入。	Hidden hints can still be typed.
 需先在系统无障碍里打开“通话字幕”。	Turn on “Call captions” in system accessibility first.
-未获得短信权限。请在系统设置 → 应用 → CyIME → 权限里允许接收短信，再回到这里。	SMS permission not granted. Allow receiving SMS in System settings → Apps → CyIME → Permissions, then come back.
+未获得短信权限。请在系统设置 → 应用 → CJIME → 权限里允许接收短信，再回到这里。	SMS permission not granted. Allow receiving SMS in System settings → Apps → CJIME → Permissions, then come back.
 需要通讯录权限，请在系统设置里允许	Contacts permission is needed; allow it in system settings
 高度、宽度、悬浮、透明度	Height, width, floating, transparency

@@ -162,10 +162,10 @@ internal fun SetupWizardContent(
             .padding(horizontal = 20.dp, vertical = 12.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Text("按顺序完成下面三项，即可开始输入。", style = MaterialTheme.typography.bodyLarge)
-            SetupCard(1, "启用 CyIME", status.imeEnabled,
+            SetupCard(1, "启用 CJIME", status.imeEnabled,
                 if (status.imeEnabled) "已启用" else "待启用") {
                 if (!status.imeEnabled) {
-                    Text("在系统输入法列表中打开 CyIME，返回后会自动检查。")
+                    Text("在系统输入法列表中打开 CJIME，返回后会自动检查。")
                     Button(onClick = onEnable) { Text("去系统设置启用") }
                 }
             }
@@ -191,16 +191,16 @@ internal fun SetupWizardContent(
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 TextButton(onClick = onSchemas, enabled = !status.preparing) { Text("选择其他方案(可选)") }
             }
-            SetupCard(3, "切换到 CyIME", status.imeEnabled && status.imeSelected,
+            SetupCard(3, "切换到 CJIME", status.imeEnabled && status.imeSelected,
                 if (status.imeEnabled && status.imeSelected) "已切换" else "待切换") {
                 if (!status.imeEnabled || !status.imeSelected) {
                     val canSwitch = status.imeEnabled && status.ready
                     if (pickerFallbackHint == null) {
-                        Text("启用并准备完成后，在输入法选择器中选中 CyIME。")
-                        Button(onClick = onSwitch, enabled = canSwitch) { Text("选择 CyIME") }
+                        Text("启用并准备完成后，在输入法选择器中选中 CJIME。")
+                        Button(onClick = onSwitch, enabled = canSwitch) { Text("选择 CJIME") }
                     } else {
                         Text(pickerFallbackHint)
-                        Button(onClick = onOpenImeSettings, enabled = canSwitch) { Text("去系统设置选择 CyIME") }
+                        Button(onClick = onOpenImeSettings, enabled = canSwitch) { Text("去系统设置选择 CJIME") }
                         TextButton(onClick = onSwitch, enabled = canSwitch) { Text("仍用输入法选择框") }
                     }
                 }

@@ -177,7 +177,7 @@ class KeyGlowTest {
         rule.runOnIdle { assertEquals(3, taps) }
     }
 
-    @Test fun textIconSwipeKanaAndSpaceKeysAllUseTheSameDecoration() {
+    @Test fun textIconSwipeAndSpaceKeysAllUseTheSameDecoration() {
         var taps = 0
         rule.setContent { MaterialTheme { CompositionLocalProvider(LocalKeyboardInputPreferences provides KeyboardInputPreferences(keyGlowEnabled = true, keyAnimationEnabled = true)) { Column(Modifier.width(160.dp)) {
             val color = Color.DarkGray
@@ -185,11 +185,10 @@ class KeyGlowTest {
             SwipeableKeyButton("Q", { taps++ }, color, Color.White, Modifier.height(55.dp).testTag("swipe"), shadowEnabled = false)
             IconKeyButton(rememberVectorPainter(Icons.Default.Language), { taps++ }, color, Color.White, Modifier.height(55.dp).testTag("icon"), shadowEnabled = false)
             SwipeableIconKeyButton(rememberVectorPainter(Icons.Default.Language), { taps++ }, color, Color.White, Modifier.height(55.dp).testTag("swipe-icon"), shadowEnabled = false)
-            KanaFlickButton(japaneseKanaKeys.first(), { taps++ }, color, Color.White, Modifier.height(55.dp).testTag("kana"), shadowEnabled = false)
             SpaceKeyButton({ taps++ }, color, Color.White, modifier = Modifier.height(55.dp).testTag("space"), shadowEnabled = false)
         } } } }
         rule.mainClock.autoAdvance = false
-        listOf("plain", "swipe", "icon", "swipe-icon", "kana", "space").forEach { tag ->
+        listOf("plain", "swipe", "icon", "swipe-icon", "space").forEach { tag ->
             val before = snapshot(tag)
             rule.onNodeWithTag(tag).performTouchInput { down(center); up() }
             rule.mainClock.advanceTimeBy(96)
@@ -197,7 +196,7 @@ class KeyGlowTest {
             rule.mainClock.advanceTimeBy(448)
             assertTrue("$tag did not fade", before.sameAs(snapshot(tag)))
         }
-        rule.runOnIdle { assertEquals(6, taps) }
+        rule.runOnIdle { assertEquals(5, taps) }
     }
 
     @Test fun defaultKeyboardHasNoDecorationAfterRapidTaps() {
@@ -275,29 +274,5 @@ class KeyGlowTest {
             rule.mainClock.advanceTimeBy(80)
         }
         rule.runOnIdle { assertEquals(3, taps) }
-    }
-
-    @Test fun japaneseRowsShareCellSizesAndReadableLabelScale() {
-        rule.setContent { MaterialTheme { JapaneseKanaKeyboardLayout({}, {}, Color(0xFF2C2D32), Color.White,
-            Color(0xFF4A587E), modifier = Modifier.size(360.dp, 260.dp).testTag("japanese")) } }
-        val sizes = listOf("kana-convert", "kana-number", "kana-symbol", "kana-key:a", "kana-key:wa", "kana-delete", "kana-space", "kana-enter")
-            .map { rule.onNodeWithTag(it).fetchSemanticsNode().boundsInRoot }
-        sizes.forEach { assertEquals(sizes[0].width, it.width, 1f); assertEquals(sizes[0].height, it.height, 1f) }
-        val fontSizes = listOf("変換", "123", "!@#", "あ", "わ").map { label ->
-            val layouts = mutableListOf<androidx.compose.ui.text.TextLayoutResult>()
-            rule.onNodeWithText(label).performSemanticsAction(androidx.compose.ui.semantics.SemanticsActions.GetTextLayoutResult) { it(layouts) }
-            layouts.single().layoutInput.style.fontSize.value
-        }
-        listOf(fontSizes[3], fontSizes[4]).forEach { assertEquals(fontSizes[0], it, 0.1f) }
-        assertEquals("Mode labels share a compact size", fontSizes[1], fontSizes[2], 0.1f)
-        assertTrue("Mode labels remain smaller than the kana keys", fontSizes[1] < fontSizes[0])
-        assertTrue("Mode labels must remain readable", fontSizes[1] >= fontSizes[0] * .8f)
-        rule.onNodeWithText("、").assertExists()
-        rule.onNodeWithText("。").assertDoesNotExist()
-        rule.onNodeWithText("？").assertDoesNotExist()
-        val cap = snapshot("kana-punctuation")
-        assertEquals("punctuation is an ordinary gray key", Color(0xFF2C2D32).value,
-            Color(cap.getPixel(cap.width / 4, cap.height / 4)).value)
-        save("japanese-key-proportions.png", snapshot("japanese"))
     }
 }

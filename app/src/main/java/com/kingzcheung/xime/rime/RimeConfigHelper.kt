@@ -338,14 +338,6 @@ object RimeConfigHelper {
         ) { context.assets.open(it) }
         // 进共享日志：升级后第一次弹键盘慢时，看内置资源核对、替换用了多久。
         if (bundledChanged) FileLogger.w(TAG, "Bundled assets updated in ${android.os.SystemClock.elapsedRealtime() - bundledStartedAt}ms")
-        // 日语词典装不上只影响日语转换，不能连累其它输入方案启动。
-        // 词典和引擎在安装包里或是「日语」插件下载的（JapanesePack）；告诉日语翻译器下载的引擎在哪。
-        try {
-            com.kingzcheung.xime.settings.JapanesePack.exportLibraryPath(context)
-            com.kingzcheung.xime.settings.JapanesePack.installDictionary(context)
-        } catch (e: Exception) {
-            FileLogger.e(TAG, "Failed to install the Japanese dictionary", e)
-        }
         // Optional downloads become available at the normal engine initialization boundary.
         // Never restart or replay an active editor merely because a model download finished.
         com.kingzcheung.xime.model.CandidateModelAssets.installAvailable(context)
@@ -353,6 +345,8 @@ object RimeConfigHelper {
         com.kingzcheung.xime.settings.ChineseSchemas.installOptionalLayoutSchemas(context, rimeDir)
         com.kingzcheung.xime.settings.DoublePinyinSchemes.install(context, rimeDir)
         check(installing.delete()) { "Cannot finish bundled asset installation" }
+        // 必须在删除 installing 标记后再清理：否则 getEnabledSchemas 会返回内置默认列表而非真实 default.custom.yaml。
+        cleanupRetiredForeignRimeFiles(context, rimeDir)
         // 内置排列和自建布局是中文26键方案的副本：26 键方案随版本更新后，按当前方案重新生成，不停在旧快照。
         com.kingzcheung.xime.settings.CustomKeyboardLayouts.followBaseSchema(context)
         com.kingzcheung.xime.settings.CustomKeyboardLayouts.enableMeasuredCorrection(context)
@@ -383,6 +377,45 @@ object RimeConfigHelper {
         // 内置资源替换后部署哈希变了，由 ensureDeployment 增量维护：librime 按源文件校验和只重编变了的词库。
 
         Pair(rimeDir.absolutePath, rimeDir.absolutePath)
+    }
+
+    /** 清理旧版本安装包遗留在 rime/ 目录的内置外语方案文件及启用记录。 */
+    private fun cleanupRetiredForeignRimeFiles(context: Context, rimeDir: File) {
+        val retired = com.kingzcheung.xime.settings.CyimeInputDefaults.retiredForeignSchemas
+        val buildDir = File(rimeDir, "build")
+        for (id in retired) {
+            File(rimeDir, "$id.schema.yaml").takeIf { it.isFile }?.delete()
+            File(rimeDir, "$id.dict.yaml").takeIf { it.isFile }?.delete()
+            buildDir.listFiles { _, name ->
+                name == "$id.schema.yaml" || name.startsWith("$id.")
+            }?.forEach { it.delete() }
+        }
+        rimeDir.listFiles { _, name ->
+            name == "cyime_japanese_romaji.lua" || name == "cyime_japanese_particles.dict.yaml" ||
+                name.startsWith("jaroomaji.") && name.endsWith(".dict.yaml")
+        }?.forEach { it.delete() }
+        File(rimeDir, "lua/cyime_japanese_completion.lua").takeIf { it.isFile }?.delete()
+
+        val enabled = SchemaManager.readSavedEnabledSchemas(context) ?: SchemaManager.getEnabledSchemas(context)
+        val filtered = enabled.filterNot { it in retired || com.kingzcheung.xime.settings.CyimeInputDefaults.isDependency(it) }
+        if (filtered.size != enabled.size) {
+            SchemaManager.setEnabledSchemas(context, filtered.ifEmpty { com.kingzcheung.xime.settings.CyimeInputDefaults.recommended })
+        }
+        val current = SettingsPreferences.getCurrentSchema(context)
+        if (current in retired) {
+            val fallback = filtered.firstOrNull() ?: com.kingzcheung.xime.settings.CyimeInputDefaults.recommended.first()
+            SettingsPreferences.setCurrentSchema(context, fallback)
+        }
+        val existingProblems = rawSchemaProblems(context)
+        val cleanedProblems = existingProblems.filterKeys {
+            it !in retired && !com.kingzcheung.xime.settings.CyimeInputDefaults.isDependency(it)
+        }
+        if (cleanedProblems.size != existingProblems.size) {
+            recordSchemaProblems(context, cleanedProblems)
+            if (cleanedProblems.isEmpty() && deploymentProblem(context).isNotEmpty()) {
+                recordProblem(context, "", usable = true)
+            }
+        }
     }
 
     /**
@@ -507,11 +540,16 @@ object RimeConfigHelper {
         SettingsPreferences.getPrefsPublic(context).edit().putString(DEPLOYMENT_SCHEMA_PROBLEMS, json.toString()).apply()
     }
 
-    /** 上次部署没生效的方案和原因；没有问题时为空。 */
-    fun schemaProblems(context: Context): Map<String, String> = runCatching {
+    private fun rawSchemaProblems(context: Context): Map<String, String> = runCatching {
         val json = org.json.JSONObject(SettingsPreferences.getPrefsPublic(context).getString(DEPLOYMENT_SCHEMA_PROBLEMS, "{}").orEmpty())
         json.keys().asSequence().associateWith { json.getString(it) }
     }.getOrDefault(emptyMap())
+
+    /** 上次部署没生效的方案和原因；没有问题时为空。 */
+    fun schemaProblems(context: Context): Map<String, String> = rawSchemaProblems(context).filterKeys {
+        it !in com.kingzcheung.xime.settings.CyimeInputDefaults.retiredForeignSchemas &&
+            !com.kingzcheung.xime.settings.CyimeInputDefaults.isDependency(it)
+    }
 
     /**
      * 方案编译出来了却不在方案列表里时，把三方的列表和文件时间写进日志：启用列表、编译出的文件、引擎读到的。

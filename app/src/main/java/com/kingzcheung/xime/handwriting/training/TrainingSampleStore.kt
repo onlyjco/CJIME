@@ -319,14 +319,7 @@ class TrainingSampleStore(private val context: Context, private val name: String
         val stamp = SimpleDateFormat("yyyyMMdd_HHmmss", Locale.US).format(Date())
         val prefix = if (name == "handwriting_training") "cyime_handwriting_training" else "cyime_$name"
         return File(exportDir, "${prefix}_$stamp.jsonl").also { export ->
-            if (licensedShare && name == HandwritingContribution.STORE_NAME) {
-                check(HandwritingContribution.consented(context))
-                export.bufferedWriter().use { writer ->
-                    samplesFile.forEachLine { line ->
-                        if (line.isNotBlank()) writer.appendLine(HandwritingContribution.licensedSample(line))
-                    }
-                }
-            } else samplesFile.copyTo(export, overwrite = true)
+            samplesFile.copyTo(export, overwrite = true)
         }
     }
 

@@ -20,8 +20,7 @@ object LetterLayouts {
     private var chosen by mutableStateOf<Map<InputLanguage, String>>(emptyMap())
 
     fun appliesTo(language: InputLanguage, scheme: InputScheme): Boolean =
-        language == InputLanguage.ENGLISH && (scheme == InputScheme.DIRECT || scheme == InputScheme.WORDS) ||
-            language == InputLanguage.JAPANESE && scheme == InputScheme.ROMAJI ||
+        language == InputLanguage.ENGLISH && scheme == InputScheme.DIRECT ||
             language == InputLanguage.CHINESE && scheme in LETTER_CODED_CHINESE
 
     /** Chinese schemes typed letter by letter on 26 keys besides pinyin: double pinyin and code tables (五笔、仓颉、音形等导入的码表). */
@@ -37,7 +36,7 @@ object LetterLayouts {
      * 字母语言自带的另一套键盘（xime.yaml 里不绑方案的 section）：法语可以换成 AZERTY。
      * 选了才用，存的键和上面的排列一样（letter_layout_<语言>），没选时照旧用语言自己的键盘。
      */
-    private val SECTION_LAYOUTS: Map<InputLanguage, List<String>> = mapOf(InputLanguage.FRENCH to listOf(AZERTY_FRENCH))
+    private val SECTION_LAYOUTS: Map<InputLanguage, List<String>> = emptyMap()
     val sectionLayoutIds: Set<String> get() = SECTION_LAYOUTS.values.flatten().toSet()
 
     fun sectionChoices(language: InputLanguage): List<String> = SECTION_LAYOUTS[language].orEmpty()

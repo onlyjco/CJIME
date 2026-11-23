@@ -55,13 +55,6 @@ fun LanguageSettingsContent(onOpenSchemaResources: () -> Unit = {}, onOpenDouble
     var remembered by remember { mutableStateOf(InputModes.rememberedModes(context)) }
     val availableProfiles = InputModes.ordered(context, profilesState.allSchemas
         .filter { it.schemaId in profilesState.enabledSchemas }.map { it.toSchemaInfo() })
-    // 一步选方案（用户 11-01 批准）：关着的内置方案（全拼 14 键、内置双拼）和它们的组合（如小鹤 14 键）也列在
-    // 布局、方案里，点了自动启用并部署，不用先去「已安装的方案」打开再回来。
-    val installedIds = profilesState.allSchemas.map { it.schemaId }.toSet()
-    val offeredIds = CyimeInputDefaults.withCompanions(
-        (profilesState.enabledSchemas + CyimeInputDefaults.listedWhenOff).filter { it in installedIds }.distinct(), installedIds).toSet()
-    val pickableProfiles = InputModes.ordered(context, profilesState.allSchemas
-        .filter { it.schemaId in offeredIds || it.schemaId in profilesState.enabledSchemas }.map { it.toSchemaInfo() })
     val dragOrder = rememberDragOrder(orderedLanguages.map { it.id }) { ids ->
         InputModes.saveLanguageOrder(context, ids)
         orderedLanguages = InputModes.languageOrder(context)
@@ -133,11 +126,9 @@ fun LanguageSettingsContent(onOpenSchemaResources: () -> Unit = {}, onOpenDouble
                                 }
                             })
                         }
-                        // 日语是插件：轻量版的词库和转换引擎是下载的，没下好时在这里说明、给下载按钮。
-                        if (checked && language == InputLanguage.JAPANESE) JapanesePackStatus(
-                            Modifier.padding(horizontal = 16.dp).padding(bottom = 12.dp))
-                        if (expanded && selected != null) InputProfileSelectors(pickableProfiles, selected,
-                            Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp)) { entry ->
+                        if (expanded && selected != null) InputProfileSelectors(availableProfiles, selected,
+                            Modifier.padding(horizontal = 16.dp).padding(bottom = 16.dp),
+                            onManage = onOpenSchemaResources) { entry ->
                             InputModes.selectProfile(context, entry)
                             remembered = remembered + (language to entry.schemaId)
                             // 正在用的语言：同时改当前方案，键盘下次弹出就换（收起时在这里改了布局也算数）。
@@ -147,30 +138,10 @@ fun LanguageSettingsContent(onOpenSchemaResources: () -> Unit = {}, onOpenDouble
                             if (entry.schemaId == InputModes.ENGLISH) {
                                 // 英文直接输入不是 Rime 方案，不启用、不部署、不写成当前方案；切到英文时按这里的选择开 ascii。
                                 message = "已保存：${language.displayName} · ${entry.selectionLabel}，下次切换到该语言时使用"
-                            } else if (entry.schemaId in profilesState.enabledSchemas) {
+                            } else {
                                 if (active) SettingsPreferences.setCurrentSchema(context, entry.schemaId, language)
                                 message = "已保存：${language.displayName} · ${entry.selectionLabel}，" +
                                     if (active) "键盘下次弹出时使用" else "下次切换到该语言时使用"
-                            } else if (!saving) scope.launch {
-                                saving = true
-                                try {
-                                    withContext(Dispatchers.IO) {
-                                        // 组合（如小鹤 14 键）启用它需要的双拼和 14 键，组合本身由 setEnabledSchemas 补上。
-                                        val needs = CyimeInputDefaults.companionNeeds(entry.schemaId) ?: listOf(entry.schemaId)
-                                        SchemaManager.setEnabledSchemas(context, (SchemaManager.getEnabledSchemas(context) + needs).distinct())
-                                        LanguagePreferences.enableForSchema(context, entry.schemaId)
-                                    }
-                                    profilesModel.refresh()
-                                    // 关着的方案（笔画、仓颉等）点了也要像开着的一样换上：以前只启用不换，键盘还是拼音，
-                                    // 以为点的是笔画、其实在拼音键盘上打（11-06）。部署完再换，没编译好的方案键盘会退回第一个方案。
-                                    profilesModel.deploySchema {
-                                        if (active) SettingsPreferences.setCurrentSchema(context, entry.schemaId, language)
-                                    }
-                                    message = "已打开并选好：${language.displayName} · ${entry.selectionLabel}，正在部署，几秒后好；" +
-                                        if (active) "键盘下次弹出时使用" else "下次切换到该语言时使用"
-                                } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
-                                catch (error: Exception) { message = error.message ?: "打开方案失败，请稍后再试" }
-                                finally { saving = false }
                             }
                         }
                         // 西班牙、德、法、俄语的补全词表在商店里，开启时自动下载；没下好时在这里说一声。

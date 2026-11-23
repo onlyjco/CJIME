@@ -63,18 +63,6 @@ fun OtherSettingsContent(onBack: () -> Unit, onNavigateToRoute: (String) -> Unit
                     onClick = { onNavigateToRoute(SettingsRoutes.Backup) },
                     showArrow = true
                 )
-                HorizontalDivider(
-                    modifier = Modifier.padding(start = 56.dp),
-                    thickness = 0.5.dp,
-                    color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-                )
-                SettingsItem(
-                    icon = Icons.TwoTone.Speed,
-                    title = stringResource(R.string.item_performance_title), searchKey = "性能与省电",
-                    subtitle = stringResource(R.string.item_performance_summary),
-                    onClick = { onNavigateToRoute(SettingsRoutes.Performance) },
-                    showArrow = true
-                )
                 // 界面语言：默认跟随系统；选英文时设置各页按 assets/i18n/en.tsv 显示英文。
                 HorizontalDivider(
                     modifier = Modifier.padding(start = 56.dp),

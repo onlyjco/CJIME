@@ -31,7 +31,7 @@ import com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences
 import com.kingzcheung.xime.settings.SettingsPreferences
 
 /** Groups of [InputExperienceSettings]; the 布局与显示 sub-pages each show some of them. */
-internal enum class InputExperiencePart { SYMBOLS, DELETE, FLICK_DISC, KANA, CURSOR, TIMING, HANDWRITING, KEY_TEXT }
+internal enum class InputExperiencePart { SYMBOLS, DELETE, FLICK_DISC, CURSOR, TIMING, HANDWRITING, KEY_TEXT }
 
 /** 「时长与距离」里的几项（设置搜索点中其中一项时自动展开，见 [InputExperienceSettings] 的 collapsedSummary）。 */
 internal val TIMING_SEARCH_KEYS = setOf("长按空格多久开始", "从中间滑到边缘走几行", "光标每移动一字所需距离",
@@ -287,27 +287,6 @@ internal fun InputExperienceSettings(
                 Switch(checked = settings.flickDirectionDisc,
                     modifier = Modifier.testTag("flick-direction-disc"), onCheckedChange = {
                         settings = settings.copy(flickDirectionDisc = it); settings.save(context)
-                    })
-            }
-            }
-            if (InputExperiencePart.KANA in parts) {
-            divider()
-            Row(Modifier.settingsSearchAnchor("假名方向提示", bleed = 16.dp, bleedVertical = 6.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("假名方向提示", style = MaterialTheme.typography.titleSmall)
-                    Text("日语九键按键四周显示各方向的假名",
-                        style = MaterialTheme.typography.bodySmall)
-                    // 日语没启用时没有假名九键，这一项不起作用：写明，免得以为开关坏了。
-                    if (com.kingzcheung.xime.settings.InputLanguage.JAPANESE in com.kingzcheung.xime.settings.InputLanguage.supported &&
-                        com.kingzcheung.xime.settings.InputLanguage.JAPANESE !in
-                        com.kingzcheung.xime.settings.LanguagePreferences.enabled(context))
-                        SettingsJumpText("在「语言与方案」打开日语后可用。", jumps = listOf("语言与方案"),
-                            style = MaterialTheme.typography.bodySmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Switch(checked = settings.kanaDirectionHints,
-                    modifier = Modifier.testTag("kana-direction-hints"), onCheckedChange = {
-                        settings = settings.copy(kanaDirectionHints = it); settings.save(context)
                     })
             }
             }

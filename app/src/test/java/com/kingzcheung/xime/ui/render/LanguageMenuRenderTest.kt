@@ -93,7 +93,7 @@ class LanguageMenuRenderTest {
     private val schemas = listOf(
         SchemaInfo("zh", "中文", "", "", "", language = InputLanguage.CHINESE),
         SchemaInfo("en", "English", "", "", "", language = InputLanguage.ENGLISH),
-        SchemaInfo("ja", "日本語", "", "", "", language = InputLanguage.JAPANESE))
+        SchemaInfo("yue", "粤语", "", "", "", language = InputLanguage.CANTONESE))
 
     /** 菜单后面的画面（App 文字 + 键盘），用 android Canvas 画成位图，好做真实的软件模糊。 */
     private fun behind(palette: KeyboardPalette, glass: FrostedGlassConfig, w: Int, h: Int): Bitmap {

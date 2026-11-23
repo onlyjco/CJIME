@@ -24,13 +24,13 @@ class CaptionLanguageTest {
         assertEquals("你好", chooseFinal("你好", "こんにちは", chineseOnly = true))
     }
 
-    @Test fun `elder package captions offer only Chinese, and a restored Japanese choice reads as Chinese`() {
+    @Test fun `elder package captions offer only Chinese, and a restored Cantonese choice reads as Chinese`() {
         val elder = CaptionLanguage.forPackage(elder = true)
         assertEquals(listOf(CaptionLanguage.CHINESE), elder)
-        assertEquals(CaptionLanguage.CHINESE, CaptionLanguage.of("ja", elder))
+        assertEquals(CaptionLanguage.CHINESE, CaptionLanguage.of("yue", elder))
         assertEquals(CaptionLanguage.CHINESE, CaptionLanguage.of("en", elder))
         val normal = CaptionLanguage.forPackage(elder = false)
-        assertEquals(CaptionLanguage.JAPANESE, CaptionLanguage.of("ja", normal))
+        assertEquals(CaptionLanguage.CANTONESE, CaptionLanguage.of("yue", normal))
         assertEquals(CaptionLanguage.CHINESE, CaptionLanguage.of(null, normal))
     }
 
@@ -39,7 +39,7 @@ class CaptionLanguageTest {
         val normal = CaptionLanguage.forPackage(elder = false)
         assertEquals(CaptionLanguage.CHINESE, CaptionLanguage.forInterface("zh-CN", normal))
         assertEquals(CaptionLanguage.CHINESE, CaptionLanguage.forInterface("zh-Hant-TW", normal))
-        assertEquals(CaptionLanguage.JAPANESE, CaptionLanguage.forInterface("ja-JP", normal))
+        assertEquals(CaptionLanguage.CANTONESE, CaptionLanguage.forInterface("yue-HK", normal))
         assertEquals(CaptionLanguage.ENGLISH, CaptionLanguage.forInterface("en-US", normal))
         assertEquals(CaptionLanguage.CHINESE, CaptionLanguage.forInterface("ko-KR", normal))
         assertEquals(CaptionLanguage.CHINESE, CaptionLanguage.forInterface(null, normal))

@@ -29,7 +29,7 @@ fun InstallIntegrityWarning() {
         onDismissRequest = { dismissed = true },
         properties = DialogProperties(dismissOnClickOutside = false),
         title = { Text("非官方安装包") },
-        text = { Text("这个 CyIME 不是作者签名发布的，可能被人改过。输入法能看到你打的每个字，请卸载后从官方下载页重新安装。") },
+        text = { Text("这个 CJIME 不是作者签名发布的，可能被人改过。输入法能看到你打的每个字，请卸载后从官方下载页重新安装。") },
         confirmButton = {
             TextButton(onClick = {
                 dismissed = true

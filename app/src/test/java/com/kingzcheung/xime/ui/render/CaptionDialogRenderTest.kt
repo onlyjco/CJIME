@@ -70,7 +70,7 @@ class CaptionDialogRenderTest {
                                         Text("$id ${if (dark) "深" else "浅"} ${if (glass) "玻璃" else "不透明"}", fontSize = 12.sp, color = Color.Black,
                                             modifier = Modifier.background(Color.White))
                                         LanguagePickerCard(CaptionLanguage.CHINESE,
-                                            { if (it == CaptionLanguage.JAPANESE) "153 MB" else null }, {}, {})
+                                            { if (it == CaptionLanguage.CANTONESE) "153 MB" else null }, {}, {})
                                     }
                                 }
                             }

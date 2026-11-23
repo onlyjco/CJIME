@@ -18,10 +18,8 @@ import androidx.compose.ui.test.junit4.createAndroidComposeRule
 import androidx.compose.ui.test.onNodeWithTag
 import androidx.compose.ui.unit.dp
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.kingzcheung.xime.ui.keyboard.JapaneseLongVowelKey
 import com.kingzcheung.xime.ui.keyboard.QwertyStaggerMode
 import com.kingzcheung.xime.ui.settings.IllustratedChoiceCard
-import com.kingzcheung.xime.ui.settings.JapaneseLongVowelIllustration
 import com.kingzcheung.xime.ui.settings.KeyFaceHintsLegend
 import com.kingzcheung.xime.ui.settings.LEGEND_MIN_KEY_CONTRAST
 import com.kingzcheung.xime.ui.settings.QwertyStaggerIllustration
@@ -73,12 +71,6 @@ class LegendContrastRenderTest {
                         }
                     }
                     SpacePunctuationIllustration(comma = true, period = true)
-                    Row(Modifier.width(379.dp).choiceCardRowHeight(108.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        JapaneseLongVowelKey.entries.forEach { mode ->
-                            IllustratedChoiceCard(mode.label, mode == JapaneseLongVowelKey.entries.first(), onClick = {},
-                                modifier = Modifier.weight(1f)) { JapaneseLongVowelIllustration(mode) }
-                        }
-                    }
                     Box(Modifier.fillMaxWidth()) { KeyFaceHintsLegend(up = true, down = true, doublePinyin = false, opacity = 1f) }
                 }
             }

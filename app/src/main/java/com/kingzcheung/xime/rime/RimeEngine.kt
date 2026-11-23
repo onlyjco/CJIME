@@ -785,9 +785,7 @@ class RimeEngine {
         if (!isInitialized) return false
         return tryMutating(false) {
             if (!nativeHasSession() && !createSession()) return@tryMutating false
-            val japanese = !nativeIsAsciiMode() && com.kingzcheung.xime.settings.InputProfiles
-                .describe(nativeGetCurrentSchema().orEmpty()).capabilities.japaneseConversion
-            nativeSetInput(if (japanese) canonicalJapaneseRomaji(input) else input)
+            nativeSetInput(input)
         }
     }
 

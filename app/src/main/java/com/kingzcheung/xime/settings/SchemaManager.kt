@@ -696,8 +696,9 @@ object SchemaManager {
                     SchemaLanguageChoice.get(context, it.schemaId)
                 }
             }
-            // Compilation-only tables of imported English words are not input modes.
-            if (meta != null && !CellDictionaryEnglish.isDependency(meta.schemaId)) {
+            // Compilation-only tables of imported English words or retired built-in foreign schemas are not input modes.
+            if (meta != null && !CellDictionaryEnglish.isDependency(meta.schemaId) &&
+                meta.schemaId !in CyimeInputDefaults.retiredForeignSchemas) {
                 schemas.add(meta)
             }
         }
@@ -728,7 +729,7 @@ object SchemaManager {
                 description = entry.description ?: "",
                 language = declared ?: builtinLanguage,
                 scheme = entry.inputScheme?.let(InputScheme::fromId) ?: InputProfiles.builtin(entry.schemaId).scheme,
-                languageAssignable = declared == null && builtinLanguage == InputLanguage.UNSPECIFIED,
+                languageAssignable = entry.language.isNullOrBlank() && builtinLanguage == InputLanguage.UNSPECIFIED,
             )
         } catch (e: Exception) {
             try { Log.w(TAG, "Failed to parse schema file: ${file.name}, error=${e.message}, skip", e) } catch (_: Exception) {}
@@ -1034,7 +1035,17 @@ object SchemaManager {
                     SettingsPreferences.setBuiltinSchemasMerged(context, true)
                     m
                 }
-                return ChineseSchemas.addOnFirstUpgrade(context, merged)
+                val cleaned = merged.filterNot {
+                    it in CyimeInputDefaults.retiredForeignSchemas || CyimeInputDefaults.isDependency(it)
+                }
+                val finalSchemas = if (cleaned.isNotEmpty()) {
+                    cleaned
+                } else {
+                    val available = getRimeDir(context).listFiles().orEmpty().filter { it.name.endsWith(".schema.yaml") }
+                        .map { it.name.removeSuffix(".schema.yaml") }.toSet()
+                    fallbackNativeSchema(available)
+                }
+                return ChineseSchemas.addOnFirstUpgrade(context, finalSchemas)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Failed to read custom.yaml", e)

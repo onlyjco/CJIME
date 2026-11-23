@@ -2,6 +2,7 @@ package com.kingzcheung.xime.ui.theme
 
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.ImageDecoder
 import android.net.Uri
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.toArgb
@@ -144,7 +145,12 @@ object CustomImageTheme {
     fun importImage(context: Context, uri: Uri): String = importAs(context, uri, FILE_PREFIX)
 
     private fun importAs(context: Context, uri: Uri, prefix: String): String {
-        val bitmap = com.kingzcheung.xime.ocr.loadOcrGalleryImage(context, uri)
+        val bitmap = ImageDecoder.decodeBitmap(ImageDecoder.createSource(context.contentResolver, uri)) { decoder, info, _ ->
+            val maxSide = maxOf(info.size.width, info.size.height)
+            val ratio = minOf(1f, 2048f / maxSide)
+            decoder.setTargetSize((info.size.width * ratio).toInt().coerceAtLeast(1), (info.size.height * ratio).toInt().coerceAtLeast(1))
+            decoder.allocator = ImageDecoder.ALLOCATOR_SOFTWARE
+        }
         val dir = themesDir(context).apply { mkdirs() }
         // 轮播图片一次选好几张，同一毫秒里也不能重名。
         val name = if (prefix == SLIDE_PREFIX) "$prefix${System.currentTimeMillis()}-${(0..99999).random()}.jpg"

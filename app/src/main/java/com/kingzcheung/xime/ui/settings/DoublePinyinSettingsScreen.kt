@@ -90,6 +90,13 @@ fun DoublePinyinSettingsContent(onBack: () -> Unit) {
             .onSuccess { schemes = it }.onFailure { message = "无法读取双拼方案：${it.message}" }
         enabled = withContext(Dispatchers.IO) { SchemaManager.getEnabledSchemas(context).toSet() }
     }
+    androidx.lifecycle.compose.LifecycleEventEffect(androidx.lifecycle.Lifecycle.Event.ON_RESUME) {
+        scope.launch {
+            runCatching { withContext(Dispatchers.IO) { DoublePinyinSchemes.all(context) } }
+                .onSuccess { schemes = it }
+            enabled = withContext(Dispatchers.IO) { SchemaManager.getEnabledSchemas(context).toSet() }
+        }
+    }
     // 「在方案栏显示」「九键版本」的开关自动应用（SchemaChangeApplier）；应用完在这里说结果，没生效的写出原因。
     LaunchedEffect(Unit) {
         com.kingzcheung.xime.rime.SchemaChangeApplier.finished.collect { usable ->
@@ -161,8 +168,8 @@ fun DoublePinyinSettingsContent(onBack: () -> Unit) {
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             DoublePinyinKeyMap(scheme)
                             // 九键没有分号键：ing 在分号上的方案（微软双拼）分号和 L 同在 5 键。
-                            listOf(Triple(scheme.id, "在方案栏显示", "在「语言与方案」里可以选它"),
-                                Triple(DoublePinyinScheme.t9Id(scheme.id), "九键版本", "在九键上用${scheme.name}")
+                            listOf(Triple(scheme.id, "启用此双拼", "同步到「已安装的方案」，开启后可在「语言与方案」中选用"),
+                                Triple(DoublePinyinScheme.t9Id(scheme.id), "启用九键双拼", "在九键上用${scheme.name}（同步到「已安装的方案」）")
                             ).forEach { (id, title, subtitle) ->
                                 Row(verticalAlignment = Alignment.CenterVertically) {
                                     Column(Modifier.weight(1f)) {
@@ -177,7 +184,7 @@ fun DoublePinyinSettingsContent(onBack: () -> Unit) {
                                                 runCatching { withContext(Dispatchers.IO) {
                                                     DoublePinyinSchemes.setEnabled(context, id, on)
                                                     SchemaManager.getEnabledSchemas(context).toSet()
-                                                } }.onSuccess { enabled = it; message = if (on) "已打开，正在应用" else "已从方案栏隐藏" }
+                                                } }.onSuccess { enabled = it; message = if (on) "已启用并同步，正在应用" else "已停用，已同步到「已安装的方案」" }
                                                     .onFailure { message = "设置失败：${it.message}" }
                                                 busy = false
                                             }

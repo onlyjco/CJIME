@@ -36,6 +36,7 @@ internal fun InputProfileSelectors(
     containerColor: Color = MaterialTheme.colorScheme.surfaceContainerHighest,
     contentColor: Color = MaterialTheme.colorScheme.onSurface,
     accentColor: Color = MaterialTheme.colorScheme.primary,
+    onManage: (() -> Unit)? = null,
     onSelect: (SchemaInfo) -> Unit,
 ) {
     val context = androidx.compose.ui.platform.LocalContext.current
@@ -61,7 +62,8 @@ internal fun InputProfileSelectors(
         ProfileChoiceRow("方案", "scheme-choice:${profile.language.id}",
             schemes.map { it.schemaId to it.schemeLabel }, selected.schemaId,
             previews = schemes.associate { it.schemaId to InputProfiles.schemePreview(it.profile) },
-            containerColor = containerColor, contentColor = contentColor, accentColor = accentColor) { id ->
+            containerColor = containerColor, contentColor = contentColor, accentColor = accentColor,
+            onManage = onManage) { id ->
             schemes.firstOrNull { it.schemaId == id }?.let(onSelect)
         }
     }
@@ -86,7 +88,6 @@ internal fun ProfileChoiceRow(
     rowHeight: Dp? = null,
     onSelect: (String) -> Unit,
 ) {
-    // 和布局那一行一样：打开时停在当前方案，整排从右边滑进来一张卡片的距离；自己点了别的才滚过去。
     val scroll = rememberChoiceRowScroll(choices.indexOfFirst { it.first == selectedId }, choices)
     val list = scroll.list
     Row(modifier.fillMaxWidth().testTag(tag), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -104,17 +105,13 @@ internal fun ProfileChoiceRow(
         LazyRow(Modifier.fillMaxWidth().wheelScroll(list).testTag("$tag:list"), state = list,
             horizontalArrangement = Arrangement.spacedBy(ChoiceRowSpacing)) {
             items(choices, key = { it.first }) { (id, label) ->
-                Box(Modifier.choiceRowSlideIn(scroll)) {
                 SchemeTextCard(label, previews[id].orEmpty(), id == selectedId, "$itemTagPrefix$id",
-                    containerColor, contentColor, accentColor, width = cardWidth, height = rowHeight, onClick = { scroll.picked(); onSelect(id) })
-                }
+                    containerColor, contentColor, accentColor, width = cardWidth, height = rowHeight, onClick = { onSelect(id) })
             }
             if (onManage != null) item(key = "scheme-management") {
-                Box(Modifier.choiceRowSlideIn(scroll)) {
                 SchemeTextCard("方案管理", "", false, "profile-scheme-management",
                     containerColor, contentColor, accentColor, isAction = true,
                     width = managementWidth, height = rowHeight, onClick = onManage)
-                }
             }
         }
         }

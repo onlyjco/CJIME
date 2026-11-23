@@ -5,9 +5,6 @@ import com.kingzcheung.xime.model.*
 /** Pinned official exports, independently available even if the original market is offline. */
 object SpeechModelCatalog {
     const val ZIPFORMER = "zipformer-zh-int8"
-    const val ZIPFORMER_JA = "zipformer-ja-reazonspeech-fp32"
-    const val ZIPFORMER_JA_INT8 = "zipformer-ja-reazonspeech-int8"
-    fun isJapaneseZipformer(id: String) = id == ZIPFORMER_JA || id == ZIPFORMER_JA_INT8
     const val ZIPFORMER_TWO_PASS = "zipformer-sensevoice"
     const val PARAFORMER = "paraformer-zh-en-int8"
     const val SENSEVOICE = "sensevoice-multilingual-int8"
@@ -16,30 +13,7 @@ object SpeechModelCatalog {
     const val XASR = "xasr-zh-en-punct-int8"
     /** CyIME 自己 Release 里的原样转存（哈希与原站一致）：HuggingFace 和它的国内镜像都下不来时用。 */
     private const val RELEASE = "https://github.com/Cyletix/CyIME/releases/download/models/"
-    private const val reazonBase = "https://huggingface.co/reazon-research/reazonspeech-k2-v2/resolve/291488c8151be24d7da4bf7af26e533fad96e407"
     val models = listOf(
-        ModelInfo(ZIPFORMER_JA_INT8, "Zipformer · 日语轻量", "约 153 MB，边说边预览，停顿后定稿。", ModelCategory.ASR,
-            versions = listOf(ModelVersion(version = "291488c8151b", size = "153.0 MB", files = listOf(
-                ModelFile("encoder-epoch-99-avg-1.int8.onnx", "$reazonBase/encoder-epoch-99-avg-1.int8.onnx", "2c7bd08a8a99f9ddd0d9e458456577b1f6279214e51426f114f9eced44c54e1d", 154670139L,
-                    mirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "zipformer-ja-reazonspeech-int8-291488c8151b-encoder-epoch-99-avg-1.int8.onnx")),
-                ModelFile("decoder-epoch-99-avg-1.int8.onnx", "$reazonBase/decoder-epoch-99-avg-1.int8.onnx", "8f0bff94d38797b03b762634ed03211a8e303d06cc4603cdd0cf4199d6eb1485", 2959337L,
-                    mirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "zipformer-ja-reazonspeech-int8-291488c8151b-decoder-epoch-99-avg-1.int8.onnx")),
-                ModelFile("joiner-epoch-99-avg-1.int8.onnx", "$reazonBase/joiner-epoch-99-avg-1.int8.onnx", "49cc7ea1d3d35a40a27442db5e89996da64bf0e683a903dce76e99e57a12e4de", 2696970L,
-                    mirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "zipformer-ja-reazonspeech-int8-291488c8151b-joiner-epoch-99-avg-1.int8.onnx")),
-                ModelFile("tokens.txt", "$reazonBase/tokens.txt", "2c3ac659818a48a0c04010e0593bbc4d7c8a24a054340b01131499c05fd52def", 45754L,
-                    mirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "zipformer-ja-reazonspeech-int8-291488c8151b-tokens.txt"))
-            )))),
-        ModelInfo(ZIPFORMER_JA, "Zipformer · 日语原版", "约 586 MB，边说边预览，停顿后定稿，加载较慢。", ModelCategory.ASR,
-            versions = listOf(ModelVersion(version = "291488c8151b", size = "586.4 MB", files = listOf(
-                ModelFile("encoder-epoch-99-avg-1.onnx", "$reazonBase/encoder-epoch-99-avg-1.onnx", "ecdb0b771e16104aaf8e579cb3c1e32fbd589eb641c5946d82b615bd366c5f96", 592347848L,
-                    mirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "zipformer-ja-reazonspeech-fp32-291488c8151b-encoder-epoch-99-avg-1.onnx")),
-                ModelFile("decoder-epoch-99-avg-1.onnx", "$reazonBase/decoder-epoch-99-avg-1.onnx", "58b18211ae06265466bfa17172dab574df94f76c8bcb61a3640c28ba860e4124", 11767836L,
-                    mirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "zipformer-ja-reazonspeech-fp32-291488c8151b-decoder-epoch-99-avg-1.onnx")),
-                ModelFile("joiner-epoch-99-avg-1.onnx", "$reazonBase/joiner-epoch-99-avg-1.onnx", "d38a81d1191c9ed6de6a1719503692e07e3e973e2364adde0abae5eaaded1174", 10720115L,
-                    mirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "zipformer-ja-reazonspeech-fp32-291488c8151b-joiner-epoch-99-avg-1.onnx")),
-                ModelFile("tokens.txt", "$reazonBase/tokens.txt", "2c3ac659818a48a0c04010e0593bbc4d7c8a24a054340b01131499c05fd52def", 45754L,
-                    mirrors = listOf(DownloadMirrors.CYIME_MODELSCOPE + "zipformer-ja-reazonspeech-fp32-291488c8151b-tokens.txt"))
-            )))),
         // Paraformer、SenseVoice 国内原来只有 hf-mirror 一条线路，两百多 MB 常常很慢：加 CyIME 魔搭仓库的同名副本
         // （和 Release `models` 逐字节相同，下载后仍按哈希校验；魔搭上还没有时 404，自动换下一条）。
         ModelInfo("paraformer-zh-en-int8", "Paraformer · 中英", "中英识别，边说边出字。", ModelCategory.ASR,

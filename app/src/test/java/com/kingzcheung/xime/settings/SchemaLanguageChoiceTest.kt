@@ -62,9 +62,9 @@ class SchemaLanguageChoiceTest {
     }
 
     @Test fun `declared and built-in languages are never replaced`() {
-        val declared = schema("my_kana", "  language: ja\n")
+        val declared = schema("my_yue", "  language: yue\n")
         assertFalse(declared.languageAssignable)
-        assertEquals(InputLanguage.JAPANESE, SchemaLanguageChoice.applyTo(declared, InputLanguage.CHINESE).language)
+        assertEquals(InputLanguage.CANTONESE, SchemaLanguageChoice.applyTo(declared, InputLanguage.CHINESE).language)
         // 明写「未标注」也算方案自己的声明。
         assertFalse(schema("plain_und", "  language: und\n").languageAssignable)
         // CyIME 认识的方案（雾凇、五笔）本来就有语言。
@@ -93,6 +93,6 @@ class SchemaLanguageChoiceTest {
         assertFalse(InputLanguage.UNSPECIFIED in choices)
         assertTrue(choices.none { it.typesLettersDirectly })
         // 存着一个直接打字母的语言（比如旧数据）时不生效，按没选处理（汉字名当中文）。
-        assertEquals(InputLanguage.CHINESE, SchemaLanguageChoice.applyTo(schema("sbyp"), InputLanguage.GERMAN).language)
+        assertEquals(InputLanguage.CHINESE, SchemaLanguageChoice.applyTo(schema("sbyp"), InputLanguage.ENGLISH).language)
     }
 }

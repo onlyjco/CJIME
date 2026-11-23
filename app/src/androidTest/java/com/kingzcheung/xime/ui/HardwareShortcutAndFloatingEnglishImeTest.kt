@@ -136,20 +136,20 @@ class HardwareShortcutAndFloatingEnglishImeTest {
             assertTrue("Compiled Chinese pinyin is required", compiled.any { it.schemaId == "rime_ice" })
             // Discovery includes legacy aliases (jaroomaji); use the same visible
             // product profiles as the language selector and switching controller.
-            val japanese = InputModes.available(schemas).firstOrNull {
+            val cantonese = InputModes.available(schemas).firstOrNull {
                 it.schemaId in canonicalCompiledIds && it.schemaId in compiledIds &&
-                    it.profile.language == InputLanguage.JAPANESE && it.profile.mode == InputMode.KEYBOARD
+                    it.profile.language == InputLanguage.CANTONESE && it.profile.mode == InputMode.KEYBOARD
             }?.schemaId
-            assertNotNull("A compiled Japanese backend is required; do not count a skipped cycle as passing", japanese)
+            assertNotNull("A compiled Cantonese backend is required; do not count a skipped cycle as passing", cantonese)
             SchemaManager.setEnabledSchemas(context, (SchemaManager.getEnabledSchemas(context) +
-                listOf("rime_ice", requireNotNull(japanese))).distinct())
+                listOf("rime_ice", requireNotNull(cantonese))).distinct())
             // Deliberately choose a different globe policy to prove shortcuts are independent.
-            prefs.edit().putStringSet(LanguagePreferences.KEY, setOf("zh", "en", "ja"))
-                .putString("input_language_order", "zh\nen\nja")
+            prefs.edit().putStringSet(LanguagePreferences.KEY, setOf("zh", "en", "yue"))
+                .putString("input_language_order", "zh\nen\nyue")
                 .putString("selected_input_profile_zh", "rime_ice")
-                .putString("selected_input_profile_ja", japanese)
+                .putString("selected_input_profile_yue", cantonese)
                 .putString(LanguageSwitchPreferences.MODE_KEY, LanguageSwitchMode.SPECIFIC_ENGLISH.id)
-                .putString(LanguageSwitchPreferences.LANGUAGE_KEY, InputLanguage.JAPANESE.id)
+                .putString(LanguageSwitchPreferences.LANGUAGE_KEY, InputLanguage.CANTONESE.id)
                 .putBoolean(HardwareKeyboardPreferences.PREFIX + "shift_tap", true)
                 .putBoolean(HardwareKeyboardPreferences.PREFIX + "ctrl_space", true)
                 .putBoolean(HardwareKeyboardPreferences.PREFIX + "dock_edge", true).commit()
@@ -190,17 +190,17 @@ class HardwareShortcutAndFloatingEnglishImeTest {
             shell("input keyboard keycombination KEYCODE_CTRL_LEFT KEYCODE_SPACE")
             awaitLanguage("EN")
             shell("input keyboard keycombination KEYCODE_CTRL_LEFT KEYCODE_SPACE")
-            awaitLanguage("あ")
-            assertEquals(japanese, engine.getCurrentSchema())
+            awaitLanguage("粤")
+            assertEquals(cantonese, engine.getCurrentSchema())
             shell("input keyboard keyevent KEYCODE_SHIFT_LEFT")
             awaitLanguage("EN")
             shell("input keyboard keyevent KEYCODE_SHIFT_LEFT")
-            awaitLanguage("あ")
-            assertEquals(japanese, engine.getCurrentSchema())
+            awaitLanguage("粤")
+            assertEquals(cantonese, engine.getCurrentSchema())
             shell("input keyboard keycombination KEYCODE_CTRL_LEFT KEYCODE_SPACE")
             awaitLanguage("中")
             assertEquals("Ctrl+Space must not insert spaces", "", document())
-            assertEquals(LanguageSwitchOptions(LanguageSwitchMode.SPECIFIC_ENGLISH, InputLanguage.JAPANESE),
+            assertEquals(LanguageSwitchOptions(LanguageSwitchMode.SPECIFIC_ENGLISH, InputLanguage.CANTONESE),
                 LanguageSwitchPreferences.read(context))
 
             shell("input keyboard keyevent KEYCODE_SHIFT_LEFT")

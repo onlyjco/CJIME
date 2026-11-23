@@ -51,15 +51,6 @@ fun HandwritingSettingsContent(
                 SettingsItem(Icons.TwoTone.Inventory, "已安装的手写模型",
                     "切换或删除手写模型", onClick = onOpenModels, showArrow = true)
             })
-            SettingsSection(title = "改进手写", content = {
-                if (devTools) {
-                    SettingsItem(Icons.TwoTone.ModelTraining, "手写训练",
-                        "按题写字，导出训练或贡献给作者", onClick = onOpenTraining, showArrow = true)
-                } else {
-                    SettingsItem(Icons.TwoTone.VolunteerActivism, "贡献手写样本",
-                        "按题写字，分享或上传给作者训练手写模型", onClick = onOpenContribute, showArrow = true)
-                }
-            })
         }
     }
 }

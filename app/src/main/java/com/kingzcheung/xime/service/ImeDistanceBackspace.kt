@@ -44,7 +44,7 @@ internal class ImeDistanceBackspace(private val service: XimeInputMethodService,
             if (document == null && code == null) {
                 if (count == 0) return@postRimeJob
                 val candidates = service.candidateState.value
-                if (composing == true && !initial.isAsciiMode && !initial.inputProfile.capabilities.japaneseConversion) {
+                if (composing == true && !initial.isAsciiMode) {
                     if (service.t9PartialSegments.isEmpty()) code = DragCode.open(engine, initial, forward)
                 } else if (composing == false && !candidates.isComposing && candidates.inputText.isEmpty() &&
                     candidates.preeditText.isEmpty() && service.t9PartialSegments.isEmpty()) {

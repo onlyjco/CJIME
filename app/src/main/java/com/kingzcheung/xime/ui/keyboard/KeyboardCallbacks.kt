@@ -34,6 +34,8 @@ data class KeyboardCallbacks(
     val onKeyPressDown: ((String) -> Unit)? = null,
     val onKeyRelease: ((String) -> Unit)? = null,
     val onCandidateSelect: (Int) -> Unit,
+    val onCandidateSelectWithoutFeedback: ((Int) -> Unit)? = null,
+    val onGlobalCandidateSelectWithoutFeedback: ((Int) -> Unit)? = null,
     val onNextCandidate: (com.kingzcheung.xime.service.CandidateState) -> Unit = {},
     val onPreviousCandidate: (com.kingzcheung.xime.service.CandidateState) -> Unit = {},
     val onRetryRejectedCommit: () -> Unit = {},
@@ -239,8 +241,6 @@ data class KeyboardCallbacks(
     val onCommitCandidateBeforeModeChange: (() -> Unit)? = null,
     /** 打拼音时切到数字面板、按中/英键：按打的字母原样上屏（不上屏首选，Gboard 规则，用户 2026-10-24）。 */
     val onCommitTypedBeforeModeChange: (() -> Unit)? = null,
-    /** 假名按序进入 Rime；变音仅修改仍在组合中的末尾编码。 */
-    val onJapaneseKanaAction: ((JapaneseKanaAction) -> Unit)? = null,
     /** Explicit symbol categories commit the chosen glyph without width conversion. */
     val onCommitExactText: ((String) -> Unit)? = null,
     val onDeleteKaomoji: ((String?) -> String?)? = null,

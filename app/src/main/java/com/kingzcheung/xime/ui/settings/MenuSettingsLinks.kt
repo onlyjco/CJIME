@@ -11,7 +11,6 @@ import com.kingzcheung.xime.keyboard.ToolbarButtonItem
 internal val MenuSettingsTitles: Map<ToolbarButton, String> = mapOf(
     ToolbarButton.SCHEMA to "语言与方案",
     ToolbarButton.CLIPBOARD to "剪贴板",
-    ToolbarButton.OCR to "已安装的模型",
     ToolbarButton.FLOAT to "键盘尺寸与位置",
     ToolbarButton.FLOATING to "键盘尺寸与位置",
     ToolbarButton.HANDWRITING_LOOKUP to "手写",
@@ -24,7 +23,6 @@ internal val MenuSettingsTitles: Map<ToolbarButton, String> = mapOf(
     ToolbarButton.GLIDE to "滑行输入",
     ToolbarButton.T9_FLICK to "拂动选字母",
     ToolbarButton.FOURTEEN_SWIPE to "左右滑动选字母",
-    ToolbarButton.KANA_HINTS to "假名方向提示",
     ToolbarButton.FLICK_DISC to "拂动时显示方向圆盘",
 )
 

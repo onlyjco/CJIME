@@ -130,46 +130,6 @@ class EnglishLiteralInputTest {
         assertEquals(1, probes)
     }
 
-    @Test fun spanishLettersJoinTheWordOnlyOnTheSpanishKeyboard() {
-        val spanish = com.kingzcheung.xime.settings.LetterLanguage.SPANISH.extraLetters
-        for (letter in listOf("ñ", "á", "é", "í", "ó", "ú", "ü", "Ñ", "É")) {
-            assertTrue(letter, isDirectLetter(letter, spanish))
-            assertFalse(letter, isDirectLetter(letter, ""))
-        }
-        for (key in listOf("a", "Z")) assertTrue(key, isDirectLetter(key, ""))
-        for (key in listOf("¿", ",", "1", "space", "è", "")) assertFalse(key, isDirectLetter(key, spanish))
-        var state = CandidateState()
-        val editor = StringBuilder()
-        for ((letter, shifted) in listOf("n" to true, "i" to false, "ñ" to false, "o" to false)) {
-            state = requireNotNull(commitEnglishLetter(state, letter, shifted, { true }) { editor.append(it); true })
-        }
-        assertEquals("Niño", editor.toString())
-        assertEquals("Niño", state.pendingEnglishText)
-    }
-
-    @Test fun germanSharpSStaysSharpUnderShiftAndCyrillicTypesDirectly() {
-        assertTrue(isDirectLetter("ß", com.kingzcheung.xime.settings.LetterLanguage.GERMAN.extraLetters))
-        assertTrue(isDirectLetter("й", com.kingzcheung.xime.settings.LetterLanguage.RUSSIAN.extraLetters))
-        assertFalse(isDirectLetter("й", com.kingzcheung.xime.settings.LetterLanguage.GERMAN.extraLetters))
-        var state = CandidateState()
-        val editor = StringBuilder()
-        // ß 的 uppercase 是 SS：Shift 时照旧打一个 ß。
-        for ((letter, shifted) in listOf("ß" to true, "п" to true, "р" to false)) {
-            state = requireNotNull(commitEnglishLetter(state, letter, shifted, { true }) { editor.append(it); true })
-        }
-        assertEquals("ßПр", editor.toString())
-    }
-
-    @Test fun englishWordsSchemeFollowsTheEnglishSwitches() {
-        // #311：「英文单词」方案在打单词时同样按「首字母大写」「选词后/标点后自动加空格」；它的 ABC 状态、英文直接输入、中文不算。
-        val words = com.kingzcheung.xime.settings.InputProfiles.builtin(com.kingzcheung.xime.settings.InputModes.ENGLISH_WORDS)
-        assertTrue(typesEnglishWords(words, asciiMode = false))
-        assertFalse(typesEnglishWords(words, asciiMode = true))
-        val direct = com.kingzcheung.xime.settings.InputProfiles.builtin(com.kingzcheung.xime.settings.InputModes.ENGLISH)
-        assertFalse(typesEnglishWords(direct, asciiMode = false))
-        assertFalse(typesEnglishWords(com.kingzcheung.xime.settings.InputProfiles.builtin("rime_ice"), asciiMode = false))
-    }
-
     @Test fun autoCappedFirstLetterIsNotLearnedAsTyped() {
         assertEquals("xyzw", spellingWithoutAutoCap("Xyzw"))
         assertEquals("obsidian", spellingWithoutAutoCap("Obsidian"))
@@ -180,31 +140,14 @@ class EnglishLiteralInputTest {
         assertEquals("I", spellingWithoutAutoCap("I"))
     }
 
-    @Test fun wordsAutoSpaceOnlyFollowsWords() {
-        assertTrue(takesWordsAutoSpace("hello"))
-        assertTrue(takesWordsAutoSpace("don't"))
-        assertTrue(takesWordsAutoSpace("Hello"))
-        assertFalse(takesWordsAutoSpace(""))
-        assertFalse(takesWordsAutoSpace("."))
-        assertFalse(takesWordsAutoSpace("123"))
-        assertFalse(takesWordsAutoSpace("hello "))
-    }
-
     /** 用户 11-16：英文打 what's 时撇号接进词里，补全按整个词接着出。 */
     @Test fun apostropheJoinsTheWordBeingTyped() {
         val english = com.kingzcheung.xime.settings.InputLanguage.ENGLISH
         assertTrue(apostropheJoinsWord(english, "what"))
-        assertTrue(apostropheJoinsWord(com.kingzcheung.xime.settings.InputLanguage.FRENCH, "l"))
-        assertTrue(apostropheJoinsWord(com.kingzcheung.xime.settings.InputLanguage.ITALIAN, "dell"))
-        assertTrue(apostropheJoinsWord(com.kingzcheung.xime.settings.InputLanguage.GERMAN, "geht"))
-        assertTrue(apostropheJoinsWord(com.kingzcheung.xime.settings.InputLanguage.SPANISH, "d"))
-        // 反例：没在打词、刚打过撇号（第二个照旧是标点）、俄语韩语不用撇号、中文日语不走这里。
         assertFalse(apostropheJoinsWord(english, ""))
         assertFalse(apostropheJoinsWord(english, "what'"))
         assertFalse(apostropheJoinsWord(english, "3"))
-        for (language in listOf(com.kingzcheung.xime.settings.InputLanguage.RUSSIAN, com.kingzcheung.xime.settings.InputLanguage.KOREAN,
-                com.kingzcheung.xime.settings.InputLanguage.VIETNAMESE,
-                com.kingzcheung.xime.settings.InputLanguage.CHINESE, com.kingzcheung.xime.settings.InputLanguage.JAPANESE))
+        for (language in listOf(com.kingzcheung.xime.settings.InputLanguage.CHINESE, com.kingzcheung.xime.settings.InputLanguage.CANTONESE))
             assertFalse(language.id, apostropheJoinsWord(language, "abc"))
 
         val editor = StringBuilder()
@@ -217,27 +160,5 @@ class EnglishLiteralInputTest {
         // 撇号不会被当成大写，也不补空格。
         val glided = CandidateState(pendingEnglishText = "don", glidedWord = "don")
         assertEquals("don'", requireNotNull(commitEnglishLetter(glided, "'", true, { true }) { true }).pendingEnglishText)
-    }
-
-    /** 用户 11-16 要的马来语：叠词 kanak-kanak 的连字符接进正在打的词，补全接着出；别的语言连字符照旧是标点。 */
-    @Test fun malayHyphenJoinsTheWordBeingTyped() {
-        val malay = com.kingzcheung.xime.settings.InputLanguage.MALAY
-        assertTrue(markJoinsWord(WORD_HYPHEN, malay, "kanak"))
-        assertTrue(markJoinsWord(WORD_APOSTROPHE, malay, "don"))
-        // 反例：没在打词、刚打过连字符、别的语言。
-        assertFalse(markJoinsWord(WORD_HYPHEN, malay, ""))
-        assertFalse(markJoinsWord(WORD_HYPHEN, malay, "kanak-"))
-        for (language in listOf(com.kingzcheung.xime.settings.InputLanguage.ENGLISH, com.kingzcheung.xime.settings.InputLanguage.FRENCH,
-                com.kingzcheung.xime.settings.InputLanguage.VIETNAMESE, com.kingzcheung.xime.settings.InputLanguage.CHINESE))
-            assertFalse(language.id, markJoinsWord(WORD_HYPHEN, language, "well"))
-        assertFalse(markJoinsWord("?", malay, "kanak"))
-
-        val editor = StringBuilder()
-        var state = CandidateState()
-        for (key in listOf("k", "a", "n", "a", "k", "-", "k")) {
-            state = requireNotNull(commitEnglishLetter(state, key, false, { true }) { editor.append(it); true })
-        }
-        assertEquals("kanak-k", editor.toString())
-        assertEquals("kanak-k", state.pendingEnglishText)
     }
 }

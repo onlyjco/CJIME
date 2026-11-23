@@ -252,7 +252,7 @@ internal fun KeyboardSettingsScaffold(
                         }
                         autoShow = true
                     },
-                ) { Text(if (selected) "显示键盘" else if (enabled) "选择 CyIME" else "启用 CyIME") }
+                ) { Text(if (selected) "显示键盘" else if (enabled) "选择 CJIME" else "启用 CJIME") }
               }
             }
         }

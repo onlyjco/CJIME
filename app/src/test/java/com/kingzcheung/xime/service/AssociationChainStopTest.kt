@@ -33,7 +33,7 @@ class AssociationChainStopTest {
         // 空格上屏第一个联想词也是选联想词。
         assertTrue(router.contains("service.commitTextAndPredict(association, isPaste = false, chained = true)"))
         assertEquals(2, Regex("chained = true").findAll(router).count())
-        val service = File(root, "app/src/main/java/com/kingzcheung/xime/service/XimeInputMethodService.kt").readText()
+        val service = File(root, "app/src/main/java/com/kingzcheung/xime/service/XimeInputMethodService.kt").readText().replace("\r\n", "\n")
         assertTrue(service.contains("override fun commitText(text: String) {\n        commitTextAndPredict(text, isPaste = false)\n"))
     }
 }

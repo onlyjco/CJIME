@@ -25,7 +25,7 @@ internal fun rawCompositionCommitText(engineInput: String, preedit: String, t9: 
  * T9 and 14-key take the same decoded reading as Enter (T9 partial selections are already in [preedit]).
  */
 internal fun compositionCommitPrefix(asTyped: Boolean, engineInput: String, preedit: String, t9: Boolean,
-    merged14: Boolean, partial: String, englishDelivered: Boolean, japanesePreview: String?,
+    merged14: Boolean, partial: String, englishDelivered: Boolean, japanesePreview: String? = null,
     firstCandidate: () -> String): String = when {
     // English has already been delivered character by character.
     englishDelivered && engineInput.isEmpty() -> ""

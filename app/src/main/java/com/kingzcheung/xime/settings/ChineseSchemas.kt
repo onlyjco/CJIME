@@ -138,7 +138,7 @@ object ChineseSchemas {
     private fun addDoublePinyinDefaults(context: Context, enabled: List<String>): List<String> {
         val prefs = SettingsPreferences.getPrefsPublic(context)
         if (prefs.getBoolean(DOUBLE_PINYIN_ADDED, false) || !prefs.getBoolean(ADDED, false)) return enabled
-        val guideWillAsk = !com.kingzcheung.xime.BuildConfig.ELDER && !com.kingzcheung.xime.model.SetupGuide.isShown(context)
+        val guideWillAsk = false
         if (!CyimeInputDefaults.addsDoublePinyinToBar(isFreshInstall(context), guideWillAsk)) {
             prefs.edit().putBoolean(DOUBLE_PINYIN_ADDED, true).apply()
             return enabled

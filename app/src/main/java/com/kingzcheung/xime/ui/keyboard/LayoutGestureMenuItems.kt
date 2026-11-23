@@ -16,8 +16,7 @@ internal fun ToolbarButton.appliesTo(kind: LayoutKind): Boolean = when (this) {
     ToolbarButton.GLIDE -> kind == LayoutKind.ALPHABETIC || kind == LayoutKind.T9
     ToolbarButton.T9_FLICK -> kind == LayoutKind.T9
     ToolbarButton.FOURTEEN_SWIPE -> kind == LayoutKind.MERGED
-    ToolbarButton.KANA_HINTS -> kind == LayoutKind.KANA_KEYPAD
-    ToolbarButton.FLICK_DISC -> kind in setOf(LayoutKind.T9, LayoutKind.MERGED, LayoutKind.KANA_KEYPAD)
+    ToolbarButton.FLICK_DISC -> kind in setOf(LayoutKind.T9, LayoutKind.MERGED)
     else -> true
 }
 
@@ -26,7 +25,6 @@ internal fun ToolbarButton.gestureOn(prefs: KeyboardInputPreferences, chinese: B
     ToolbarButton.T9_FLICK -> prefs.t9FlickLetters &&
         InputGestureLocks.lockFor(prefs, InputGestureLock.Option.T9_FLICK_LETTERS, true) == null
     ToolbarButton.FOURTEEN_SWIPE -> prefs.fourteenLetterSwipe
-    ToolbarButton.KANA_HINTS -> prefs.kanaDirectionHints
     ToolbarButton.FLICK_DISC -> prefs.flickDirectionDisc
     else -> false
 }
@@ -37,7 +35,6 @@ internal fun ToolbarButton.gestureKeys(chinese: Boolean = false, nine: Boolean =
         else if (chinese) listOf(KeyboardInputPreferences.CHINESE_GLIDE_KEY) else listOf("glide_typing_v2", "glide_typing")
     ToolbarButton.T9_FLICK -> listOf("t9_flick_letters")
     ToolbarButton.FOURTEEN_SWIPE -> listOf("fourteen_letter_swipe")
-    ToolbarButton.KANA_HINTS -> listOf("kana_direction_hints")
     ToolbarButton.FLICK_DISC -> listOf("flick_direction_disc_v2", "flick_direction_disc")
     else -> emptyList()
 }

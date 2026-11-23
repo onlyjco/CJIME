@@ -120,4 +120,25 @@ class BottomLiftButtonsTest {
         rule.waitForIdle()
         assertTrue(cursorDelta > 0)
     }
+
+    @Test
+    fun hidesActionButtonsWhenDisabledByToggle() {
+        rule.setContent {
+            MaterialTheme {
+                Box(Modifier.requiredSize(360.dp, 80.dp)) {
+                    BottomLiftSpacer(
+                        heightDp = 40,
+                        cursorEnabled = false,
+                        onCursorMove = null,
+                        showActionButtons = false,
+                        onSwitchLanguage = {},
+                        onOpenClipboard = {},
+                    )
+                }
+            }
+        }
+        rule.waitForIdle()
+        rule.onNodeWithTag("bottom-lift-language-switch").assertDoesNotExist()
+        rule.onNodeWithTag("bottom-lift-clipboard").assertDoesNotExist()
+    }
 }

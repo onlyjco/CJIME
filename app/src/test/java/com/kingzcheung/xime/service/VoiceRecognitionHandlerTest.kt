@@ -6,7 +6,7 @@ import org.junit.Test
 class VoiceRecognitionHandlerTest {
     @Test fun `Chinese dictated commands do not rewrite another language`() {
         for (language in listOf(com.kingzcheung.xime.settings.InputLanguage.ENGLISH,
-            com.kingzcheung.xime.settings.InputLanguage.JAPANESE, com.kingzcheung.xime.settings.InputLanguage.UNSPECIFIED)) {
+            com.kingzcheung.xime.settings.InputLanguage.UNSPECIFIED)) {
             assertEquals("句号 逗号 問題", normalizeVoiceText("句号，逗号。問題", language))
         }
     }

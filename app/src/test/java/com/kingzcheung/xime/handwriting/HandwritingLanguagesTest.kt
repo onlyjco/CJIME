@@ -10,18 +10,12 @@ import org.mockito.kotlin.verifyNoInteractions
 class HandwritingLanguagesTest {
     /** 中文、英文、日语都由内置汉字手写模型服务，不需要公式模型；只有未标注语言的方案不能手写。 */
     @Test fun everyKeyboardLanguageHasARecognizerBackedByTheBuiltinModel() {
-        for (language in listOf(InputLanguage.CHINESE, InputLanguage.ENGLISH, InputLanguage.JAPANESE)) {
+        for (language in listOf(InputLanguage.CHINESE, InputLanguage.CANTONESE, InputLanguage.ENGLISH)) {
             assertTrue(language.name, HandwritingLanguages.supports(language))
             assertEquals(language, HandwritingLanguages.recognitionLanguageForKeyboard(language))
         }
         assertFalse(HandwritingLanguages.supports(InputLanguage.UNSPECIFIED))
         assertNull(HandwritingLanguages.recognitionLanguageForKeyboard(InputLanguage.UNSPECIFIED))
-    }
-
-    @Test fun kanaTemplatesNeedOnlyTheBuiltinModelWhileLetterTemplatesNeedTheFormulaModel() {
-        assertEquals(HandwritingTemplates.Script.KANA, HandwritingTemplates.Script.forLanguage(InputLanguage.JAPANESE))
-        // 假名模板换成汉字模型特征后存新文件，旧的公式特征文件不再读
-        assertEquals("kana_och.json", HandwritingTemplates.Script.KANA.fileName)
     }
 
     @Test fun englishCandidatesAreTheModelsLettersAndDigitsNeverHanCharacters() {
@@ -41,9 +35,9 @@ class HandwritingLanguagesTest {
     }
 
     @Test fun switchingLanguageKeepsHandwritingWhenTheNewLanguageCanBeHandwritten() {
-        for (language in listOf(InputLanguage.CHINESE, InputLanguage.ENGLISH, InputLanguage.JAPANESE))
+        for (language in listOf(InputLanguage.CHINESE, InputLanguage.CANTONESE, InputLanguage.ENGLISH))
             assertTrue(language.name, HandwritingLanguages.keepsHandwritingOnSwitch(language, hasBuiltinModel = true))
-        assertFalse(HandwritingLanguages.keepsHandwritingOnSwitch(InputLanguage.JAPANESE, hasBuiltinModel = false))
+        assertFalse(HandwritingLanguages.keepsHandwritingOnSwitch(InputLanguage.CANTONESE, hasBuiltinModel = false))
         assertFalse(HandwritingLanguages.keepsHandwritingOnSwitch(InputLanguage.UNSPECIFIED, hasBuiltinModel = true))
     }
 

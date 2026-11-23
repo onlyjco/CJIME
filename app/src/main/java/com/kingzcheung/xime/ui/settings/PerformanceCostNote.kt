@@ -39,19 +39,10 @@ internal fun rememberPerformanceCostSource(): PerformanceCosts.Source? {
  */
 @Composable
 internal fun PerformanceCostNote(item: PerformanceCosts.Item, modifier: Modifier = Modifier, label: String = "性能开销") {
-    val source = rememberPerformanceCostSource() ?: return
-    val text = PerformanceCosts.note(source, item.id, label) ?: return
-    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier.padding(top = 2.dp).testTag("perf-cost:${item.id}"))
 }
 
-/** 几项合起来的代价一行（同 [PerformanceCostNote] 的样式），如「九键按数字也模糊」下面已开各组的合计；一组都没开不显示。 */
 @Composable
 internal fun PerformanceCostTotalNote(items: Set<PerformanceCosts.Item>, label: String, tag: String, modifier: Modifier = Modifier) {
-    val source = rememberPerformanceCostSource() ?: return
-    val text = PerformanceCosts.totalNote(source, items.mapTo(linkedSetOf()) { it.id }, label) ?: return
-    Text(text, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-        modifier = modifier.padding(top = 2.dp).testTag("perf-cost-total:$tag"))
 }
 
 

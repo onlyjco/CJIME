@@ -58,13 +58,13 @@ class AsrSupportStartupTest {
             assertSame(backend, first)
             verifyNoInteractions(backend)
 
-            AsrSupport.warmup(context, InputLanguage.JAPANESE)
+            AsrSupport.warmup(context, InputLanguage.CANTONESE)
             assertSame("Warmup must use the backend already handed to the recording manager", first, AsrSupport.create(context))
-            AsrSupport.warmup(context, InputLanguage.JAPANESE)
+            AsrSupport.warmup(context, InputLanguage.CANTONESE)
             assertSame(first, AsrSupport.create(context))
 
             assertEquals("All startup paths must share a single IPC owner", 1, backends.constructed().size)
-            verify(backend, times(2)).initialize(InputLanguage.JAPANESE)
+            verify(backend, times(2)).initialize(InputLanguage.CANTONESE)
             verify(backend, never()).initialize()
             verify(backend, times(2)).initialize(any())
         }
@@ -76,13 +76,13 @@ class AsrSupportStartupTest {
             val backend = backends.constructed().single()
             assertSame(backend, AsrSupport.create(context))
 
-            AsrSupport.warmup(context, InputLanguage.JAPANESE)
+            AsrSupport.warmup(context, InputLanguage.CANTONESE)
             assertSame(backend, AsrSupport.create(context))
             assertEquals(1, backends.constructed().size)
 
             val ordered = inOrder(backend)
             ordered.verify(backend).initialize(InputLanguage.ENGLISH)
-            ordered.verify(backend).initialize(InputLanguage.JAPANESE)
+            ordered.verify(backend).initialize(InputLanguage.CANTONESE)
             verify(backend, times(2)).initialize(any())
             verify(backend, never()).initialize()
         }

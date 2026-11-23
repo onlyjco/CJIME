@@ -49,7 +49,7 @@ internal object OptimizedEncoder {
     fun prepareLater(context: Context, selection: AsrModelManager.Selection) {
         val first = selection.first ?: return
         val dir = selection.firstDir ?: return
-        if (first.modelType != "transducer" || SpeechModelCatalog.isJapaneseZipformer(first.id)) return
+        if (first.modelType != "transducer") return
         val source = File(dir, first.encoderFile)
         if (!source.isFile || path(context, dir, first.encoderFile) != null) return
         val memory = context.getSystemService(ActivityManager::class.java)?.let { am ->

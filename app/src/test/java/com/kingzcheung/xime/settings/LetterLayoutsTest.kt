@@ -12,17 +12,16 @@ import org.mockito.kotlin.whenever
 
 /**
  * One rule for letter layouts: every letter layout Chinese pinyin offers is offered the same way for
- * English direct input and Japanese romaji, as the same [CustomKeyboardLayout] (rows, name, swipes).
+ * English direct input, as the same [CustomKeyboardLayout] (rows, name, swipes).
  */
 class LetterLayoutsTest {
     @get:Rule val temporary = TemporaryFolder()
     private val chinese = listOf("rime_ice", "t9_pinyin", "pinyin_14jian", Cyletix10Layout.ID, ColemakLayout.ID)
-    private val entries = (chinese + listOf("japanese", "japanese_kana")).map { SchemaInfo(it, it, "", "", "") } + InputModes.english
+    private val entries = chinese.map { SchemaInfo(it, it, "", "", "") } + InputModes.english
     private fun entry(id: String) = entries.first { it.schemaId == id }
 
     @After fun clear() {
         LetterLayouts.setForTest(InputLanguage.ENGLISH, null)
-        LetterLayouts.setForTest(InputLanguage.JAPANESE, null)
         LetterLayouts.setForTest(InputLanguage.CHINESE, null)
     }
 
@@ -74,24 +73,21 @@ class LetterLayoutsTest {
         assertEquals("Colemak · 内置", SchemaInfo(ColemakLayout.ID, "Colemak", "", "", "").resourceLabel)
     }
 
-    @Test fun englishAndJapaneseOfferExactlyTheChineseLetterLayouts() {
+    @Test fun englishOffersExactlyTheChineseLetterLayouts() {
         val chineseLetterLayouts = InputProfileSelection.layouts(entries, entry("rime_ice"))
             .filter { CustomKeyboardLayouts.find(it.id)?.let(LetterLayouts::typable) == true }
         assertEquals(listOf(Cyletix10Layout.ID, ColemakLayout.ID), chineseLetterLayouts.map { it.id })
-        for (id in listOf(InputModes.ENGLISH, "japanese")) {
-            val offered = InputProfileSelection.layouts(entries, entry(id))
-            assertEquals(entry(id).baseProfile.layout, offered.first())
-            // Same ids and the user's own names, never copies with new labels.
-            assertEquals(chineseLetterLayouts, offered.drop(1))
-        }
-        // Kana and Chinese entries offer only their own layout (which one depends on loaded bindings).
-        for (id in listOf("japanese_kana", "pinyin_14jian", "rime_ice"))
+        val offered = InputProfileSelection.layouts(entries, entry(InputModes.ENGLISH))
+        assertEquals(entry(InputModes.ENGLISH).baseProfile.layout, offered.first())
+        // Same ids and the user's own names, never copies with new labels.
+        assertEquals(chineseLetterLayouts, offered.drop(1))
+        // Chinese entries offer only their own layout (which one depends on loaded bindings).
+        for (id in listOf("pinyin_14jian", "rime_ice"))
             assertEquals(listOf(entry(id).profile.layout), InputProfileSelection.layoutsOf(entry(id), entries))
     }
 
     @Test fun anArrangementChangesKeysNotLanguageSchemeOrEngine() {
         LetterLayouts.setForTest(InputLanguage.ENGLISH, Cyletix10Layout.ID)
-        LetterLayouts.setForTest(InputLanguage.JAPANESE, ColemakLayout.ID)
         val english = InputProfiles.current("rime_ice", asciiMode = true)
         assertEquals(InputLanguage.ENGLISH, english.language)
         assertEquals(InputScheme.DIRECT, english.scheme)
@@ -99,22 +95,12 @@ class LetterLayoutsTest {
         assertEquals(Cyletix10Layout.ID, english.layout.id)
         assertEquals(Cyletix10Layout.preset.typingRows(), KeysConfigHelper.letterLayout("rime_ice", true)?.typingRows())
 
-        val japanese = InputProfiles.current("japanese")
-        assertEquals(InputScheme.ROMAJI, japanese.scheme)
-        assertEquals(EngineProfile.Rime("japanese"), japanese.engineProfile)
-        assertEquals(ColemakLayout.ID, japanese.layout.id)
-        assertEquals(ColemakLayout.ID, entry("japanese").profile.layout.id)
-        assertEquals(ColemakLayout.preset.typingRows(), KeysConfigHelper.letterLayout("japanese", false)?.typingRows())
-
-        // Chinese keeps its layout in the schema; kana keeps its keypad.
+        // Chinese keeps its layout in the schema.
         assertNull(KeysConfigHelper.letterLayout("rime_ice", false))
         assertEquals(Cyletix10Layout.ID, KeysConfigHelper.letterLayout(Cyletix10Layout.ID, false)?.id)
-        assertNull(KeysConfigHelper.letterLayout("japanese_kana", false))
 
         // The picker selects the same entry; only the stored arrangement changes.
         assertEquals(InputModes.ENGLISH, InputProfileSelection.changeLayout(entries, entry(InputModes.ENGLISH), ColemakLayout.ID)?.schemaId)
-        assertEquals("japanese", InputProfileSelection.changeLayout(entries, entry("japanese"),
-            entry("japanese").baseProfile.layout.id)?.schemaId)
 
         LetterLayouts.setForTest(InputLanguage.ENGLISH, null)
         assertEquals(InputLayout.QWERTY.id, InputProfiles.current("rime_ice", asciiMode = true).layout.id)
@@ -160,14 +146,13 @@ class LetterLayoutsTest {
         assertEquals("1", typewise.gestures(base)["q"]?.swipeUp?.label)
         assertEquals("2", typewise.gestures(base)["w"]?.swipeUp?.label)
         val all = entries + SchemaInfo(TypewiseLayout.ID, "Typewise", "", "", "")
-        for (id in listOf(InputModes.ENGLISH, "japanese"))
-            assertTrue(InputProfileSelection.layouts(all, all.first { it.schemaId == id }).any { it.id == TypewiseLayout.ID })
+        assertTrue(InputProfileSelection.layouts(all, all.first { it.schemaId == InputModes.ENGLISH }).any { it.id == TypewiseLayout.ID })
         LetterLayouts.setForTest(InputLanguage.ENGLISH, TypewiseLayout.ID)
         assertEquals(typewise.typingRows(), KeysConfigHelper.letterLayout("rime_ice", true)?.typingRows())
     }
 
-    /** Romaji needs only letters: each arrangement has all 26, and swipes stay where the finger expects them. */
-    @Test fun romajiKeepsEveryLetterAndPositionalSwipes() {
+    /** Direct letter layouts need only letters: each arrangement has all 26, and swipes stay where the finger expects them. */
+    @Test fun letterLayoutsKeepEveryLetterAndPositionalSwipes() {
         val base = mapOf(
             "m" to KeyGestureConfig(swipeUp = GestureDef(label = "ー", value = "ー")),
             "l" to KeyGestureConfig(swipeUp = GestureDef(label = "-", value = "-")),

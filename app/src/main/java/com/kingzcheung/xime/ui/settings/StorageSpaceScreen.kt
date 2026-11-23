@@ -77,14 +77,13 @@ fun StorageSpaceScreen(
     onBack: () -> Unit,
     onNavigateToPlugins: () -> Unit = {},
     onNavigateToModels: () -> Unit = {},
-    onNavigateToPerformance: () -> Unit = {},
 ) {
     val context = LocalContext.current
     val viewModel: StorageSpaceViewModel = viewModel()
     val categories by viewModel.categories.collectAsStateWithLifecycle()
     val memory by viewModel.memory.collectAsStateWithLifecycle()
     val releasingVoice by viewModel.releasingVoice.collectAsStateWithLifecycle()
-    // 从性能与省电、模型管理回来时重新量一次。
+    // 从模型管理回来时重新量一次。
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { viewModel.refreshMemory() }
     val cleaningId by viewModel.cleaningId.collectAsStateWithLifecycle()
     val message by viewModel.message.collectAsStateWithLifecycle()
@@ -149,8 +148,7 @@ fun StorageSpaceScreen(
             contentPadding = PaddingValues(vertical = 8.dp)
         ) {
             item {
-                MemorySection(memory, releasingVoice, onRelease = viewModel::releaseVoice,
-                    onNavigateToPerformance = onNavigateToPerformance)
+                MemorySection(memory, releasingVoice, onRelease = viewModel::releaseVoice)
             }
             item {
                 SettingsSection(title = "数据目录占用") {
@@ -283,7 +281,6 @@ private fun MemorySection(
     memory: MemoryStats.Snapshot?,
     releasing: Boolean,
     onRelease: () -> Unit,
-    onNavigateToPerformance: () -> Unit,
 ) {
     val context = LocalContext.current
     SettingsSection(title = "运行内存") {
@@ -322,29 +319,6 @@ private fun MemorySection(
                 text = "语音模型没在内存里",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
-            )
-        }
-        HorizontalDivider(
-            modifier = Modifier.padding(horizontal = 16.dp),
-            thickness = 0.5.dp,
-            color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
-        )
-        Row(
-            modifier = Modifier.fillMaxWidth().clickable(onClick = onNavigateToPerformance).padding(16.dp),
-            verticalAlignment = Alignment.CenterVertically
-        ) {
-            Column(Modifier.weight(1f)) {
-                Text("性能与省电", style = MaterialTheme.typography.bodyLarge, fontWeight = FontWeight.Medium)
-                Text(
-                    "语音模型空闲多久从内存卸掉",
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant
-                )
-            }
-            Icon(
-                imageVector = Icons.AutoMirrored.Filled.KeyboardArrowRight,
-                contentDescription = null,
-                tint = MaterialTheme.colorScheme.onSurfaceVariant
             )
         }
     }

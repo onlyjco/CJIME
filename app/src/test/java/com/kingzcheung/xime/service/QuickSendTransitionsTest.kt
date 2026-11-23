@@ -5,7 +5,16 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
+import org.junit.runner.RunWith
+import org.mockito.kotlin.doCallRealMethod
+import org.mockito.kotlin.mock
+import org.mockito.kotlin.verify
+import org.mockito.kotlin.whenever
+import org.robolectric.annotation.Config
+import androidx.test.ext.junit.runners.AndroidJUnit4
 
+@RunWith(AndroidJUnit4::class)
+@Config(sdk = [34], application = android.app.Application::class)
 class QuickSendTransitionsTest {
     @Test fun everyOpeningTypesIntoTheFormText() {
         for (state in listOf(
@@ -47,5 +56,28 @@ class QuickSendTransitionsTest {
         val away = QuickSendTransitions.textFocus(back, false)
         assertTrue(away.showQuickSendForm)
         assertEquals(InputTarget.Host, away.inputTarget)
+    }
+
+    @Test fun dismissingQuickSendFormViaBackReturnsToClipboard() {
+        val service = mock<XimeInputMethodService>()
+        val uiState = androidx.compose.runtime.mutableStateOf(QuickSendTransitions.open(InputUIState()))
+        val viewModel = mock<com.kingzcheung.xime.viewmodel.KeyboardViewModel>()
+        val app = androidx.test.core.app.ApplicationProvider.getApplicationContext<android.app.Application>()
+        val favoriteStore = com.kingzcheung.xime.clipboard.ClipboardFavoriteStore.getInstance(app)
+        favoriteStore.beginAdd(returnToFavorites = true)
+        XimeInputMethodService::class.java.getDeclaredField("uiState").apply {
+            isAccessible = true
+            set(service, uiState)
+        }
+        whenever(service.uiState).thenReturn(uiState)
+        whenever(service.keyboardViewModel).thenReturn(viewModel)
+        whenever(service.editorEnterKeyText()).thenReturn("发送")
+        whenever(service.applicationContext).thenReturn(app)
+        doCallRealMethod().whenever(service).dismissQuickSendFormToClipboard()
+        service.dismissQuickSendFormToClipboard()
+        assertFalse(uiState.value.showQuickSendForm)
+        assertNull(favoriteStore.peekPendingForm())
+        assertTrue(favoriteStore.consumeReturnToFavorites())
+        verify(viewModel).showOverlay(com.kingzcheung.xime.keyboard.OverlayRoute.Clipboard(0))
     }
 }

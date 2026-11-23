@@ -10,9 +10,8 @@ object CyimeInputDefaults {
 
     /**
      * 「已安装的方案」里关着也直接列出、不收进「其他已安装方案（高级）」的。
-     * 英文单词方案（11-09）也在这里：关着也列在「语言与方案」英文的方案里，点了才启用，不加进默认启用。
      */
-    val listedWhenOff: List<String> get() = recommended + "pinyin_14jian" + doublePinyin + shapeAndStroke + InputModes.ENGLISH_WORDS
+    val listedWhenOff: List<String> get() = recommended + "pinyin_14jian" + doublePinyin + shapeAndStroke
 
     /**
      * 形码、笔画、注音（用户 11-04：收在「其他已安装方案」里，以为没有）：随包的仓颉、速成、笔画、注音和下载后的五笔
@@ -25,7 +24,14 @@ object CyimeInputDefaults {
      */
     val dependencies = setOf("cyime_t9_english", "cyime_k14_english", "cyime_cn_en", "cyime_omission", "cyime_letter_swap",
         "cyime_digit_edit", "cyime_digit_tap", "melt_eng", "radical_pinyin", "numbers", "handwriting", "stroke_phrase",
-        "cyime_aux_zrm", "cyime_aux_flypy", "flypydz", "flypyok")
+        "stroke_cells", "cyime_aux_zrm", "cyime_aux_flypy", "flypydz", "flypyok")
+
+    /** 已从安装包移除的旧版内置方案，升级时自动清理并忽略。 */
+    val retiredForeignSchemas = setOf(
+        "cyime_english",
+        "french", "german", "italian", "japanese", "japanese_kana", "jaroomaji",
+        "korean", "malay", "russian", "spanish", "vietnamese",
+    )
 
     /** 只给别的方案当索引或词表、自己不是输入方式的方案：上面固定的几个，加每个双拼方案停顿纠错用的索引。 */
     fun isDependency(id: String) = id in dependencies || id.startsWith(DoublePinyinScheme.PAUSE_PREFIX)
@@ -84,10 +90,9 @@ object CyimeInputDefaults {
 
     fun canonicalIds(ids: List<String>, available: Set<String>): List<String> = ids.mapNotNull { id ->
         when {
-            isDependency(id) || id == InputModes.ENGLISH -> null
+            isDependency(id) || id in retiredForeignSchemas || id == InputModes.ENGLISH -> null
             id == "pinyin_simp" && "rime_ice" in available -> "rime_ice"
             id == "t9" && "t9_pinyin" in available -> "t9_pinyin"
-            id == "jaroomaji" && "japanese" in available -> "japanese"
             else -> id
         }
     }.distinct()
@@ -99,7 +104,6 @@ object CyimeInputDefaults {
 
     fun description(id: String): String? = when (id) {
         "t9_pinyin", "rime_ice", "pinyin_14jian", "double_pinyin_flypy" -> "默认雾凇词库 · 支持市场同名更新"
-        "japanese", "japanese_kana" -> "共享日语词库 · 支持市场同名方案更新"
         else -> null
     }
 }

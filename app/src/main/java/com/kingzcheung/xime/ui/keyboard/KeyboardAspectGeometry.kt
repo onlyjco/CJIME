@@ -21,7 +21,7 @@ internal data class KeyboardAspectLimits(val min: Float, val max: Float) {
             (5f * 3f / 3.4f) / 4f * 1.8f)
         fun forLayout(kind: LayoutKind, split: Boolean = false, splitGapFraction: Float = 0.1f): KeyboardAspectLimits = when (kind) {
             LayoutKind.T9 -> T9
-            LayoutKind.KANA_KEYPAD, LayoutKind.STROKE_KEYPAD,
+            LayoutKind.STROKE_KEYPAD,
             LayoutKind.NUMBER, LayoutKind.HANDWRITING -> Keypad
             // The split layout gives its centre gap to neither half.
             // 注音 11 列 4 行，比例落在字母键盘的范围里；不分体。

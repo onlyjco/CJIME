@@ -26,7 +26,7 @@ import org.junit.Test
 
 class MenuLayoutRegressionTest {
     @get:Rule val rule = createComposeRule()
-    private val firstPage = listOf(com.kingzcheung.xime.keyboard.ToolbarButton.FLOAT, com.kingzcheung.xime.keyboard.ToolbarButton.OCR,
+    private val firstPage = listOf(com.kingzcheung.xime.keyboard.ToolbarButton.FLOAT, com.kingzcheung.xime.keyboard.ToolbarButton.GLASS,
         com.kingzcheung.xime.keyboard.ToolbarButton.SOUND, com.kingzcheung.xime.keyboard.ToolbarButton.SETTINGS)
 
     @Test fun compactPortraitGridDoesNotClipOrOverlapAndSettingsRemainReachable() {

@@ -50,8 +50,7 @@ object PerformanceTiers {
 
     /** 只看实测的算力档；没测、版本对不上或分档线没定返回 null。 */
     fun cpuTier(cpu: CpuMeasurement?, thresholds: CpuThresholds? = cpuThresholds): PerformanceTier? {
-        if (cpu == null || thresholds == null || cpu.version != CpuBenchmark.VERSION ||
-            cpu.singleNs <= 0 || cpu.dualNs <= 0) return null
+        if (cpu == null || thresholds == null || cpu.singleNs <= 0 || cpu.dualNs <= 0) return null
         fun tier(ns: Long, high: Long?, low: Long) = when {
             high != null && ns <= high -> PerformanceTier.HIGH
             ns >= low -> PerformanceTier.LOW

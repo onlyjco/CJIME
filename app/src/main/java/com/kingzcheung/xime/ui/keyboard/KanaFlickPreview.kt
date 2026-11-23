@@ -45,17 +45,11 @@ internal fun SwipeState.movedOffPress(): Boolean = !isPressed && !isLongPress &&
 internal fun discFlickPreview(preview: KeyFlickPreview?, disc: Boolean): KeyFlickPreview? =
     if (preview == null || !disc) preview else preview.copy(progress = if (preview.progress >= 1f) 1f else 0f)
 
-/** Five choices stay at fixed positions above the key; only the selected choice changes. */
-@Composable
-internal fun KanaFlickPreview(key: KanaFlickKey, direction: KanaFlickDirection,
-    background: Color, foreground: Color, contentScale: Float = 1f) {
-    val labels = KanaFlickDirection.entries.mapNotNull { item -> key.choice(item)?.let { item to it.label } }.toMap()
-    DirectionDiscPreview(labels, direction, background, foreground, contentScale, tagPrefix = "kana")
-}
+internal enum class KanaFlickDirection { TAP, LEFT, UP, RIGHT, DOWN }
 
 /**
- * The kana direction disc, shared by every key whose flick directions are fixed
- * (kana keys, nine-key flick letters, fourteen-key letter pairs). Display only.
+ * The direction disc, shared by every key whose flick directions are fixed
+ * (nine-key flick letters, fourteen-key letter pairs). Display only.
  */
 @Composable
 internal fun DirectionDiscPreview(labels: Map<KanaFlickDirection, String>, direction: KanaFlickDirection,
@@ -117,38 +111,6 @@ private fun kanaDirectionAlignment(direction: KanaFlickDirection): Alignment = w
     KanaFlickDirection.UP -> Alignment.TopCenter
     KanaFlickDirection.RIGHT -> Alignment.CenterEnd
     KanaFlickDirection.DOWN -> Alignment.BottomCenter
-}
-
-/** Optional quiet labels on the key itself; preview visibility remains independent. */
-@Composable
-internal fun KanaDirectionLabels(key: KanaFlickKey, color: Color, centerSize: Float, hintSize: Float) {
-    val measurer = rememberTextMeasurer()
-    val density = LocalDensity.current
-    val baseStyle = LocalTextStyle.current.copy(fontFamily = AppFonts.keyFontFamily)
-    BoxWithConstraints(Modifier.fillMaxSize().padding(2.dp), contentAlignment = Alignment.Center) {
-        val choices = KanaFlickDirection.entries.mapNotNull { direction -> key.choice(direction)?.let { direction to it } }
-        val sizes = choices.associate { (direction, choice) ->
-            val fontSp = if (direction == KanaFlickDirection.TAP) centerSize else hintSize
-            direction to measurer.measure(punctuationKeyLabel(choice.label),
-                style = baseStyle.copy(fontSize = fontSp.sp, lineHeight = (fontSp * 1.15f).sp),
-                maxLines = 1, softWrap = false).size
-        }
-        val center = sizes.getValue(KanaFlickDirection.TAP)
-        // Opposite hints align to the outer edges and the main label stays centred.
-        // Fit the actual Android line boxes, not only fontSize, with one pixel per seam.
-        val verticalHints = maxOf(sizes[KanaFlickDirection.UP]?.height ?: 0, sizes[KanaFlickDirection.DOWN]?.height ?: 0)
-        val horizontalHints = maxOf(sizes[KanaFlickDirection.LEFT]?.width ?: 0, sizes[KanaFlickDirection.RIGHT]?.width ?: 0)
-        val fit = minOf(1f,
-            (with(density) { maxHeight.toPx() } - 2f).coerceAtLeast(1f) / (center.height + 2 * verticalHints).coerceAtLeast(1),
-            (with(density) { maxWidth.toPx() } - 2f).coerceAtLeast(1f) / (center.width + 2 * horizontalHints).coerceAtLeast(1))
-        for ((direction, choice) in choices) {
-            val fontSize = (if (direction == KanaFlickDirection.TAP) centerSize else hintSize) * fit
-            Text(punctuationKeyLabel(choice.label), color = if (direction == KanaFlickDirection.TAP) color else Color.Gray,
-                style = baseStyle.copy(fontSize = fontSize.sp, lineHeight = (fontSize * 1.15f).sp),
-                maxLines = 1, softWrap = false, modifier = Modifier.align(kanaDirectionAlignment(direction))
-                    .testTag("kana-key-hint:${key.center.romaji}:${direction.name}"))
-        }
-    }
 }
 
 /**

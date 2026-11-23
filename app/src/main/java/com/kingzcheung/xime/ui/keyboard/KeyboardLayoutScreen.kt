@@ -38,10 +38,6 @@ fun KeyboardLayoutScreen(
         lastLoggedKb = keyboardState
         FileLogger.d("XimeKeyboard", "render keyboard: $keyboardState, ui ascii=${uiState.isAsciiMode}")
     }
-    // 只在「有没有编码」变化时重组整块键盘，每打一个假名只重组候选栏。
-    val hasKanaInput by remember(candidateState) {
-        androidx.compose.runtime.derivedStateOf { candidateState.value.inputText.isNotEmpty() }
-    }
     val kbColors = KeysConfigHelper.getKeyboardColors()
     val longToColor: (Long) -> Color = { if (it > 0xFFFFFF) Color(it) else Color(0xFF000000 or it) }
     val themeScheme = KeyboardThemes.getRenderingScheme(uiState.themeId)
@@ -102,40 +98,15 @@ fun KeyboardLayoutScreen(
         key(uiState.swipeCancelEpoch) {
             when (keyboardState) {
             is KeyboardLayoutState.Chinese -> {
-                if (uiState.inputProfile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.KANA_KEYPAD) {
-                    JapaneseKanaKeyboardLayout(
-                        hasKanaInput = hasKanaInput,
-                        onKanaAction = { callbacks.onJapaneseKanaAction?.invoke(it) },
-                        onKeyPress = onKeyPress,
-                        keyBackgroundColor = keyBgColor,
-                        keyTextColor = keyTextColor,
-                        specialKeyBackgroundColor = specialKeyBgColor,
-                        specialKeyTextColor = specialKeyTextColor,
-                        keyboardBackgroundColor = keyboardBgColor,
-                        onKeyPressDown = callbacks.onKeyPressDown,
-                        shadowEnabled = kbShadow.enabled,
-                        shadowElevation = kbShadow.elevation.dp,
-                        shadowShapeRadius = kbShadow.shapeRadius.dp,
-                        keyCornerRadius = kbKey.cornerRadius.dp,
-                        keySpacingX = kbKey.spacingFor("japanese_kana").first?.dp,
-                        keySpacingY = kbKey.spacingFor("japanese_kana").second?.dp,
-                        isFloatingMode = uiState.isFloatingMode,
-                        modifier = modifier,
-                        enterKeyText = uiState.enterKeyText,
-                        onGestureAction = onGestureAction,
-                        accentColor = accentColor,
-                    )
-                } else {
-                    KeyboardLayout(
-                        onKeyPress = onKeyPress,
-                        viewModel = viewModel,
-                        callbacks = callbacks,
-                        uiState = uiState,
-                        isAsciiMode = false,
-                        modifier = modifier,
-                        candidateState = candidateState,
-                    )
-                }
+                KeyboardLayout(
+                    onKeyPress = onKeyPress,
+                    viewModel = viewModel,
+                    callbacks = callbacks,
+                    uiState = uiState,
+                    isAsciiMode = false,
+                    modifier = modifier,
+                    candidateState = candidateState,
+                )
             }
 
             is KeyboardLayoutState.English -> {
@@ -150,8 +121,6 @@ fun KeyboardLayoutScreen(
             }
 
             is KeyboardLayoutState.Number -> {
-                val isJapaneseKana = !uiState.isAsciiMode &&
-                    uiState.inputProfile.layout.kind == com.kingzcheung.xime.settings.LayoutKind.KANA_KEYPAD
                 val spacing = kbKey.spacingFor(numberKeyboardSpacingSection(uiState.inputProfile, uiState.isAsciiMode))
                 NumberKeyboardLayout(
                     onKeyPress = onKeyPress,
@@ -170,7 +139,6 @@ fun KeyboardLayoutScreen(
                     onKeyPressDown = callbacks.onKeyPressDown,
                     isFloatingMode = uiState.isFloatingMode,
                     specialKeyTextColor = specialKeyTextColor,
-                    isJapaneseKana = isJapaneseKana,
                     enterKeyText = uiState.enterKeyText,
                 )
             }

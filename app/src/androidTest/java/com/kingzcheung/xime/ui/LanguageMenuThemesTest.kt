@@ -60,7 +60,7 @@ class LanguageMenuThemesTest {
                 LocalKeyboardPalette provides palette,
                 LocalKeyboardInputActions provides KeyboardInputActions(
                     schemas = listOf(SchemaInfo("first", "中文26键", "", "", "", language = InputLanguage.CHINESE),
-                        SchemaInfo("second", "日语模式", "", "", "", language = InputLanguage.JAPANESE)),
+                        SchemaInfo("second", "粤语模式", "", "", "", language = InputLanguage.CANTONESE)),
                     currentInputModeId = "first", onSwitchSchema = {})) {
                 MaterialTheme(colorScheme = if (dark) darkColorScheme() else lightColorScheme()) {
                     Box(Modifier.fillMaxSize().background(Brush.horizontalGradient(

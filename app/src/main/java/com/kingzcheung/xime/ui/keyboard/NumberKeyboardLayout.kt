@@ -57,7 +57,6 @@ import com.kingzcheung.xime.settings.LayoutKind
 
 /** A keypad's number page inherits the text page's geometry settings. */
 internal fun numberKeyboardSpacingSection(profile: InputProfile, ascii: Boolean): String = when {
-    !ascii && profile.layout.kind == LayoutKind.KANA_KEYPAD -> "japanese_kana"
     !ascii && profile.layout.kind == LayoutKind.T9 -> "t9"
     else -> "number"
 }
@@ -81,35 +80,9 @@ fun NumberKeyboardLayout(
     onKeyPressDown: ((String) -> Unit)? = null,
     isFloatingMode: Boolean = false,
     specialKeyTextColor: Color = Color.White,
-    isJapaneseKana: Boolean = false,
     /** 回车键动作名（换行、发送、搜索等），与主键盘同一来源，决定回车键图标。 */
     enterKeyText: String = "确定",
 ) {
-    if (isJapaneseKana) {
-        CompositionLocalProvider(LocalKeyboardPunctuation provides LocalKeyboardPunctuation.current?.copy(numberPanel = true)) {
-            JapaneseKanaKeyboardLayout(
-                onKanaAction = { if (it is JapaneseKanaAction.Input) onKeyPress(it.romaji) },
-                onKeyPress = onKeyPress,
-                keyBackgroundColor = keyBackgroundColor,
-                keyTextColor = keyTextColor,
-                specialKeyBackgroundColor = specialKeyBackgroundColor,
-                specialKeyTextColor = specialKeyTextColor,
-                keyboardBackgroundColor = keyboardBackgroundColor,
-                modifier = modifier,
-                onKeyPressDown = onKeyPressDown,
-                shadowEnabled = shadowEnabled,
-                shadowElevation = shadowElevation,
-                shadowShapeRadius = shadowShapeRadius,
-                keyCornerRadius = keyCornerRadius,
-                keySpacingX = keySpacingX,
-                keySpacingY = keySpacingY,
-                isFloatingMode = isFloatingMode,
-                numberMode = true,
-                enterKeyText = enterKeyText,
-            )
-        }
-        return
-    }
     KeyboardKeySpacingScope(modifier, columns = 5f * 3f / 3.4f,
         policy = KeyVisualPolicy.T9, allowShrink = isFloatingMode, applyGutter = true,
         growthSpacing = keySpacingX?.value to keySpacingY?.value) { bodyModifier ->

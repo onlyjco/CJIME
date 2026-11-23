@@ -67,7 +67,7 @@ object DeviceDefaults {
      */
     private fun applyElderDefaults(context: Context) {
         SettingsPreferences.setToolbarButtons(context,
-            listOf(ToolbarButton.VOICE, ToolbarButton.HANDWRITING_LOOKUP, ToolbarButton.CAPTION, ToolbarButton.OCR,
+            listOf(ToolbarButton.VOICE, ToolbarButton.HANDWRITING_LOOKUP, ToolbarButton.CAPTION,
                 ToolbarButton.EMOJI, ToolbarButton.CLIPBOARD, ToolbarButton.SCHEMA).map { it.id })
         SettingsPreferences.setCurrentSchema(context, "t9_pinyin")
         SettingsPreferences.setCandidateTextSize(context, ELDER_CANDIDATE_SP)

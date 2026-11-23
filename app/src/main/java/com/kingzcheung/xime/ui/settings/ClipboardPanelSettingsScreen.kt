@@ -13,20 +13,14 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.selection.selectable
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.twotone.ContentPaste
 import androidx.compose.material.icons.twotone.Folder
 import androidx.compose.material.icons.twotone.PhotoLibrary
 import androidx.compose.material.icons.twotone.Sync
-import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.RadioButton
-import androidx.compose.material3.Scaffold
 import com.kingzcheung.xime.ui.i18n.Text
-import androidx.compose.material3.TopAppBar
-import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -63,28 +57,20 @@ import com.kingzcheung.xime.ui.menubar.clipboardClosesAfterPaste
  * 用户 11-15：这页改名「剪贴板」，从设置首页直接进；验证码、敏感内容、导出导入从原「剪贴板与同步」挪来，
  * 同步本身是插件，这里只放一个跳到「剪贴板同步」的入口。设置项名字和值都没变。
  */
-@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun ClipboardPanelSettingsContent(onBack: () -> Unit, onNavigateToSync: () -> Unit = {}) {
-    Scaffold(
-        containerColor = MaterialTheme.colorScheme.surface,
-        topBar = {
-            TopAppBar(
-                title = { Text("剪贴板") },
-                navigationIcon = {
-                    IconButton(onClick = onBack) {
-                        Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
-                    }
-                },
-                colors = TopAppBarDefaults.topAppBarColors(
-                    containerColor = MaterialTheme.colorScheme.surface,
-                    titleContentColor = MaterialTheme.colorScheme.onSurface
-                ),
-            )
-        }
-    ) { padding ->
+    KeyboardSettingsScaffold(
+        title = "剪贴板",
+        onBack = onBack,
+        preview = true,
+        example = com.kingzcheung.xime.keyboard.KeyboardPanelLaunch.Example.Keyboard,
+    ) { modifier ->
         Column(
-            modifier = Modifier.fillMaxSize().padding(padding).padding(horizontal = 16.dp).settingsVerticalScroll(),
+            modifier = modifier
+                .fillMaxSize()
+                .settingsVerticalScroll()
+                .padding(horizontal = 16.dp)
+                .padding(bottom = 8.dp + LocalKeyboardPreviewInset.current),
             verticalArrangement = Arrangement.spacedBy(16.dp)
         ) {
             ClipboardPanelDisplaySettings()
@@ -104,7 +90,6 @@ fun ClipboardPanelSettingsContent(onBack: () -> Unit, onNavigateToSync: () -> Un
             })
             ClipboardExportSetting()
             ClipboardImportSetting()
-            Spacer(Modifier.height(8.dp))
         }
     }
 }

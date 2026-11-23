@@ -26,10 +26,6 @@ object NativeAbi {
  */
 internal fun packagedPacks(context: Context): Set<String> = buildSet {
     val libraries = context.applicationInfo.nativeLibraryDir?.let(::File)
-    if (libraries != null && File(libraries, "libopencv_java4.so").isFile) add(BuiltinModelCatalog.OCR_ENGINE)
-    if (libraries != null && File(libraries, "libCyAzooKey.so").isFile) add(BuiltinModelCatalog.JAPANESE_ENGINE)
     if (libraries != null && File(libraries, com.kingzcheung.xime.speech.SherpaLibrary.LIBRARY).isFile) add(BuiltinModelCatalog.SPEECH_ENGINE)
-    if (com.kingzcheung.xime.settings.JapanesePack.dictionaryBundled(context)) add(BuiltinModelCatalog.JAPANESE_DICTIONARY)
-    if (com.kingzcheung.xime.handwriting.HandwritingAssets.bundled(context, "kana_default_och.bin")) add(BuiltinModelCatalog.JAPANESE_HANDWRITING)
     if (com.kingzcheung.xime.handwriting.HandwritingAssets.bundled(context, "hanzi_rare_och.bin")) add(BuiltinModelCatalog.HANDWRITING_RARE)
 }

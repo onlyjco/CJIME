@@ -278,19 +278,19 @@ class SpeechRecognitionLanguageSessionTest {
         assertTrue(f.errors.isEmpty())
     }
 
-    @Test fun coldJapaneseRecordingInitializesInJapaneseAndDiscardsWarmupCallbacks() = Fixture(preload = false).use { f ->
+    @Test fun coldCantoneseRecordingInitializesInCantoneseAndDiscardsWarmupCallbacks() = Fixture(preload = false).use { f ->
         assertTrue(f.backend.initializations.isEmpty())
-        f.manager.startRecognition(InputLanguage.JAPANESE)
+        f.manager.startRecognition(InputLanguage.CANTONESE)
         val active = f.session()
         f.await { f.manager.getState() == RecognitionState.LISTENING }
 
-        assertEquals(listOf(InputLanguage.JAPANESE), f.backend.initializations.toList())
-        assertEquals(InputLanguage.JAPANESE, active.first)
+        assertEquals(listOf(InputLanguage.CANTONESE), f.backend.initializations.toList())
+        assertEquals(InputLanguage.CANTONESE, active.first)
         assertTrue("Warmup results must never enter the editor", f.results.isEmpty())
         assertTrue(f.errors.isEmpty())
-        active.second.final("日本語")
+        active.second.final("粤语")
         f.drain()
-        assertEquals(listOf("日本語"), f.results)
+        assertEquals(listOf("粤语"), f.results)
     }
 
     // 2026-10-31 tablet user: right after the keyboard opens, the first short phrase gave no text.
@@ -360,20 +360,20 @@ class SpeechRecognitionLanguageSessionTest {
         old.second.partial?.invoke("queued old partial")
         f.manager.cancelRecognition()
         assertTrue(f.backend.closing.await(3, TimeUnit.SECONDS))
-        f.manager.startRecognition(InputLanguage.JAPANESE)
+        f.manager.startRecognition(InputLanguage.CANTONESE)
         f.drain()
         assertTrue("Cannot start while old backend is closing", f.backend.sessions.isEmpty())
         assertTrue(f.results.isEmpty())
         f.backend.allowClose.countDown()
         val next = f.session()
-        assertEquals(InputLanguage.JAPANESE, next.first)
+        assertEquals(InputLanguage.CANTONESE, next.first)
         f.await { f.manager.getState() == RecognitionState.LISTENING }
         old.second.final("late old final")
         old.second.error("late old error")
         old.second.state(RecognitionState.ERROR)
-        next.second.partial?.invoke("日本語")
+        next.second.partial?.invoke("粤语")
         f.drain()
-        assertEquals(listOf("日本語"), f.results)
+        assertEquals(listOf("粤语"), f.results)
         assertTrue(f.errors.isEmpty())
         assertEquals(RecognitionState.LISTENING, f.manager.getState())
     }
@@ -383,10 +383,10 @@ class SpeechRecognitionLanguageSessionTest {
         f.session()
         f.manager.stopRecognition()
         assertTrue(f.backend.closing.await(3, TimeUnit.SECONDS))
-        f.manager.startRecognition(InputLanguage.JAPANESE)
+        f.manager.startRecognition(InputLanguage.CANTONESE)
         assertTrue(f.backend.sessions.isEmpty())
         f.backend.allowClose.countDown()
-        assertEquals(InputLanguage.JAPANESE, f.session().first)
+        assertEquals(InputLanguage.CANTONESE, f.session().first)
         assertTrue(f.results.isEmpty())
     }
 
@@ -397,8 +397,8 @@ class SpeechRecognitionLanguageSessionTest {
         f.session()
         f.manager.stopRecognition()
         assertTrue(f.backend.closing.await(3, TimeUnit.SECONDS))
-        f.manager.startRecognition(InputLanguage.JAPANESE)
-        assertEquals("the new session starts without the test releasing the old stop", InputLanguage.JAPANESE, f.session().first)
+        f.manager.startRecognition(InputLanguage.CANTONESE)
+        assertEquals("the new session starts without the test releasing the old stop", InputLanguage.CANTONESE, f.session().first)
         assertEquals(1, f.backend.abandons.get())
         f.drain()
         assertTrue("the old session's final never reaches the editor", f.results.isEmpty())
@@ -410,7 +410,7 @@ class SpeechRecognitionLanguageSessionTest {
         f.session()
         f.manager.cancelRecognition()
         assertTrue(f.backend.closing.await(3, TimeUnit.SECONDS))
-        f.manager.startRecognition(InputLanguage.JAPANESE)
+        f.manager.startRecognition(InputLanguage.CANTONESE)
         f.await { f.microphones.size == 2 && f.microphones[1].starts.get() == 1 }
         val waitingMicrophone = f.microphones[1]
         waitingMicrophone.feed(251)
@@ -431,7 +431,7 @@ class SpeechRecognitionLanguageSessionTest {
         f.session()
         var previousLanguage = InputLanguage.ENGLISH
 
-        listOf(InputLanguage.JAPANESE, InputLanguage.CHINESE).forEachIndexed { index, nextLanguage ->
+        listOf(InputLanguage.CANTONESE, InputLanguage.CHINESE).forEachIndexed { index, nextLanguage ->
             if (index > 0) f.backend.blockNextStop()
             f.manager.stopRecognition()
             assertTrue(f.backend.closing.await(3, TimeUnit.SECONDS))
@@ -501,7 +501,7 @@ class SpeechRecognitionLanguageSessionTest {
         f.manager.stopRecognition()
         assertTrue(f.backend.closing.await(3, TimeUnit.SECONDS))
 
-        f.manager.startRecognition(InputLanguage.JAPANESE)
+        f.manager.startRecognition(InputLanguage.CANTONESE)
         f.await { f.microphones.size == 2 && f.microphones[1].starts.get() == 1 }
         val cancelledMicrophone = f.microphones[1]
         cancelledMicrophone.feed(301)
@@ -539,7 +539,7 @@ class SpeechRecognitionLanguageSessionTest {
         f.session()
         f.manager.stopRecognition()
         assertTrue(f.backend.closing.await(3, TimeUnit.SECONDS))
-        f.manager.startRecognition(InputLanguage.JAPANESE)
+        f.manager.startRecognition(InputLanguage.CANTONESE)
         f.await { f.microphones.size == 2 && f.microphones[1].starts.get() == 1 }
         val waitingMicrophone = f.microphones[1]
         repeat(150) { waitingMicrophone.feed(300 + it) }
@@ -639,7 +639,7 @@ class SpeechRecognitionLanguageSessionTest {
     @Test fun activeSessionKeepsItsLanguageAndWarmupNeverWritesText() = Fixture().use { f ->
         f.manager.startRecognition(InputLanguage.ENGLISH)
         val active = f.session()
-        f.manager.startRecognition(InputLanguage.JAPANESE)
+        f.manager.startRecognition(InputLanguage.CANTONESE)
         active.second.final("English")
         f.drain()
         assertEquals(InputLanguage.ENGLISH, active.first)
@@ -647,14 +647,14 @@ class SpeechRecognitionLanguageSessionTest {
         assertEquals(listOf("English"), f.results)
     }
 
-    @Test fun japaneseEnglishJapaneseSwitchKeepsOneMicrophoneAndPreservesCompletedText() = Fixture().use { f ->
+    @Test fun cantoneseEnglishCantoneseSwitchKeepsOneMicrophoneAndPreservesCompletedText() = Fixture().use { f ->
         f.backend.allowClose.countDown()
-        f.manager.startRecognition(InputLanguage.JAPANESE)
-        val japanese = f.session()
+        f.manager.startRecognition(InputLanguage.CANTONESE)
+        val cantonese = f.session()
         f.await { f.microphones.single().starts.get() == 1 }
         f.microphones.single().feed(101)
         f.await { f.backend.audio.isNotEmpty() }
-        assertEquals(InputLanguage.JAPANESE, f.backend.audio.remove().first)
+        assertEquals(InputLanguage.CANTONESE, f.backend.audio.remove().first)
         f.manager.switchRecognitionLanguage(InputLanguage.ENGLISH)
         f.microphones.single().feed(102)
         val english = f.session()
@@ -664,14 +664,14 @@ class SpeechRecognitionLanguageSessionTest {
         english.second.partial!!.invoke("hello world")
         f.drain()
         assertEquals("closing result hello world", f.results.last())
-        japanese.second.final("stale Japanese")
+        cantonese.second.final("stale Cantonese")
         f.drain()
-        assertFalse(f.results.any { it.contains("stale Japanese") })
-        f.manager.switchRecognitionLanguage(InputLanguage.JAPANESE)
+        assertFalse(f.results.any { it.contains("stale Cantonese") })
+        f.manager.switchRecognitionLanguage(InputLanguage.CANTONESE)
         f.microphones.single().feed(103)
-        assertEquals(InputLanguage.JAPANESE, f.session().first)
+        assertEquals(InputLanguage.CANTONESE, f.session().first)
         f.await { f.backend.audio.isNotEmpty() }
-        assertEquals(InputLanguage.JAPANESE, f.backend.audio.remove().first)
+        assertEquals(InputLanguage.CANTONESE, f.backend.audio.remove().first)
         assertEquals(1, f.allocations)
         assertEquals(0, f.microphones.single().releases.get())
         assertTrue(f.errors.toString(), f.errors.isEmpty())

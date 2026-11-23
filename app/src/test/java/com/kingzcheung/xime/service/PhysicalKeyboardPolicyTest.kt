@@ -35,10 +35,10 @@ class PhysicalKeyboardPolicyTest {
             assertEquals(HardwareCandidateDecision.Confirm(0, false),
                 physicalCandidateDecision(HardwareCandidateKey.SPACE, state, true))
         }
-        val japanese = source(composing.copy(inputText = "kana", candidates = listOf("仮名", "かな")))
-            .copy(profile = profile.copy(language = InputLanguage.JAPANESE))
+        val cantonese = source(composing.copy(inputText = "nei", candidates = listOf("你", "呢")))
+            .copy(profile = profile.copy(language = InputLanguage.CANTONESE))
         assertEquals(HardwareCandidateDecision.Confirm(0, false),
-            physicalCandidateDecision(HardwareCandidateKey.SPACE, japanese, true))
+            physicalCandidateDecision(HardwareCandidateKey.SPACE, cantonese, true))
     }
 
     @Test fun `space follows the selected T9 candidate but not an unrelated layout focus`() {

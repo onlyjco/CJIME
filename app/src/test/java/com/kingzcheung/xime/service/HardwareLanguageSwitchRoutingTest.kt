@@ -15,7 +15,7 @@ class HardwareLanguageSwitchRoutingTest {
     private val options = HardwareKeyboardOptions()
     private val zh = InputLanguage.CHINESE
     private val en = InputLanguage.ENGLISH
-    private val ja = InputLanguage.JAPANESE
+    private val ja = InputLanguage.CANTONESE
     private val order = listOf(zh, en, ja)
 
     private fun down(key: Int, time: Long = 0, repeat: Int = 0, ctrl: Boolean = false,

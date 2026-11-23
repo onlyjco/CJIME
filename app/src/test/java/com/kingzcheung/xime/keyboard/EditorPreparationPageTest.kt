@@ -5,13 +5,13 @@ import org.junit.Test
 
 class EditorPreparationPageTest {
     private val keyboard = KeyboardPage.Main(MainType.FULL)
-    private fun ocr() = KeyboardPage.Overlay(OverlayRoute.Ocr, emptyList(), keyboard)
+    private fun ocr() = KeyboardPage.Overlay(OverlayRoute.Emoji, emptyList(), keyboard)
 
     @Test fun galleryReturnSurvivesEnginePreparationCompletingAfterPanelOpened() {
         var page: KeyboardPage = keyboard // onStartInput resets the previous editor
         page = ocr() // picker returns and onStartInputView opens the image preview
         page = page.afterEditorPreparation(keyboard) // delayed FIFO preparation completes
-        assertEquals(OverlayRoute.Ocr, (page as KeyboardPage.Overlay).route)
+        assertEquals(OverlayRoute.Emoji, (page as KeyboardPage.Overlay).route)
         assertEquals(keyboard, page.behind)
     }
 
@@ -32,7 +32,7 @@ class EditorPreparationPageTest {
         for (prepared in listOf(KeyboardPage.Main(MainType.HANDWRITING),
                 KeyboardPage.Panel(PanelType.NUMBER, MainType.FULL))) {
             val result = ocr().afterEditorPreparation(prepared) as KeyboardPage.Overlay
-            assertEquals(OverlayRoute.Ocr, result.route)
+            assertEquals(OverlayRoute.Emoji, result.route)
             assertEquals(prepared, result.behind)
         }
     }

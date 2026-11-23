@@ -95,7 +95,7 @@ class RemoteModelVersionsTest {
     @Test fun unknownModelsAndUnpinnedVersionsAreIgnored() {
         assertEquals(BuiltinModelCatalog.models.map { it.id }, merged.map { it.id })
         assertFalse(merged.first { it.id == "ochwpro" }.versions.any { it.version == "unpinned" })
-        val untouched = BuiltinModelCatalog.models.first { it.id == BuiltinModelCatalog.JAPANESE_HANDWRITING }
+        val untouched = BuiltinModelCatalog.models.first { it.id == BuiltinModelCatalog.SPEECH_ENGINE }
         assertSame(untouched, merged.first { it.id == untouched.id })
     }
 

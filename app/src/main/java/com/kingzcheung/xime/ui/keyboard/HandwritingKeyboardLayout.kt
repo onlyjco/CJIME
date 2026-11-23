@@ -91,10 +91,6 @@ private const val SIDE_BY_SIDE_MAX_CHARS = 12
 @Suppress("UNUSED_PARAMETER")
 internal fun handwritingLanguageHint(language: InputLanguage, useTemplates: Boolean, preparing: Boolean, missingKana: Boolean): String = when {
     preparing -> "${language.displayName} · 正在准备（只在第一次较慢）…"
-    // 手写训练页只在自用测试包里有，公开包不指向它。
-    language == InputLanguage.JAPANESE && missingKana ->
-        if (com.kingzcheung.xime.BuildConfig.DEV_TOOLS || com.kingzcheung.xime.BuildConfig.DEBUG)
-            "日语 · 假名模板没读到，去 设置 → 手写训练 导入样本备份" else "日语 · 假名模板没读到"
     else -> language.displayName
 }
 
@@ -306,7 +302,7 @@ fun HandwritingKeyboardLayout(
             onRecognition = { result?.invoke(it) }, onKey = { wordSpacing.reset(); keyAction(it) }, keepInk = { formulaActive },
             // 边写边识别只给中文、日语：英文要按停顿分词（有状态），公式整段重认，都不能提前认
             recognizeEarly = { recognizeWhileWriting && !formulaActive &&
-                (recognitionLanguage == InputLanguage.CHINESE || recognitionLanguage == InputLanguage.JAPANESE) },
+                (recognitionLanguage == InputLanguage.CHINESE || recognitionLanguage == InputLanguage.CANTONESE) },
             onPreview = { preview?.invoke(it) })
     }
     val modelDownloaded by remember {
@@ -366,9 +362,8 @@ fun HandwritingKeyboardLayout(
             // 正在写的语言平时写在空格键上，和其他键盘一样（用户 11-03，#107：胶囊挡住画板和公式预览）。
             // 画板上只在正在准备、假名模板没读到这种要人知道的时候才浮出提示。
             val hintPreparing = templateScript != null && importingTemplates
-            val hintMissingKana = templateScript == HandwritingTemplates.Script.KANA && !useTemplates
-            if (hintPreparing || hintMissingKana) HandwritingLanguageHint(handwritingLanguageHint(language, useTemplates,
-                    preparing = hintPreparing, missingKana = hintMissingKana),
+            if (hintPreparing) HandwritingLanguageHint(handwritingLanguageHint(language, useTemplates,
+                    preparing = hintPreparing, missingKana = false),
                 specialKeyBackgroundColor, specialKeyTextColor, Modifier.align(Alignment.TopStart))
             // 公式开关是浮在画板右上角的实心小按钮，不用对钩：开启时强调色填满、文字在黑白里取反差大的；
             // 关闭时用主题功能键的底色（强制不透明）和文字色，不加描边。

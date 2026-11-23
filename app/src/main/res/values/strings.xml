@@ -1,20 +1,20 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <!-- 产品名不翻译。其余文字的繁体、英文、日文在 values-b+zh+Hant、values-en、values-ja，加新文字时四个一起加。 -->
-    <string name="app_name" translatable="false">CyIME</string>
-    <string name="subtype_label_wubi" translatable="false">CyIME</string>
-    <string name="keyboard_name" translatable="false">CyIME</string>
-    <string name="ime_service_label" translatable="false">CyIME</string>
-    <string name="settings_title">CyIME 设置</string>
+    <string name="app_name" translatable="false">CJIME</string>
+    <string name="subtype_label_wubi" translatable="false">CJIME</string>
+    <string name="keyboard_name" translatable="false">CJIME</string>
+    <string name="ime_service_label" translatable="false">CJIME</string>
+    <string name="settings_title">CJIME 设置</string>
     <string name="section_model_download">模型下载</string>
     <string name="item_wait_wifi_title">等连上 Wi-Fi 再下载模型</string>
     <string name="item_wait_wifi_summary">语音、联想、手写等模型共约 %1$s；现在用的是移动数据，点这里用流量下载</string>
     <string name="status_wait_wifi">等 Wi-Fi</string>
     <string name="section_setup">配置选择</string>
     <string name="item_enable_ime_title">启用输入法</string>
-    <string name="item_enable_ime_summary">在系统设置中启用 CyIME</string>
+    <string name="item_enable_ime_summary">在系统设置中启用 CJIME</string>
     <string name="item_select_ime_title">选择输入法</string>
-    <string name="item_select_ime_summary">将 CyIME 设为当前输入法</string>
+    <string name="item_select_ime_summary">将 CJIME 设为当前输入法</string>
     <string name="status_set">已设置</string>
     <string name="status_not_set">未设置</string>
     <string name="item_setup_guide_title">按设备推荐配置</string>
@@ -56,20 +56,18 @@
     <string name="item_extensions_summary">输入方案、模型和插件：下载、已安装、导入</string>
     <string name="item_backup_title">备份与恢复</string>
     <string name="item_backup_summary">把设置导出为本地文件，或从备份文件恢复</string>
-    <string name="item_performance_title">性能与省电</string>
-    <string name="item_performance_summary">档位、语音模型占用内存</string>
     <string name="item_other_title">其他设置</string>
-    <string name="item_other_summary">备份与恢复、性能与省电</string>
-    <string name="item_other_summary_with_language">备份、性能与省电、界面语言</string>
-    <string name="item_about_title">关于 CyIME</string>
+    <string name="item_other_summary">备份与恢复</string>
+    <string name="item_other_summary_with_language">备份与恢复、界面语言</string>
+    <string name="item_about_title">关于 CJIME</string>
     <string name="item_about_summary">版本信息、开发者、联系方式</string>
     <string name="settings_app_language">界面语言 · Language</string>
     <string name="settings_app_language_summary">设置页的显示语言</string>
     <string name="settings_app_language_summary_old_android">跟随系统语言，点这里去系统设置</string>
     <string name="settings_app_language_system">跟随系统</string>
-    <string name="settings_app_language_note">English 已翻译设置各页；繁體中文、日本語目前只翻了设置首页，其余页面先显示简体中文。只改界面文字，不影响输入语言和繁体输出。</string>
+    <string name="settings_app_language_note">English 已翻译设置各页；繁體中文目前只翻了设置首页，其余页面先显示简体中文。只改界面文字，不影响输入语言和繁体输出。</string>
     <string name="action_close">关闭</string>
     <string name="subtype_label_pinyin">拼音</string>
-    <string name="call_caption_service_label">CyIME 通话字幕</string>
+    <string name="call_caption_service_label">CJIME 通话字幕</string>
     <string name="call_caption_service_description">打电话、微信语音或视频时，在屏幕底部自动显示对方说的话（字幕），挂断后自动消失。需要开免提或外放。声音只在本机识别，不录音、不上传，也不读取屏幕内容。</string>
 </resources>

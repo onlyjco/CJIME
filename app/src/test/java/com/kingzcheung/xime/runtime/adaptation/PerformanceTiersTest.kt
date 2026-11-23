@@ -52,9 +52,8 @@ class PerformanceTiersTest {
         assertEquals(PerformanceTier.HIGH, PerformanceTiers.cpuTier(CpuMeasurement(20_000_000, 25_000_000), lines))
     }
 
-    @Test fun `no thresholds or an old benchmark version count as unmeasured`() {
+    @Test fun `no thresholds count as unmeasured`() {
         assertNull(PerformanceTiers.cpuTier(fast, null))
-        assertNull(PerformanceTiers.cpuTier(fast.copy(version = CpuBenchmark.VERSION - 1), lines))
         assertEquals(PerformanceTiers.Limit.UNMEASURED, PerformanceTiers.explain(device.copy(cpu = fast), null).limit)
         assertEquals(PerformanceTier.MEDIUM, PerformanceTiers.classify(device.copy(cpu = fast), null))
     }

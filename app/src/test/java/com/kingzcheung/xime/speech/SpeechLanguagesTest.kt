@@ -13,25 +13,6 @@ import java.io.File
 class SpeechLanguagesTest {
     @get:Rule val files = TemporaryFolder()
 
-    @Test fun japaneseLightModelUsesQuantizedFilesAndNeverRequiresSenseVoice() {
-        val context = mock<Context>()
-        whenever(context.filesDir).thenReturn(files.root)
-        val manager = AsrModelManager(context)
-        val small = manager.selection(SpeechModelCatalog.ZIPFORMER_JA_INT8, InputLanguage.JAPANESE)
-        val original = manager.selection(SpeechModelCatalog.ZIPFORMER_JA, InputLanguage.JAPANESE)
-        assertEquals("offline-transducer", small.first!!.modelType)
-        assertTrue(small.first.encoderFile.endsWith(".int8.onnx"))
-        assertTrue(small.first.decoderFile.endsWith(".int8.onnx"))
-        assertTrue(small.first.joinerFile.endsWith(".int8.onnx"))
-        assertNull(small.secondDir)
-        assertNotEquals(small.firstDir, original.firstDir)
-        assertFalse(small.ready)
-        assertFalse(SpeechLanguages.supports(SpeechModelCatalog.ZIPFORMER_JA_INT8, InputLanguage.CHINESE))
-        assertFalse(SpeechModelSelection.supportsCorrection(SpeechModelCatalog.ZIPFORMER_JA_INT8))
-        val manifest = SpeechModelCatalog.models.first { it.id == SpeechModelCatalog.ZIPFORMER_JA_INT8 }
-        assertTrue(manifest.files.sumOf { it.sizeBytes } < 170_000_000L)
-    }
-
     @Test fun eachLanguageKeepsItsOwnModelAndCorrectionWithoutOverwritingLegacyPreferences() {
         val context = mock<Context>()
         val prefs = mock<SharedPreferences>()
@@ -45,18 +26,18 @@ class SpeechLanguagesTest {
         val manager = AsrModelManager(context)
         manager.setModel(SpeechModelCatalog.ZIPFORMER_TWO_PASS, InputLanguage.CHINESE)
         manager.setModel(SpeechModelCatalog.PARAFORMER, InputLanguage.ENGLISH)
-        manager.setModel(SpeechModelCatalog.ZIPFORMER_JA, InputLanguage.JAPANESE)
+        manager.setModel(SpeechModelCatalog.SENSEVOICE, InputLanguage.CANTONESE)
         manager.setRefinementEnabled(false, InputLanguage.CHINESE)
         assertEquals(SpeechModelCatalog.ZIPFORMER, manager.getSelectedModelId(InputLanguage.CHINESE))
         assertEquals(SpeechModelCatalog.PARAFORMER, manager.getSelectedModelId(InputLanguage.ENGLISH))
-        assertEquals(SpeechModelCatalog.ZIPFORMER_JA, manager.getSelectedModelId(InputLanguage.JAPANESE))
+        assertEquals(SpeechModelCatalog.SENSEVOICE, manager.getSelectedModelId(InputLanguage.CANTONESE))
         assertEquals(SpeechModelCatalog.TWO_PASS, manager.getSelectedModelId())
-        assertThrows(IllegalArgumentException::class.java) { manager.setModel(SpeechModelCatalog.ZIPFORMER, InputLanguage.JAPANESE) }
-        assertThrows(IllegalStateException::class.java) { manager.selectionForLanguage(InputLanguage.JAPANESE) }
-        assertEquals(SpeechModelCatalog.ZIPFORMER_JA, stored["selected_model_ja"])
+        assertThrows(IllegalArgumentException::class.java) { manager.setModel(SpeechModelCatalog.ZIPFORMER, InputLanguage.CANTONESE) }
+        assertThrows(IllegalStateException::class.java) { manager.selectionForLanguage(InputLanguage.CANTONESE) }
+        assertEquals(SpeechModelCatalog.SENSEVOICE, stored["selected_model_yue"])
     }
 
-    @Test fun japaneseWithNothingDownloadedPointsToTheLightModel() {
+    @Test fun cantoneseWithNothingDownloadedPointsToSenseVoice() {
         val context = mock<Context>()
         val prefs = mock<SharedPreferences>()
         val stored = mutableMapOf("selected_model" to SpeechModelCatalog.TWO_PASS)
@@ -64,20 +45,17 @@ class SpeechLanguagesTest {
         whenever(context.getSharedPreferences(any(), any())).thenReturn(prefs)
         whenever(prefs.getString(any(), anyOrNull())).thenAnswer { stored[it.getArgument<String>(0)] ?: it.getArgument<String?>(1) }
         val manager = AsrModelManager(context)
-        assertEquals(SpeechModelCatalog.ZIPFORMER_JA_INT8, manager.getSelectedModelId(InputLanguage.JAPANESE))
-        // 只是没选时的指向，不写进设置；用户自己选的原版照旧保留（见上一个用例）。
-        assertNull(stored["selected_model_ja"])
+        assertEquals(SpeechModelCatalog.SENSEVOICE, manager.getSelectedModelId(InputLanguage.CANTONESE))
+        // 只是没选时的指向，不写进设置；用户自己选的照旧保留。
+        assertNull(stored["selected_model_yue"])
     }
 
     @Test fun primaryAndCorrectionMustBothSupportTheLanguage() {
         assertTrue(SpeechLanguages.supports(SpeechModelCatalog.ZIPFORMER_TWO_PASS, InputLanguage.CHINESE))
         assertFalse(SpeechLanguages.supports(SpeechModelCatalog.ZIPFORMER_TWO_PASS, InputLanguage.ENGLISH))
-        assertFalse(SpeechLanguages.supports(SpeechModelCatalog.TWO_PASS, InputLanguage.JAPANESE))
+        assertFalse(SpeechLanguages.supports(SpeechModelCatalog.TWO_PASS, InputLanguage.CANTONESE))
         assertTrue(SpeechLanguages.supports(SpeechModelCatalog.TWO_PASS, InputLanguage.ENGLISH))
         InputLanguage.speech.forEach { assertTrue(SpeechLanguages.supports(SpeechModelCatalog.SENSEVOICE, it)) }
-        // 没有西班牙、德、法、俄、韩语识别器：不能交给 SenseVoice 当中文识别。
-        for (letters in com.kingzcheung.xime.settings.LetterLanguage.entries)
-            SpeechModelSelection.primaryIds.forEach { assertFalse(SpeechLanguages.supports(it, letters.language)) }
         InputLanguage.entries.forEach { assertFalse(SpeechLanguages.supports("unknown-model", it)) }
         SpeechModelSelection.primaryIds.forEach { assertFalse(SpeechLanguages.supports(it, InputLanguage.UNSPECIFIED)) }
     }
@@ -93,10 +71,8 @@ class SpeechLanguagesTest {
     }
 
     @Test fun incompatibleLanguageSelectsAnInstalledRecognizerWithoutUsingAnUnsupportedFirstPass() {
-        assertEquals(SpeechModelCatalog.PARAFORMER,
-            SpeechLanguages.select(InputLanguage.CHINESE, SpeechModelCatalog.ZIPFORMER_JA) { true })
         assertEquals(SpeechModelCatalog.SENSEVOICE,
-            SpeechLanguages.select(InputLanguage.JAPANESE, SpeechModelCatalog.ZIPFORMER_TWO_PASS) { it == SpeechModelCatalog.SENSEVOICE })
+            SpeechLanguages.select(InputLanguage.CANTONESE, SpeechModelCatalog.ZIPFORMER_TWO_PASS) { it == SpeechModelCatalog.SENSEVOICE })
         assertEquals(SpeechModelCatalog.PARAFORMER,
             SpeechLanguages.select(InputLanguage.ENGLISH, SpeechModelCatalog.ZIPFORMER) { it == SpeechModelCatalog.PARAFORMER })
         assertEquals(SpeechModelCatalog.SENSEVOICE,
@@ -110,13 +86,13 @@ class SpeechLanguagesTest {
             SpeechLanguages.select(InputLanguage.UNSPECIFIED, SpeechModelCatalog.SENSEVOICE) { error("must not inspect resources") }
         }
         val error = assertThrows(IllegalStateException::class.java) {
-            SpeechLanguages.select(InputLanguage.JAPANESE, SpeechModelCatalog.TWO_PASS) { false }
+            SpeechLanguages.select(InputLanguage.CANTONESE, SpeechModelCatalog.TWO_PASS) { false }
         }
-        assertTrue(error.message!!.contains("日语"))
+        assertTrue(error.message!!.contains("粤语"))
         assertTrue(error.message!!.contains("SenseVoice"))
     }
 
-    @Test fun multilingualSelectionPreservesPreferencesAndSharesLanguageDetectionModel() {
+    @Test fun multilingualSelectionPreservesPreferencesAndUsesLanguageSpecificTag() {
         val context = mock<Context>()
         val prefs = mock<SharedPreferences>()
         whenever(context.filesDir).thenReturn(files.root)
@@ -128,23 +104,22 @@ class SpeechLanguagesTest {
         File(sense, "model.int8.onnx").writeBytes(byteArrayOf(1))
         File(sense, "tokens.txt").writeText("test fixture")
         val manager = AsrModelManager(context)
-        val japanese = manager.selectionForLanguage(InputLanguage.JAPANESE)
+        val cantonese = manager.selectionForLanguage(InputLanguage.CANTONESE)
         val english = manager.selectionForLanguage(InputLanguage.ENGLISH)
-        assertEquals(SpeechModelCatalog.SENSEVOICE, japanese.mode)
-        assertNull(japanese.first)
-        assertEquals("auto", japanese.recognitionLanguage)
+        assertEquals(SpeechModelCatalog.SENSEVOICE, cantonese.mode)
+        assertNull(cantonese.first)
+        assertEquals("yue", cantonese.recognitionLanguage)
         assertEquals("auto", english.recognitionLanguage)
-        assertEquals(japanese.key, english.key)
         assertEquals(SpeechModelCatalog.ZIPFORMER_TWO_PASS, manager.getSelectedModelId())
         verify(prefs, never()).edit()
         File(sense, "tokens.txt").writeText("")
-        assertThrows(IllegalStateException::class.java) { manager.selectionForLanguage(InputLanguage.JAPANESE) }
+        assertThrows(IllegalStateException::class.java) { manager.selectionForLanguage(InputLanguage.CANTONESE) }
     }
 
     @Test fun incompatibleExplicitSelectionIsRejectedBeforeFileAccess() {
         val context = mock<Context>()
         assertThrows(IllegalArgumentException::class.java) {
-            AsrModelManager(context).selection(SpeechModelCatalog.ZIPFORMER_TWO_PASS, InputLanguage.JAPANESE)
+            AsrModelManager(context).selection(SpeechModelCatalog.ZIPFORMER_TWO_PASS, InputLanguage.CANTONESE)
         }
         verifyNoInteractions(context)
     }

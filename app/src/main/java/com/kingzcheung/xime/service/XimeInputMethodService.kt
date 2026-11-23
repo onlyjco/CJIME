@@ -780,10 +780,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         val snapshot = candidateState.value
         val session = uiState.value.inputSessionId
         val admission = inputReadiness.ticket() ?: return
-        japaneseInputController.displayCandidates(snapshot.inputText)?.let {
-            candidateState.value = snapshot.copy(expandedCandidates = it, expandedCandidatesLoaded = true)
-            return
-        }
         expandedCandidateLoader.load(snapshot.engineRevision, isCurrent = {
             inputReadiness.accepts(admission) && uiState.value.inputSessionId == session &&
                 (keyboardViewModel.candidatePageExpanded.value || keyboardViewModel.candidateStripExtended.value) &&
@@ -859,12 +855,12 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         when {
             result.typed -> Unit
             result.copied -> voiceRecognitionHandler.showVoiceNotice(
-                "${result.computer ?: "电脑"} 上当前不是 CyIME 输入框，已放到电脑剪贴板，按 Ctrl+V 粘贴")
+                "${result.computer ?: "电脑"} 上当前不是 CJIME 输入框，已放到电脑剪贴板，按 Ctrl+V 粘贴")
             else -> {
                 // 没发出去的话不能丢：放到手机剪贴板。
                 runCatching {
                     (getSystemService(CLIPBOARD_SERVICE) as android.content.ClipboardManager)
-                        .setPrimaryClip(android.content.ClipData.newPlainText("CyIME", text))
+                        .setPrimaryClip(android.content.ClipData.newPlainText("CJIME", text))
                 }
                 voiceRecognitionHandler.showVoiceNotice("没发到电脑：${result.error ?: "连不上电脑"}。这句已复制到手机剪贴板")
             }
@@ -937,7 +933,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     internal val sessionController = ImeSessionController(this)
 
     internal val schemaController = ImeSchemaController(this)
-    internal val japaneseInputController = JapaneseInputController(this)
 
     internal val textCommit = ImeTextCommit(this)
     
@@ -1179,7 +1174,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 com.kingzcheung.xime.security.InstallIntegrity.check(this@XimeInputMethodService)
             }
             if (integrity == com.kingzcheung.xime.security.InstallIntegrity.Result.FOREIGN) {
-                Toast.makeText(this@XimeInputMethodService, "CyIME 不是官方安装包，可能被人改过，请从官方下载页重装", Toast.LENGTH_LONG).show()
+                Toast.makeText(this@XimeInputMethodService, "CJIME 不是官方安装包，可能被人改过，请从官方下载页重装", Toast.LENGTH_LONG).show()
             }
         }
         // 允许 IME 窗口绘制到摄像头挖孔/刘海区域（横屏时背景覆盖全屏）
@@ -1812,7 +1807,14 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         // restoring a saved copy of it on close once let a password field learn.
         privacy.setClipboardSearch(true)
         clipboardManager.boardQuery.value = ""
-        uiState.value = uiState.value.copy(clipboardSearchVisible = true, toolPanelInputFocused = true, enterKeyText = "完成")
+        clipboardMotionActive = false
+        clipboardFrozenInsetsTopPx = null
+        uiState.value = uiState.value.copy(
+            clipboardSearchVisible = true,
+            clipboardImagesExpanded = false,
+            toolPanelInputFocused = true,
+            enterKeyText = "完成",
+        )
         fitClipboardSearchOnShortScreen()
     }
 
@@ -1855,14 +1857,14 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     internal fun closeClipboardSearch(openBoard: Boolean, keepQuery: Boolean = false) {
         if (!uiState.value.clipboardSearchVisible) return
         stopVoiceForClosedEditor(ToolPanelEditTextHolder.editText)
-        val favoriteStore = com.kingzcheung.xime.clipboard.ClipboardFavoriteStore.getInstance(this)
+        val favoriteStore = if (applicationContext != null) com.kingzcheung.xime.clipboard.ClipboardFavoriteStore.getInstance(this) else null
         if (!keepQuery) {
             clipboardManager.boardQuery.value = ""
-            favoriteStore.setSearchInFavorites(false)
+            favoriteStore?.setSearchInFavorites(false)
         }
         if (!openBoard) {
-            favoriteStore.setSearchInFavorites(false)
-            favoriteStore.setReturnToFavorites(false)
+            favoriteStore?.setSearchInFavorites(false)
+            favoriteStore?.setReturnToFavorites(false)
         }
         if (candidateState.value.isComposing) {
             keyRouter.postRimeJob { keyRouter.endQueuedComposition(); withContext(Dispatchers.Main) { updateUI() } }
@@ -2250,8 +2252,15 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                     isHandwritingMode && !state.showKeyboardResize && !state.isCompact,
                     state.handwritingExpanded, state.inputSessionId, instant = state.handwritingRestored)
                 val handwritingExpanded = handwritingExpansion.active
-                val clipboardPanelOpen = clipboardPanelCanExpand(page, state.showKeyboardResize, state.isCompact)
+                val clipboardPanelOpen = !state.clipboardSearchVisible &&
+                    clipboardPanelCanExpand(page, state.showKeyboardResize, state.isCompact)
                 val imagePanelExpanded = clipboardPanelOpen && state.clipboardImagesExpanded
+                LaunchedEffect(clipboardPanelOpen) {
+                    if (!clipboardPanelOpen) {
+                        clipboardMotionActive = false
+                        clipboardFrozenInsetsTopPx = null
+                    }
+                }
                 androidx.compose.runtime.LaunchedEffect(isHandwritingMode, state.isCompact, state.voiceCollapsed) {
                     if (!isHandwritingMode && uiState.value.handwritingExpanded)
                         uiState.value = uiState.value.copy(handwritingExpanded = false)
@@ -2516,9 +2525,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                             val hardwareLanguage = if (state.isAsciiMode) "EN" else when (state.inputProfile.language) {
                                 com.kingzcheung.xime.settings.InputLanguage.ENGLISH -> "EN"
                                 com.kingzcheung.xime.settings.InputLanguage.CHINESE -> "中"
-                                com.kingzcheung.xime.settings.InputLanguage.JAPANESE -> "あ"
-                                else -> com.kingzcheung.xime.settings.LetterLanguage.of(state.inputProfile.language)?.badge
-                                    ?: state.inputProfile.language.displayName
+                                com.kingzcheung.xime.settings.InputLanguage.CANTONESE -> "粤"
+                                else -> state.inputProfile.language.displayName
                             }
                             val selectHardwareCandidate: (Int) -> Unit = { index ->
                                 if (hardwareCandidates.association) {
@@ -2656,9 +2664,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                 amplitude = { voiceAmplitudeState.floatValue },
                                 languageLabel = if (pillEnglish) "EN" else when (state.inputProfile.language) {
                                     com.kingzcheung.xime.settings.InputLanguage.CHINESE -> "中"
-                                    com.kingzcheung.xime.settings.InputLanguage.JAPANESE -> "あ"
-                                    else -> com.kingzcheung.xime.settings.LetterLanguage.of(state.inputProfile.language)?.badge
-                                        ?: state.inputProfile.language.displayName
+                                    com.kingzcheung.xime.settings.InputLanguage.CANTONESE -> "粤"
+                                    else -> state.inputProfile.language.displayName
                                 },
                                 languageActions = com.kingzcheung.xime.ui.keyboard.KeyboardInputActions(
                                     schemas = com.kingzcheung.xime.settings.InputModes.available(state.schemas),
@@ -3715,9 +3722,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         if (keyCode == KeyEvent.KEYCODE_CAPS_LOCK && hasHardwareKeyboard && e.repeatCount == 0 &&
             chinese && !uiState.value.isAsciiMode) keyRouter.commitCompositionAsTyped()
         // Caps Lock inverts letter case like Shift (digits and symbols keep their own Shift meaning);
-        // a capital letter in Chinese is typed literally. Japanese kana input keeps its own case rules.
-        val capsLetter = e.isCapsLockOn && keyCode in KeyEvent.KEYCODE_A..KeyEvent.KEYCODE_Z &&
-            uiState.value.inputProfile.language != com.kingzcheung.xime.settings.InputLanguage.JAPANESE
+        // a capital letter in Chinese is typed literally.
+        val capsLetter = e.isCapsLockOn && keyCode in KeyEvent.KEYCODE_A..KeyEvent.KEYCODE_Z
         val isShifted = e.isShiftPressed != capsLetter
         val key = keyCodeToKey(keyCode, isShifted)
         if (key != null) {
@@ -3725,6 +3731,17 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             return true
         }
         return super.onKeyDown(keyCode, event)
+    }
+
+    private var lastQuickSendBackDismissUptimeMs: Long = 0L
+
+    internal fun dismissQuickSendFormToClipboard() {
+        if (!uiState.value.showQuickSendForm) return
+        if (applicationContext != null) {
+            com.kingzcheung.xime.clipboard.ClipboardFavoriteStore.getInstance(this).clearPendingForm()
+        }
+        closeQuickSend()
+        keyboardViewModel.showOverlay(OverlayRoute.Clipboard(0))
     }
 
     override fun onKeyUp(keyCode: Int, event: KeyEvent?): Boolean {
@@ -3744,7 +3761,10 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         event?.let { hardwareCapsLockState.value = it.isCapsLockOn }
         if (uiState.value.showQuickSendForm && keyCode in listOf(KeyEvent.KEYCODE_ENTER, KeyEvent.KEYCODE_NUMPAD_ENTER)) return true
         if (uiState.value.showQuickSendForm && keyCode in listOf(KeyEvent.KEYCODE_BACK, KeyEvent.KEYCODE_ESCAPE)) {
-            if (event?.isCanceled != true) keyboardCallbacks?.onHideQuickSendForm?.invoke()
+            if (event?.isCanceled != true) {
+                lastQuickSendBackDismissUptimeMs = SystemClock.uptimeMillis()
+                dismissQuickSendFormToClipboard()
+            }
             return true
         }
         if (glossShiftKeys.remove(keyCode)) return true
@@ -3767,6 +3787,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         }
         val overlay = keyboardViewModel.page.value as? KeyboardPage.Overlay
         if (keyCode == KeyEvent.KEYCODE_BACK && overlay != null) {
+            // 部分系统在弹出窗口与输入法窗口间会对同一次返回手势连发两次 KEYCODE_BACK（间隔 ~1ms），
+            // 刚从新增/编辑弹窗退回剪贴板时吃掉紧随其后的重复返回键，避免瞬间又退回键盘。
+            if (SystemClock.uptimeMillis() - lastQuickSendBackDismissUptimeMs < 150L) return true
             if (event?.isCanceled != true) {
                 keyboardViewModel.backFromOverlay()
             }
@@ -4156,7 +4179,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         restoreHandwritingFullscreen()
         applyWindowBackground()
         requestHardwareCursorUpdates()
-        openPendingOcrPanel()
         openPendingKeyboardPanel()
         // 释义词典随设置与下载状态后台加载/释放；选拼音时不占内存。
         com.kingzcheung.xime.gloss.CandidateGlossary.prepare(this)
@@ -4238,7 +4260,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     private fun caretLeftInlineComposition(selStart: Int, selEnd: Int, candidatesStart: Int, candidatesEnd: Int): Boolean {
         val state = uiState.value
         if (!inlineComposition.active || inlineComposition.text.isNullOrEmpty() || !candidateState.value.isComposing ||
-            state.inputTarget.isInternal || state.isVoiceMode || isSecretEditor() || schemaController.japaneseReadingOnScreen() ||
+            state.inputTarget.isInternal || state.isVoiceMode || isSecretEditor() ||
             TerminalEditor.inputTextLocation(this) != SettingsPreferences.INPUT_TEXT_INPUT_BOX) return false
         if (!inlineCaretOutsideSpan(selStart, selEnd, candidatesStart, candidatesEnd)) return false
         val value = currentInputConnection?.let { connection ->
@@ -4280,12 +4302,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                     } == true &&
                     keyboardCallbacks?.onPreeditCursorMove?.invoke("preedit_cursor:inline:$offset") == true) {
                     inlineComposition.moveCaret(offset)
-                } else if (!state.inputTarget.isInternal && schemaController.japaneseReadingOnScreen() &&
-                    TerminalEditor.inputTextLocation(this) == SettingsPreferences.INPUT_TEXT_INPUT_BOX &&
-                    hostSelectionIsCurrent(newSelStart)) {
-                    // 日语：在输入框里点了读音中间，接着打的字插在那里（11-05 用户反馈：句中光标处输入的内容出现在句末）。
-                    inlineComposition.moveCaret(offset)
-                    keyRouter.postRimeJob("japanese_caret") { japaneseInputController.placeCaret(offset) }
                 }
             }
         }
@@ -4729,7 +4745,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     override fun onWindowHidden() {
         super.onWindowHidden()
         gameShowExplicit = false
-        com.kingzcheung.xime.runtime.adaptation.CpuBenchmarkRunner.keyboardShown = false
         backgroundMotionWindowShown.value = false
         imeWindowShown = false
         inputStallWatchdog?.stop()
@@ -4753,7 +4768,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         // 子窗口，键盘收完会跟着一起藏，晚拆不会多露一块；1 秒内又弹出来（切聊天框）就直接接着用，不重建。
         mainHandler.removeCallbacks(hideGlassBlurWindows)
         mainHandler.postDelayed(hideGlassBlurWindows, GLASS_BLUR_HIDE_DELAY_MS)
-        com.kingzcheung.xime.ocr.DocumentOcrActivity.finishHiddenHost()
         clearHardwareSurfaceBounds()
         if (::clipboardManager.isInitialized) clipboardManager.images.dismissPresentedPreview()
         if (::clipboardManager.isInitialized) clipboardManager.images.setKeyboardVisible(false)
@@ -4778,8 +4792,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         super.onWindowShown()
         // 键盘重新弹出：上次收起时没收到的 Shift 抬起不再算按住（否则候选一直中英对调，空格上屏英文）。
         com.kingzcheung.xime.gloss.CandidateGlossary.physicalShiftHeld.value = false
-        // 键盘一出来 CPU 测速就停（设置页里测到一半也停），不和打字抢 CPU。
-        com.kingzcheung.xime.runtime.adaptation.CpuBenchmarkRunner.keyboardShown = true
         backgroundMotionWindowShown.value = true
         imeWindowShown = true
         inputStallWatchdog?.start()
@@ -4788,7 +4800,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         mainHandler.removeCallbacks(hideGlassBlurWindows)
         glassWindowVisible = true
         glassBlurWindows.values.forEach { it.setVisible(true) }
-        openPendingOcrPanel()
         startVoiceAfterPermission()
         requestHardwareCursorUpdates()
         startRuntimeObservation()
@@ -4813,13 +4824,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         }
     }
 
-    private fun openPendingOcrPanel() {
-        if (settingsPreviewEditor) return
-        if (com.kingzcheung.xime.ocr.DocumentOcrActivity.takePending()) {
-            showScreenKeyboardFromHardware(OverlayRoute.Ocr)
-            keyboardViewModel.showOverlay(OverlayRoute.Ocr)
-        }
-    }
+
 
     /** 设置页要求打开的键盘调节／排列面板：只在本应用的输入框里打开，与菜单入口走同一条路。 */
     private fun openPendingKeyboardPanel() {
@@ -5331,7 +5336,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         }
         if (rimeEngine.onSchemaSwitched === schemaSwitchPrefetch) rimeEngine.onSchemaSwitched = null
         KeyboardPanelLaunch.previewVisible = false
-        com.kingzcheung.xime.runtime.adaptation.CpuBenchmarkRunner.keyboardShown = false
         if (com.kingzcheung.xime.ui.keyboard.HandwritingGlassRegion.reporter === handwritingGlassRegionReporter)
             com.kingzcheung.xime.ui.keyboard.HandwritingGlassRegion.reporter = null
         if (com.kingzcheung.xime.ui.keyboard.CursorLineMetrics.requester === cursorLineRequester)

@@ -298,7 +298,7 @@ fun SmartPredictionSettingsContent(
                     profileSize = uiState.profileSize, busy = uiState.isSaving,
                     status = uiState.learningStatus,
                     onSave = viewModel::saveUserData, onRefresh = viewModel::refreshCacheSize,
-                    onExport = { exportFile.launch("CyIME-personal-learning.json") },
+                    onExport = { exportFile.launch("CJIME-personal-learning.json") },
                     // 不按类型筛：md、srt 等在很多手机上没有 text/plain 类型，选了再看内容是不是文字（用户 11-15：md 都选不了）
                     onImport = { importFile.launch(arrayOf("*/*")) }
                 )

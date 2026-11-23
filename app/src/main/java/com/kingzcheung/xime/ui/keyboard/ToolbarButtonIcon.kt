@@ -2,9 +2,9 @@ package com.kingzcheung.xime.ui.keyboard
 
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
-import androidx.compose.material.icons.twotone.AutoFixHigh
-import androidx.compose.material.icons.twotone.Quickreply
-import androidx.compose.material.icons.twotone.Translate
+import androidx.compose.material.icons.outlined.AutoFixHigh
+import androidx.compose.material.icons.outlined.Quickreply
+import androidx.compose.material.icons.outlined.Translate
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -88,13 +88,13 @@ fun ToolbarButtonIcon(
 }
 
 /**
- * 自家 AI 回复、AI 改写、翻译插件的按钮：用和内置按钮同一套 TwoTone 图标，
+ * 自家 AI 回复、AI 改写、翻译插件的按钮：用和内置按钮同一套 Outlined 图标，
  * 不再显示插件 manifest 里的单字（应、改、译；用户 2026-11-11 嫌丑）。按按钮 id 认，别人的插件照旧。
  */
 internal fun ownPluginButtonIcon(buttonId: String): ImageVector? = when (buttonId) {
-    "com.kingzcheung.xime.plugin.ai_reply:open" -> Icons.TwoTone.Quickreply
-    "com.kingzcheung.xime.plugin.ai_rewrite:open" -> Icons.TwoTone.AutoFixHigh
-    "com.kingzcheung.xime.plugin.translate:open" -> Icons.TwoTone.Translate
+    "com.kingzcheung.xime.plugin.ai_reply:open" -> Icons.Outlined.Quickreply
+    "com.kingzcheung.xime.plugin.ai_rewrite:open" -> Icons.Outlined.AutoFixHigh
+    "com.kingzcheung.xime.plugin.translate:open" -> Icons.Outlined.Translate
     else -> null
 }
 

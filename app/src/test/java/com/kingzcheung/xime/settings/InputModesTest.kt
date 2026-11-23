@@ -4,24 +4,27 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class InputModesTest {
-    private val modes = listOf("t9_pinyin", "rime_ice", "double_pinyin_flypy", "japanese", "japanese_kana")
-        .map { SchemaInfo(it, it, "", "", "") }
+    private val modes = listOf("t9_pinyin", "rime_ice", "double_pinyin_flypy").map { SchemaInfo(it, it, "", "", "") } +
+        listOf(
+            SchemaInfo("jyutping", "粤拼", "", "", "", language = InputLanguage.CANTONESE),
+            SchemaInfo("jyutping_t9", "粤拼九键", "", "", "", language = InputLanguage.CANTONESE),
+        )
 
-    @Test fun chineseModesIncludeShuangpinButNeverJapaneseOrEnglish() {
+    @Test fun chineseModesIncludeShuangpinButNeverCantoneseOrEnglish() {
         assertEquals(listOf("t9_pinyin", "rime_ice", "double_pinyin_flypy"),
             InputModes.inCurrentLanguage(modes, "double_pinyin_flypy").map { it.schemaId })
     }
-    @Test fun japaneseAndEnglishPanelsOnlyShowTheirOwnModes() {
-        assertEquals(listOf("japanese", "japanese_kana"),
-            InputModes.inCurrentLanguage(modes, "japanese_kana").map { it.schemaId })
+    @Test fun cantoneseAndEnglishPanelsOnlyShowTheirOwnModes() {
+        assertEquals(listOf("jyutping", "jyutping_t9"),
+            InputModes.inCurrentLanguage(modes, "jyutping_t9").map { it.schemaId })
         assertEquals(listOf(InputModes.ENGLISH),
             InputModes.inCurrentLanguage(modes, InputModes.ENGLISH).map { it.schemaId })
     }
     @Test fun languageMenuRestoresEachLanguageModeFromEnglish() {
         val choices = InputModes.languageChoices(modes, InputModes.ENGLISH,
-            mapOf(InputLanguage.CHINESE to "double_pinyin_flypy", InputLanguage.JAPANESE to "japanese_kana"))
-        assertEquals(listOf("中文", "英文", "日语"), choices.map { it.name })
-        assertEquals(listOf("double_pinyin_flypy", InputModes.ENGLISH, "japanese_kana"), choices.map { it.schemaId })
+            mapOf(InputLanguage.CHINESE to "double_pinyin_flypy", InputLanguage.CANTONESE to "jyutping_t9"))
+        assertEquals(listOf("中文", "英文", "粤语"), choices.map { it.name })
+        assertEquals(listOf("double_pinyin_flypy", InputModes.ENGLISH, "jyutping_t9"), choices.map { it.schemaId })
     }
     @Test fun addressFieldRemembersItsChineseLayoutWithoutChangingTheSavedProfile() {
         val saved = mapOf(InputLanguage.CHINESE to "rime_ice")
@@ -33,84 +36,74 @@ class InputModesTest {
     }
     @Test fun currentModeWinsAndRemovedModeFallsBackWithinItsLanguage() {
         val choices = InputModes.languageChoices(modes, "rime_ice",
-            mapOf(InputLanguage.CHINESE to "t9_pinyin", InputLanguage.JAPANESE to "removed"))
-        // 语言菜单和别处同一个先后：中文、英文、日语（6eddc7c4）。
-        assertEquals(listOf("rime_ice", InputModes.ENGLISH, "japanese"), choices.map { it.schemaId })
+            mapOf(InputLanguage.CHINESE to "t9_pinyin", InputLanguage.CANTONESE to "removed"))
+        assertEquals(listOf("rime_ice", InputModes.ENGLISH, "jyutping"), choices.map { it.schemaId })
     }
-    @Test fun newJapaneseModesCanDeclareTheirLanguageWithoutChangingTheMenu() {
-        val extra = SchemaInfo("kana_flick", "假名滑行", "", "", "", language = InputLanguage.JAPANESE)
-        assertTrue(InputModes.inCurrentLanguage(modes + extra, "japanese").contains(extra))
+    @Test fun newCantoneseModesCanDeclareTheirLanguageWithoutChangingTheMenu() {
+        val extra = SchemaInfo("yale", "耶鲁粤拼", "", "", "", language = InputLanguage.CANTONESE)
+        assertTrue(InputModes.inCurrentLanguage(modes + extra, "jyutping").contains(extra))
     }
-    @Test fun reorderingChineseModesPreservesJapaneseAndEnglishSlots() {
-        val current = listOf("t9_pinyin", "japanese", "rime_ice", InputModes.ENGLISH, "japanese_kana")
-        assertEquals(listOf("rime_ice", "japanese", "t9_pinyin", InputModes.ENGLISH, "japanese_kana"),
+    @Test fun reorderingChineseModesPreservesCantoneseAndEnglishSlots() {
+        val current = listOf("t9_pinyin", "jyutping", "rime_ice", InputModes.ENGLISH, "jyutping_t9")
+        assertEquals(listOf("rime_ice", "jyutping", "t9_pinyin", InputModes.ENGLISH, "jyutping_t9"),
             InputModes.mergeOrder(current, listOf("rime_ice", "t9_pinyin")))
     }
 
     @Test fun independentLanguageOrderKeepsTheRememberedInputMode() {
-        // 这是所有语言的排位（含未开启的），显示时 languageOrder(context) 再只留已开启的。
-        val order = InputModes.languageOrder(listOf("en", "ja", "ja", "unknown"))
-        assertEquals(listOf(InputLanguage.ENGLISH, InputLanguage.JAPANESE, InputLanguage.CHINESE) +
-            LetterLanguage.entries.map { it.language }, order)
-        val choices = InputModes.languageChoices(modes, "rime_ice", mapOf(InputLanguage.JAPANESE to "japanese_kana"), order)
-        assertEquals(listOf(InputModes.ENGLISH, "japanese_kana", "rime_ice"), choices.map { it.schemaId })
+        val order = InputModes.languageOrder(listOf("en", "yue", "yue", "unknown"))
+        assertEquals(listOf(InputLanguage.ENGLISH, InputLanguage.CANTONESE, InputLanguage.CHINESE), order)
+        val choices = InputModes.languageChoices(modes, "rime_ice", mapOf(InputLanguage.CANTONESE to "jyutping_t9"), order)
+        assertEquals(listOf(InputModes.ENGLISH, "jyutping_t9", "rime_ice"), choices.map { it.schemaId })
         assertEquals(listOf("rime_ice", "t9_pinyin"), InputModes.available(modes, InputModes.defaultModeOrder).take(2).map { it.schemaId })
         assertEquals("t9_pinyin", InputModes.available(modes, listOf("t9_pinyin", "rime_ice")).first().schemaId)
     }
 
-    @Test fun japaneseComesAfterEnglishByDefaultAndWhenSwitchedOnLater() {
-        assertEquals(listOf(InputLanguage.CHINESE, InputLanguage.ENGLISH, InputLanguage.JAPANESE) +
-            LetterLanguage.entries.map { it.language }, InputModes.languageOrder(emptyList()))
-        // A saved order from older versions put Japanese before English; switching Japanese on moves it last.
-        // 未开启的西班牙、德、法、俄、韩语只占排位，开启时会再排到最后。
-        val letters = LetterLanguage.entries.map { it.language.id }
-        assertEquals(listOf("zh", "en") + letters + "ja", InputModes.orderWithLanguageLast(listOf("zh", "ja", "en"), InputLanguage.JAPANESE))
-        // 德语后开启，同样排到已开启语言后面。
-        assertEquals(listOf("zh", "en", "ja") + (letters - "de") + "de",
-            InputModes.orderWithLanguageLast(listOf("zh", "en", "ja"), InputLanguage.GERMAN))
+    @Test fun cantoneseComesAfterEnglishByDefaultAndWhenSwitchedOnLater() {
+        assertEquals(listOf(InputLanguage.CHINESE, InputLanguage.ENGLISH, InputLanguage.CANTONESE),
+            InputModes.languageOrder(emptyList()))
+        assertEquals(listOf("zh", "en", "yue"), InputModes.orderWithLanguageLast(listOf("zh", "yue", "en"), InputLanguage.CANTONESE))
     }
 
-    /** 没排过序时字母排列（Colemak、Cyletix10、Typewise、QWJRTK、自定义）排在其他方案后面，排过的不动。 */
     @Test fun letterArrangementsGoLastUnlessTheUserOrderedThem() {
         val ids = listOf("pinyin_colemak", "rime_ice", QwjrtkLayout.ID, "cyime_cangjie", "custom_pinyin_0123",
-            "t9_pinyin", "pinyin_typewise", "japanese_kana", "japanese")
-        val schemas = ids.map { SchemaInfo(it, it, "", "", "") }
-        assertEquals(listOf("rime_ice", "t9_pinyin", "japanese", "japanese_kana", InputModes.ENGLISH, "cyime_cangjie",
-            "pinyin_colemak", QwjrtkLayout.ID, "custom_pinyin_0123", "pinyin_typewise"),
+            "t9_pinyin", "pinyin_typewise")
+        val schemas = ids.map { SchemaInfo(it, it, "", "", "") } +
+            listOf(SchemaInfo("jyutping", "粤拼", "", "", "", language = InputLanguage.CANTONESE))
+        assertEquals(listOf("rime_ice", "t9_pinyin", InputModes.ENGLISH, "cyime_cangjie",
+            "jyutping", "pinyin_colemak", QwjrtkLayout.ID, "custom_pinyin_0123", "pinyin_typewise"),
             InputModes.available(schemas, InputModes.defaultModeOrder).map { it.schemaId })
-        assertEquals(ids + InputModes.ENGLISH, InputModes.available(schemas, ids).map { it.schemaId })
+        assertEquals(ids + "jyutping" + InputModes.ENGLISH, InputModes.available(schemas, ids).map { it.schemaId })
     }
 
     @Test fun englishIsAvailableWithNoEnabledSchemas() {
         assertEquals(listOf(InputModes.english), InputModes.available(emptyList()))
     }
     @Test fun repeatedNormalizationKeepsOnePermanentEnglishEntry() {
-        val kana = SchemaInfo("japanese_kana", "日语九键", "", "", "")
-        val available = InputModes.available(listOf(kana, InputModes.english, kana))
-        assertEquals(listOf(kana, InputModes.english), InputModes.available(available))
+        val yue = SchemaInfo("jyutping", "粤拼", "", "", "", language = InputLanguage.CANTONESE)
+        val available = InputModes.available(listOf(yue, InputModes.english, yue))
+        assertEquals(listOf(yue, InputModes.english), InputModes.available(available))
     }
     @Test fun tapAndMenuUseTheSameEnglishSelectionIdentity() {
-        assertEquals(InputModes.ENGLISH, InputModes.selectedId("japanese", true))
-        assertEquals("japanese", InputModes.selectedId("japanese", false))
+        assertEquals(InputModes.ENGLISH, InputModes.selectedId("rime_ice", true))
+        assertEquals("rime_ice", InputModes.selectedId("rime_ice", false))
     }
     @Test fun customOrderSurvivesNormalizationAndNewSchemasAppend() {
-        val kana = SchemaInfo("japanese", "日语", "", "", "")
+        val yue = SchemaInfo("jyutping", "粤拼", "", "", "", language = InputLanguage.CANTONESE)
         val chinese = SchemaInfo("t9", "拼音", "", "", "")
-        val modes = InputModes.available(listOf(chinese, kana, chinese), listOf(InputModes.ENGLISH, "japanese", "missing"))
-        assertEquals(listOf(InputModes.ENGLISH, "japanese", "t9"), modes.map { it.schemaId })
+        val modes = InputModes.available(listOf(chinese, yue, chinese), listOf(InputModes.ENGLISH, "jyutping", "missing"))
+        assertEquals(listOf(InputModes.ENGLISH, "jyutping", "t9"), modes.map { it.schemaId })
         assertEquals(modes, InputModes.available(modes))
     }
 
-    /** 用户 11-19：有的页面日语排在英语上面。各页列语言用同一个先后：拖过的顺序优先，没排过的是中文、英文、日语。 */
     @Test fun everyLanguageListSharesOneOrder() {
-        val zh = InputLanguage.CHINESE; val en = InputLanguage.ENGLISH; val ja = InputLanguage.JAPANESE
-        assertEquals(listOf(zh, en, ja), InputLanguage.supported.take(3))
-        assertEquals(listOf(zh, en, ja), InputLanguage.speech)
+        val zh = InputLanguage.CHINESE; val en = InputLanguage.ENGLISH; val yue = InputLanguage.CANTONESE
+        assertEquals(listOf(zh, yue, en), InputLanguage.supported)
+        assertEquals(listOf(zh, yue, en), InputLanguage.speech)
         val fresh = InputModes.languageRank(emptyList())
-        assertEquals(listOf(zh, en, ja, InputLanguage.SPANISH, InputLanguage.UNSPECIFIED),
-            listOf(InputLanguage.UNSPECIFIED, ja, InputLanguage.SPANISH, en, zh).sortedBy(fresh))
-        val dragged = InputModes.languageRank(listOf("ja", "zh"))
-        assertEquals(listOf(ja, zh, en), listOf(en, zh, ja).sortedBy(dragged))
-        assertEquals(listOf("中文", "英文", "日语"), InputModes.languageChoices(modes, "rime_ice", emptyMap()).map { it.name })
+        assertEquals(listOf(zh, en, yue, InputLanguage.UNSPECIFIED),
+            listOf(InputLanguage.UNSPECIFIED, yue, en, zh).sortedBy(fresh))
+        val dragged = InputModes.languageRank(listOf("yue", "zh"))
+        assertEquals(listOf(yue, zh, en), listOf(en, zh, yue).sortedBy(dragged))
+        assertEquals(listOf("中文", "英文", "粤语"), InputModes.languageChoices(modes, "rime_ice", emptyMap()).map { it.name })
     }
 }

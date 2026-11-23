@@ -77,7 +77,8 @@ class OnlineSpeechApiTest {
         assertEquals("data:audio/wav;base64,AQID", part.getJSONObject("input_audio").getString("data"))
         assertEquals("wav", part.getJSONObject("input_audio").getString("format"))
         assertEquals("zh", body.getJSONObject("asr_options").getString("language"))
-        assertFalse(OnlineSpeechApi.chatAudioBody("m", byteArrayOf(), com.kingzcheung.xime.settings.InputLanguage.JAPANESE).has("asr_options"))
+        assertEquals("en", OnlineSpeechApi.chatAudioBody("m", byteArrayOf(), com.kingzcheung.xime.settings.InputLanguage.ENGLISH).getJSONObject("asr_options").getString("language"))
+        assertFalse(OnlineSpeechApi.chatAudioBody("m", byteArrayOf(), com.kingzcheung.xime.settings.InputLanguage.CANTONESE).has("asr_options"))
 
         assertEquals("你好", OnlineSpeechApi.chatText(JSONObject("""{"choices":[{"message":{"role":"assistant","content":"你好"}}]}""")))
         assertEquals("ab", OnlineSpeechApi.chatText(JSONObject("""{"choices":[{"message":{"content":[{"type":"text","text":"a"},{"type":"text","text":"b"}]}}]}""")))
