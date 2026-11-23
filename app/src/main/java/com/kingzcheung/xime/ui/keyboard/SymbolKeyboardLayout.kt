@@ -194,6 +194,9 @@ fun SymbolKeyboardLayout(
                                             if (!onRecentPage) recentSymbols = updated
                                             if (preserveWidth || (category.id == "common" && symbol in ownCommon)) onSelectExact(symbol)
                                             else onSelect(symbol)
+                                            // 「选完符号自动返回」（默认关）：符号已排进按键队列，回到打字键盘不影响上屏。
+                                            if (com.kingzcheung.xime.settings.SettingsPreferences
+                                                    .isSymbolReturnAfterPickEnabled(context)) onBack()
                                         },
                                         modifier = Modifier.weight(1f).height(grid.rowHeightDp.dp).testTag("symbol-key:$symbol"),
                                         fontSize = symbolFontSize,

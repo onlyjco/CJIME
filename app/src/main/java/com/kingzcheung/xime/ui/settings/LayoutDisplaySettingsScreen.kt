@@ -162,6 +162,13 @@ private fun LayoutDisplayPage(
                             pairedSymbols = it; SettingsPreferences.setPairedSymbolsEnabled(context, it)
                         })
                     HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+                    var symbolReturn by remember { mutableStateOf(SettingsPreferences.isSymbolReturnAfterPickEnabled(context)) }
+                    SettingsToggleItem(Icons.TwoTone.EmojiSymbols, "选完符号自动返回",
+                        "在符号页点一个符号后回到打字键盘",
+                        checked = symbolReturn, onCheckedChange = {
+                            symbolReturn = it; SettingsPreferences.setSymbolReturnAfterPickEnabled(context, it)
+                        })
+                    HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                     var enterSends by remember { mutableStateOf(SettingsPreferences.isEnterSendsEnabled(context)) }
                     SettingsToggleItem(Icons.AutoMirrored.TwoTone.Send, "回车发送",
                         "应用支持时，回车直接发送消息",

@@ -71,6 +71,17 @@ object SettingsPreferences {
     }
 
     /**
+     * 选完符号自动返回：在符号页点一个符号后回到打字键盘；默认关 = 留在符号页接着点（原来的样子）。
+     * 只管符号页的符号格子；删除、分类、数字键照旧（群友 11-24：选完要点「中文」才回去）。
+     */
+    const val KEY_SYMBOL_RETURN_AFTER_PICK = "symbol_return_after_pick"
+    fun isSymbolReturnAfterPickEnabled(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_SYMBOL_RETURN_AFTER_PICK, false)
+    fun setSymbolReturnAfterPickEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_SYMBOL_RETURN_AFTER_PICK, enabled).apply()
+    }
+
+    /**
      * 回车发送：应用自己把回车设成发送时（微信「回车键发送消息」等），普通回车直接发送、键面写发送；
      * 默认关 = 回车换行、Ctrl+回车发送（用户 11-05）。见 EnterKeyAction。
      */
