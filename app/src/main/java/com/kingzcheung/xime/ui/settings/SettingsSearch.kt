@@ -373,7 +373,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("手写边写边识别", handwriting, SettingsRoutes.Handwriting, "手写 边写边识别 提前 延迟 慢 等待 快"),
         SettingsSearchEntry("手写公式两边的标记", handwriting, SettingsRoutes.Handwriting, "公式 latex 美元 数学"),
         // 系统 › 剪贴板 › 剪贴板同步（同步插件的页面）
-        page("剪贴板同步", clipboard, SettingsRoutes.ClipboardSync, "剪贴板 同步 电脑 Windows 互联 插件"),
+        page("剪贴板同步", clipboard, SettingsRoutes.ClipboardSync, "剪贴板 同步 电脑 Windows 互联 插件 WebDAV 拉取间隔"),
         SettingsSearchEntry("连接状态", clipboardSync, SettingsRoutes.ClipboardSync, "扫码连接电脑 连接电脑 Windows 配对 连接码 二维码 互联"),
         SettingsSearchEntry("同步剪贴板", clipboardSync, SettingsRoutes.ClipboardSync, "同步 剪贴板 电脑 Windows 我的设备", section = "连接状态"),
         SettingsSearchEntry("让其他手机或平板连接本机", clipboardSync, SettingsRoutes.ClipboardSync, "手机 平板 互相同步 二维码 允许其他设备连接"),
