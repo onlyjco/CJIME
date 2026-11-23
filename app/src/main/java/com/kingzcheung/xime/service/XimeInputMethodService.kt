@@ -205,6 +205,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         private const val VOICE_PILL_RESHOW_DELAY_MS = 400L
         /** 收起键盘后等系统下滑动画播完再拆玻璃模糊窗口（动画约 0.2–0.4 秒）。 */
         private const val GLASS_BLUR_HIDE_DELAY_MS = 1_000L
+        /** 键盘收起后多久卸载手写模型：游戏、聊天里一句一句发，收起再弹出通常在这之内。 */
+        private const val HANDWRITING_RELEASE_DELAY_MS = 30_000L
         private const val VOICE_PILL_SHOW_TIMEOUT_MS = 1500L
         /** 悬浮条出现、上一段收尾后稍等再开麦：避开键盘弹出动画和发送后输入框的重启。 */
         private const val VOICE_PILL_RESUME_DELAY_MS = 500L
@@ -4209,6 +4211,14 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     override fun onStartInputView(info: EditorInfo?, restarting: Boolean) {
         super.onStartInputView(info, restarting)
         ensureInputAreaFits()
+        // 收起后很快又弹出（游戏里一句一句发）：手写模型不卸载；已经卸载了而手写板开着，就趁弹出先在后台加载，
+        // 不等第一个字写完才加载。没开手写不加载。
+        mainHandler.removeCallbacks(releaseHandwritingWhileHidden)
+        if (keyboardViewModel.hasTemporaryHandwriting || keyboardViewModel.page.value ==
+                com.kingzcheung.xime.keyboard.KeyboardPage.Main(com.kingzcheung.xime.keyboard.MainType.HANDWRITING)) {
+            val app = applicationContext
+            serviceScope.launch(Dispatchers.IO) { com.kingzcheung.xime.handwriting.HandwritingEngine.warmUp(app) }
+        }
         KeyboardPanelLaunch.previewVisible = settingsPreviewEditor
         // 动态背景开着才查应用类别（每个包名只查一次，见 HardwareGamePackages）。
         backgroundMotionGame.value = com.kingzcheung.xime.settings.BackgroundMotionPreferences.read(this).enabled &&
@@ -4783,12 +4793,19 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         if (!voiceKeptAlive) noteVoicePillInterrupted(VoiceSessionEnd.FOCUS_LEAVES)
         cancelVoicePillResume()
         if (!voiceKeptAlive) voiceRecognitionHandler.endInputSession()
-        // 手写模型轻量，按"用键盘时加载、键盘收起即卸载"管理：输入会话结束
-        // （收起键盘/焦点离开）即释放，:inference 侧同步卸载模型；未初始化时
-        // release() 幂等空操作。下次落笔由 predict 自愈或布局重建重载。
-        com.kingzcheung.xime.handwriting.HandwritingEngine.release()
+        // 手写模型轻量，按"用键盘时加载、键盘收起后卸载"管理：输入会话结束
+        // （收起键盘/焦点离开）后 [HANDWRITING_RELEASE_DELAY_MS] 内没再弹出才释放，:inference 侧同步卸载模型；
+        // 未初始化时 release() 幂等空操作。以前收起立刻卸载：游戏里发一句收一次键盘，下一句第一个字
+        // 写完才在识别里重新加载，:inference 进程这时多半已被游戏挤掉，冷启动几秒才出字（11-23 横屏游戏手写）。
+        mainHandler.removeCallbacks(releaseHandwritingWhileHidden)
+        mainHandler.postDelayed(releaseHandwritingWhileHidden, HANDWRITING_RELEASE_DELAY_MS)
         // 词库在线更新：键盘收起后才查、才部署，打字时不联网也不重编词库；每天最多一次。
         com.kingzcheung.xime.settings.CellWordAutoUpdate.onKeyboardHidden(this)
+    }
+
+    /** 键盘收起一段时间仍没弹出：卸载手写模型；见 [onFinishInputView]。 */
+    private val releaseHandwritingWhileHidden = Runnable {
+        com.kingzcheung.xime.handwriting.HandwritingEngine.release()
     }
 
     /** 键盘收起后真正拆掉玻璃模糊窗口；见 [onWindowHidden]。 */
@@ -5396,6 +5413,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         if (com.kingzcheung.xime.ui.keyboard.CursorLineMetrics.requester === cursorLineRequester)
             com.kingzcheung.xime.ui.keyboard.CursorLineMetrics.requester = null
         mainHandler.removeCallbacks(hideGlassBlurWindows)
+        mainHandler.removeCallbacks(releaseHandwritingWhileHidden)
         glassBlurWindows.values.forEach { it.dispose() }
         glassBlurWindows.clear()
         glassSurfaceBounds.clear()
