@@ -4867,6 +4867,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
 
     override fun onWindowHidden() {
         super.onWindowHidden()
+        resizeInsetsFreeze.forget()
         gameShowExplicit = false
         backgroundMotionWindowShown.value = false
         imeWindowShown = false
@@ -5790,7 +5791,16 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     private var handwritingNormalInsetDp = 0
     private var handwritingOverlayActive = false
 
+    /** 调节键盘期间报给应用的顶线停在进调节前（见 [ResizeInsetsFreeze]）。 */
+    private val resizeInsetsFreeze = ResizeInsetsFreeze()
+
     override fun onComputeInsets(outInsets: Insets) {
+        computeImeInsets(outInsets)
+        if (!uiState.value.showKeyboardResize)
+            resizeInsetsFreeze.noteReported(outInsets.contentTopInsets, outInsets.visibleTopInsets)
+    }
+
+    private fun computeImeInsets(outInsets: Insets) {
         val state = uiState.value
         if ((state.handwritingExpanded || handwritingOverlayActive) &&
             (keyboardViewModel.page.value.underlyingPage() as? KeyboardPage.Main)?.type == com.kingzcheung.xime.keyboard.MainType.HANDWRITING) {
@@ -5802,10 +5812,14 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             return
         }
         if (state.showKeyboardResize) {
-            // 调节层是全屏交互画布，但不能把宿主 App 顶到只剩一条缝。
-            // 整个 IME 窗口可触摸；内容 inset 仍报告为“悬浮”，底层页面保持原位。
-            outInsets.contentTopInsets = resources.displayMetrics.heightPixels
-            outInsets.visibleTopInsets = resources.displayMetrics.heightPixels
+            // 调节层是全屏交互画布，但不能把宿主 App 顶到只剩一条缝。整个 IME 窗口可触摸。
+            // 报给应用的顶线停在进调节前（11-23 红米 Android 12：报成「键盘没了」，应用把输入法收起了）；
+            // 设置页预览照旧报成不占地方，设置页自己的排版不动。
+            val screenBottom = resources.displayMetrics.heightPixels
+            val (contentTop, visibleTop) = if (settingsPreviewEditor) screenBottom to screenBottom
+                else resizeInsetsFreeze.duringResize(screenBottom)
+            outInsets.contentTopInsets = contentTop
+            outInsets.visibleTopInsets = visibleTop
             if (settingsPreviewEditor) {
                 // 设置页的返回、收起和说明区域属于 Activity，键盘只接收自己边框及把手上的操作。
                 outInsets.touchableInsets = Insets.TOUCHABLE_INSETS_REGION
