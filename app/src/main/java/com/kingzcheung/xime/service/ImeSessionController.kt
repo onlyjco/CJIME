@@ -56,6 +56,13 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
     private val omissionPause = OmissionPause()
     /** 上一帧九键编码属于哪个输入框和方案；只有同一个才能借上一帧的字母编码，见 [com.kingzcheung.xime.rime.t9RawPreedit]。 */
     private var t9PreeditOwner: Pair<Long, String>? = null
+
+    /**
+     * 最近一次交给界面的引擎原始输入（九键是数字串）。九键的 candidateState.inputText 是回显（hua），
+     * 九键滑行要按前面已打的数字挑同形编码（先打 hua 再划 xing），得用这个（11-23 平板实测出 华中）。
+     */
+    @Volatile var engineInput: String = ""
+        private set
     private val t9DigitPreeditLog = T9DigitPreeditLog()
 
     private fun scheduleOmission(ascii: Boolean) {
@@ -230,6 +237,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             service.dismissInlineSuggestions()
         }
 
+        engineInput = inputText
         service.candidateState.value = service.candidateState.value.copy(
             traceEventId = composition.traceEventId,
             engineRevision = composition.engineRevision,
@@ -382,6 +390,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             service.dismissInlineSuggestions()
         }
 
+        engineInput = result.inputText
         service.candidateState.value = service.candidateState.value.copy(
             engineRevision = result.engineRevision,
             inputText = if (isT9Schema) displayText else result.inputText,
@@ -713,6 +722,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
         val state = service.uiState.value
         if (!service.editorInputPolicy.directInput || state.inputTarget.isInternal) return false
         service.uiState.value = state.copy(isAsciiMode = true)
+        engineInput = ""
         val candidates = service.candidateState.value
         if (!candidates.isShowingRecentClipboard) service.candidateState.value = CandidateState()
         return true
