@@ -196,7 +196,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("合并键均匀排布", layouts, layoutIndex, "合并键 合并 14键 17键 18键 20键 自定义布局 键宽 均匀 等宽 单键 放宽 对齐 小屏 窄屏"),
         SettingsSearchEntry("数字框自动数字键盘", layouts, layoutIndex, "数字 验证码 号码 电话 数字键盘 自动弹出"),
         SettingsSearchEntry("数字键盘左栏符号", layouts, layoutIndex, "数字键盘 左栏 侧栏 符号 运算符 加减乘除 + - * / 冒号 自定义 顺序 上下滑 数字侧栏"),
-        SettingsSearchEntry("数字行", layouts, layoutIndex, "数字行 数字栏 一排数字 顶部数字 第五行 平板 1234567890 数字顺序 数字位置 自定义数字"),
+        SettingsSearchEntry("数字行", layouts, layoutIndex, "数字行 数字栏 一排数字 顶部数字 第五行 平板 1234567890 数字顺序 数字位置 自定义数字 数字行一样高 数字键太小 数字行太矮"),
         page("键盘尺寸与位置", layouts, SettingsRoutes.KeyboardResize, "尺寸 大小 高度 宽度 调整尺寸 键盘调节 悬浮 浮动 分体 透明度 底部留白 单手 单手模式 位置 旋转"),
         page("锁定悬浮键盘位置和大小", layouts, SettingsRoutes.KeyboardResize, "固定悬浮键盘 防误拖 锁住 解锁 底部短横条 底部小锁 长按 宽高 四角"),
         SettingsSearchEntry("底部诊断", layouts, layoutPage("bottom_gap"), "诊断 机型 导航方式 反馈 底部 被挡 有缝 复制"),
