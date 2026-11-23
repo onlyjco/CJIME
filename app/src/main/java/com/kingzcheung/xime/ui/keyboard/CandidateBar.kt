@@ -1279,7 +1279,7 @@ fun CandidateItem(
                 onLongClick = if (onSentenceSelection == null) onLongClick else null,
                 onClick = onClick,
             ) else Modifier)
-            .padding(horizontal = horizontalPadding, vertical = 2.dp),
+            .padding(horizontal = horizontalPadding, vertical = CANDIDATE_ITEM_VERTICAL_PADDING),
         verticalAlignment = Alignment.CenterVertically
     ) {
         val textSize = fit?.fontSize ?: fontSize
@@ -1395,7 +1395,9 @@ fun CandidateItem(
                         val placeable = measurable.measure(constraints)
                         // 角标比右边留白宽时往左挪进字的右上角一点，不超出候选（候选外面会被裁掉）。
                         val shift = minOf(0, with(this) { horizontalPadding.roundToPx() } - placeable.width)
-                        layout(0, placeable.height) { placeable.place(shift, 0) }
+                        // 再往上抬到候选顶边（用掉上面 2dp 留白），落在字形上方的空里，不压字的右上角（用户 11-23：0.4 倍挡住了字）。
+                        val lift = with(this) { CANDIDATE_ITEM_VERTICAL_PADDING.roundToPx() }
+                        layout(0, placeable.height) { placeable.place(shift, -lift) }
                     }
                     .size(with(LocalDensity.current) { learnedMarkSize(fontSize).toDp() })
                     .testTag("candidate-learned:$index"),
@@ -1422,7 +1424,7 @@ fun CandidateItem(
 }
 
 /**
- * 「打过的词」小图标的边长（约字高的 0.4；原来四分之一太小看不清，用户 11-23）。
+ * 「打过的词」小图标的边长（字高的 0.3：四分之一看不清，0.4 挡住字的右上角，用户 11-23）。
  * 图标不占宽度，只在后面有注释时让出 [learnedCommentGap]。
  */
 internal fun learnedMarkSize(fontSize: androidx.compose.ui.unit.TextUnit): androidx.compose.ui.unit.TextUnit =
@@ -1432,7 +1434,10 @@ internal fun learnedMarkSize(fontSize: androidx.compose.ui.unit.TextUnit): andro
 internal fun learnedCommentGap(fontSize: androidx.compose.ui.unit.TextUnit): androidx.compose.ui.unit.Dp =
     maxOf(3.dp, fontSize.value.dp * LEARNED_MARK_RATIO + 1.dp)
 
-private const val LEARNED_MARK_RATIO = 0.4f
+private const val LEARNED_MARK_RATIO = 0.3f
+
+/** 候选上下的留白；角标抬进上面这段留白里。 */
+private val CANDIDATE_ITEM_VERTICAL_PADDING = 2.dp
 
 /** 候选后面那段小字：有纠错显示纠错，否则显示注释（和 [CandidateItem] 一致）。 */
 internal fun candidateSecondaryText(comment: String, correction: String,
