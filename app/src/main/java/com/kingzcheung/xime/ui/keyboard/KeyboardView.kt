@@ -2938,7 +2938,9 @@ fun KeyboardView(
                         modifier = panelMaterial.fillMaxWidth().fillMaxHeight(),
                         onHapticFeedback = onHapticFeedback,
                     )
-                    is OverlayRoute.Symbol -> SymbolKeyboardLayout(
+                    // 底栏「中文」「123」是 KeyButton，松手震动靠 LocalKeyReleaseFeedback（11-23 平板实测只震一下）；
+                    // 符号格是点按（松手才出字、才震），不走这里，不会震两次。
+                    is OverlayRoute.Symbol -> CompositionLocalProvider(LocalKeyReleaseFeedback provides callbacks.onKeyRelease) { SymbolKeyboardLayout(
                         onKeyPressDown = callbacks.onKeyPressDown,
                         isFloatingMode = state.isFloatingMode,
                         onSelectExact = { symbol ->
@@ -2970,7 +2972,7 @@ fun KeyboardView(
                         bottomPaddingDp = 0,
                         modifier = panelMaterial.fillMaxWidth().fillMaxHeight(),
                         onHapticFeedback = onHapticFeedback,
-                    )
+                    ) }
                     is OverlayRoute.SplitWords -> SplitWordsView(
                         text = p.route.text,
                         backgroundColor = keyboardBgColor,
