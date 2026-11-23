@@ -62,6 +62,13 @@ class PredictionManager(
     @Volatile
     private var chainedContext: String? = null
 
+    @Volatile
+    private var lastShownChineseContext: String = ""
+    @Volatile
+    private var lastShownChineseWords: List<String> = emptyList()
+    @Volatile
+    private var suppressIgnoreOnce = false
+
     private val latest = LatestPrediction(serviceScope, predict = { text ->
         try {
             if (!SettingsPreferences.isSmartPredictionEnabled(context)) emptyList()
@@ -79,7 +86,16 @@ class PredictionManager(
             }
         } catch (cancelled: kotlinx.coroutines.CancellationException) { throw cancelled }
         catch (error: Exception) { Log.e(TAG, "Prediction failed", error); emptyList() }
-    }, deliver = onPredictionResult)
+    }, deliver = { words ->
+        if (words.isNotEmpty()) {
+            lastShownChineseContext = _lastCommittedText
+            lastShownChineseWords = words.take(4)
+        } else {
+            lastShownChineseContext = ""
+            lastShownChineseWords = emptyList()
+        }
+        onPredictionResult(words)
+    })
 
     val hasPendingPrediction: Boolean get() = latest.isPending
     val requestRevision: Long get() = latest.revision
@@ -203,10 +219,69 @@ class PredictionManager(
         }
     }
     
+    fun recordPickedChineseAssociation(sessionId: Long, leftContext: String, pickedWord: String, shownWords: List<String>) {
+        if (com.kingzcheung.xime.settings.IncognitoState.active) return
+        if (!SettingsPreferences.isSmartPredictionEnabled(context)) return
+        suppressIgnoreOnce = true
+        lastShownChineseContext = ""
+        lastShownChineseWords = emptyList()
+        val bridge = traditionalBridge()
+        serviceScope.launch(learningLane) {
+            val sCtx = bridge?.toSimplified?.invoke(leftContext) ?: leftContext
+            val sWord = bridge?.toSimplified?.invoke(pickedWord) ?: pickedWord
+            val sShown = if (bridge != null) shownWords.map(bridge.toSimplified) else shownWords
+            AssociationManager.recordPickedAssociation(context, sessionId, sCtx, sWord, sShown)
+        }
+    }
+
+    fun recordSentenceEditAssociationFeedback(
+        leftContext: String,
+        sentenceBefore: String,
+        start: Int,
+        end: Int,
+        badWord: String,
+        goodWord: String,
+        sentenceAfter: String,
+    ) {
+        if (com.kingzcheung.xime.settings.IncognitoState.active) return
+        if (!SettingsPreferences.isSmartPredictionEnabled(context)) return
+        val bridge = traditionalBridge()
+        serviceScope.launch(learningLane) {
+            val sLeft = bridge?.toSimplified?.invoke(leftContext) ?: leftContext
+            val sBefore = bridge?.toSimplified?.invoke(sentenceBefore) ?: sentenceBefore
+            val sBad = bridge?.toSimplified?.invoke(badWord) ?: badWord
+            val sGood = bridge?.toSimplified?.invoke(goodWord) ?: goodWord
+            val sAfter = bridge?.toSimplified?.invoke(sentenceAfter) ?: sentenceAfter
+            AssociationManager.recordSentenceEditFeedback(context, sLeft, sBefore, start, end, sBad, sGood, sAfter)
+        }
+    }
+
     fun recordInputPair(lastChar: String, candidate: String) {
         if (com.kingzcheung.xime.settings.IncognitoState.active) return
         if (SettingsPreferences.isSmartPredictionEnabled(context) && AssociationManager.isInitialized()) {
             learn(lastChar + candidate)
+        }
+        val prevFullCtx = _lastCommittedText
+        val shownCtx = lastShownChineseContext
+        val shownWords = lastShownChineseWords
+        val skippedCheck = !suppressIgnoreOnce && shownWords.isNotEmpty() && shownCtx.isNotEmpty()
+        suppressIgnoreOnce = false
+        lastShownChineseContext = ""
+        lastShownChineseWords = emptyList()
+        val ctxForLearn = if (prevFullCtx.isNotEmpty()) prevFullCtx else lastChar
+        if (ctxForLearn.isNotEmpty() && candidate.isNotEmpty()) {
+            val bridge = traditionalBridge()
+            serviceScope.launch(learningLane) {
+                val sCtx = bridge?.toSimplified?.invoke(ctxForLearn) ?: ctxForLearn
+                val sCand = bridge?.toSimplified?.invoke(candidate) ?: candidate
+                if (skippedCheck && shownCtx == prevFullCtx) {
+                    val sShownCtx = bridge?.toSimplified?.invoke(shownCtx) ?: shownCtx
+                    val sShown = if (bridge != null) shownWords.map(bridge.toSimplified) else shownWords
+                    AssociationManager.recordIgnoredAssociation(context, sShownCtx, sShown, sCand)
+                } else {
+                    AssociationManager.recordPersonalContinuation(context, sCtx, sCand)
+                }
+            }
         }
     }
 

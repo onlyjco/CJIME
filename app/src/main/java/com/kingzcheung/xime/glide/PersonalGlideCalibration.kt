@@ -81,6 +81,7 @@ object PersonalGlideCalibration {
         val createdAtMs: Long,
         var deletedAtMs: Long = 0L,
         var hadManualEditAfterDelete: Boolean = false,
+        var committedText: String = "",
     )
 
     private val phraseRevisionCounter = AtomicLong(1L)
@@ -94,6 +95,7 @@ object PersonalGlideCalibration {
     private val samples = ArrayList<SampleEntry>()
     @Volatile private var currentParams: SyllableGlideParams = SyllableGlideParams()
     @Volatile private var pendingGlide: PendingGlide? = null
+    @Volatile private var lastCommittedGlide: PendingGlide? = null
     private var samplesSinceAutoTune = 0
 
     fun phraseRevision(): Long = phraseRevisionCounter.get()
@@ -231,15 +233,67 @@ object PersonalGlideCalibration {
     }
 
     fun noteManualTypingAfterGlide(sessionId: Long) {
-        val p = pendingGlide ?: return
-        if (p.sessionId == sessionId && p.deletedAtMs > 0L) p.hadManualEditAfterDelete = true
+        pendingGlide?.let { p ->
+            if (p.sessionId == sessionId && p.deletedAtMs > 0L) p.hadManualEditAfterDelete = true
+        }
+        lastCommittedGlide?.let { p ->
+            if (p.sessionId == sessionId && p.deletedAtMs > 0L) p.hadManualEditAfterDelete = true
+        }
     }
 
     fun noteGlideDeleted(sessionId: Long) {
-        val p = pendingGlide ?: return
-        if (p.sessionId == sessionId && p.deletedAtMs == 0L) {
-            p.deletedAtMs = System.currentTimeMillis()
+        val now = System.currentTimeMillis()
+        pendingGlide?.let { p ->
+            if (p.sessionId == sessionId && p.deletedAtMs == 0L) p.deletedAtMs = now
         }
+        lastCommittedGlide?.let { p ->
+            if (p.sessionId == sessionId && p.deletedAtMs == 0L && now - p.createdAtMs <= REJECT_WINDOW_MS) {
+                p.deletedAtMs = now
+            }
+        }
+    }
+
+    /**
+     * 局部改错直接联动滑行校准：当用户在候选栏拖选修改了一句（部分偏离/同音错字）时，
+     * 将改错后的片段编码拼回原句并把原始轨迹重新对齐到真实拼音串上。
+     */
+    @Synchronized
+    fun onSentenceEditApplied(
+        dir: File,
+        sessionId: Long,
+        schemaKey: String,
+        sentenceBefore: String,
+        badPartCode: String,
+        goodPartCode: String,
+        sentenceAfter: String,
+    ) {
+        ensureLoaded(dir)
+        val candidate = listOfNotNull(pendingGlide, lastCommittedGlide).firstOrNull { g ->
+            g.sessionId == sessionId && g.schemaKey == schemaKey &&
+                (g.committedText.isEmpty() || g.committedText in sentenceBefore || sentenceBefore in g.committedText)
+        } ?: return
+        val cleanBadPart = badPartCode.replace("'", "").lowercase().filter { it in 'a'..'z' }
+        val cleanGoodPart = goodPartCode.replace("'", "").lowercase().filter { it in 'a'..'z' }
+        val baseCode = candidate.code.replace("'", "").lowercase().filter { it in 'a'..'z' }
+        if (cleanBadPart.isEmpty() || cleanGoodPart.isEmpty() || baseCode.isEmpty()) return
+
+        val idx = baseCode.indexOf(cleanBadPart)
+        val correctedCode = if (idx >= 0) {
+            baseCode.substring(0, idx) + cleanGoodPart + baseCode.substring(idx + cleanBadPart.length)
+        } else {
+            cleanGoodPart
+        }
+        if (correctedCode.length < 2) return
+        if (baseCode != correctedCode) {
+            recordConfusionLocked(dir, schemaKey, baseCode, correctedCode)
+        }
+        if (abs(correctedCode.length - baseCode.length) <= maxOf(5, (correctedCode.length + 1) / 2)) {
+            calibrateOffsetsFromTraceLocked(dir, candidate.bucket, candidate.keyboard, candidate.xs, candidate.ys, correctedCode)
+            recordSampleLocked(dir, schemaKey, candidate.bucket, candidate.keyboard, correctedCode, sentenceAfter, candidate.xs, candidate.ys, candidate.ts)
+        }
+        recordPhraseLocked(dir, schemaKey, correctedCode, sentenceAfter)
+        candidate.code = correctedCode
+        candidate.committedText = sentenceAfter
     }
 
     @Synchronized
@@ -256,6 +310,7 @@ object PersonalGlideCalibration {
             calibrateOffsetsFromTraceLocked(dir, pending.bucket, pending.keyboard, pending.xs, pending.ys, cleanChosen)
             recordSampleLocked(dir, schemaKey, pending.bucket, pending.keyboard, cleanChosen, chosenText, pending.xs, pending.ys, pending.ts)
             pending.code = cleanChosen
+            pending.committedText = chosenText
         }
         recordPhraseLocked(dir, schemaKey, cleanChosen, chosenText)
     }
@@ -270,20 +325,25 @@ object PersonalGlideCalibration {
         }
         recordPhraseLocked(dir, schemaKey, cleanCode, committedText)
 
-        val pending = pendingGlide
+        val now = System.currentTimeMillis()
+        val pending = pendingGlide ?: lastCommittedGlide?.takeIf {
+            it.sessionId == sessionId && it.schemaKey == schemaKey && it.deletedAtMs > 0L && now - it.deletedAtMs <= REJECT_WINDOW_MS
+        }
         pendingGlide = null
         if (pending == null || pending.sessionId != sessionId || pending.schemaKey != schemaKey) return
 
-        val now = System.currentTimeMillis()
         val pendingClean = pending.code.replace("'", "").lowercase()
         if (pending.deletedAtMs > 0L) {
             if (now - pending.deletedAtMs <= REJECT_WINDOW_MS && pendingClean.isNotEmpty() && pendingClean != cleanCode) {
                 recordConfusionLocked(dir, schemaKey, pendingClean, cleanCode)
-                if (pending.hadManualEditAfterDelete && abs(cleanCode.length - pendingClean.length) <= 3) {
+                // 就算识别偏离很多（比如 12 键错认成 6 键），只要在删除后手动补打出了真实拼音，仍可把原始偏离轨迹对齐回去校准指腹落点。
+                val lenTolerance = maxOf(5, (cleanCode.length + 1) / 2)
+                if (pending.hadManualEditAfterDelete && abs(cleanCode.length - pendingClean.length) <= lenTolerance) {
                     calibrateOffsetsFromTraceLocked(dir, pending.bucket, pending.keyboard, pending.xs, pending.ys, cleanCode)
                     recordSampleLocked(dir, schemaKey, pending.bucket, pending.keyboard, cleanCode, committedText, pending.xs, pending.ys, pending.ts)
                 }
             }
+            lastCommittedGlide = null
             return
         }
 
@@ -291,6 +351,7 @@ object PersonalGlideCalibration {
             val traceTarget = if (pendingClean == cleanCode) cleanCode else pendingClean
             calibrateOffsetsFromTraceLocked(dir, pending.bucket, pending.keyboard, pending.xs, pending.ys, traceTarget)
             recordSampleLocked(dir, schemaKey, pending.bucket, pending.keyboard, traceTarget, committedText, pending.xs, pending.ys, pending.ts)
+            lastCommittedGlide = pending.copy(code = traceTarget, createdAtMs = now, committedText = committedText)
         }
     }
 
@@ -303,6 +364,7 @@ object PersonalGlideCalibration {
         samples.clear()
         currentParams = SyllableGlideParams()
         pendingGlide = null
+        lastCommittedGlide = null
         samplesSinceAutoTune = 0
         listOf(OFFSETS_FILE, PHRASES_FILE, CONFUSIONS_FILE, SAMPLES_FILE, PARAMS_FILE).forEach {
             File(dir, it).delete()
@@ -680,6 +742,56 @@ object PersonalGlideCalibration {
                 append("pauseBonus=").append(p.pauseBonus).append('\n')
             }
         }
+    }
+
+    @Synchronized
+    fun buildDiagnosticReport(dir: File): String {
+        ensureLoaded(dir)
+        val gStats = stats(dir)
+        val aStats = com.kingzcheung.xime.association.PersonalAssociationBooster.stats(dir)
+        val (assocBoosts, assocPenalties) = com.kingzcheung.xime.association.PersonalAssociationBooster.reportLines(dir, limit = 8)
+        return buildString {
+            appendLine("=== 滑行与联想本机自递进报告 ===")
+            appendLine("滑行统计：已校准 ${gStats.calibratedKeys} 键 · 短语 ${gStats.phraseCount} 条 · 混淆 ${gStats.confusionCount} 组 · 轨迹样本 ${gStats.sampleCount} 条")
+            appendLine("联想统计：正强化搭配 ${aStats.boostCount} 条 · 误选降权 ${aStats.penaltyCount} 条 · 累计事件 ${aStats.totalEvents} 次")
+            appendLine()
+            appendLine("【1. 指腹落点偏移（单位：键宽，按样本数排序）】")
+            val flatOffsets = offsets.entries.flatMap { (bucket, map) ->
+                map.entries.map { (ch, off) -> Triple(bucket, ch, off) }
+            }.sortedByDescending { it.third.count }.take(12)
+            if (flatOffsets.isEmpty()) {
+                appendLine("暂无键位偏移记录（多确认几次滑行上屏后自动出现）")
+            } else {
+                flatOffsets.forEach { (bucket, ch, off) ->
+                    val bName = if (bucket == "l") "横" else "竖"
+                    val dirX = if (abs(off.dx) < 0.01f) "居中" else if (off.dx > 0f) "偏右${"%.2f".format(off.dx)}" else "偏左${"%.2f".format(-off.dx)}"
+                    val dirY = if (abs(off.dy) < 0.01f) "居中" else if (off.dy > 0f) "偏下${"%.2f".format(off.dy)}" else "偏上${"%.2f".format(-off.dy)}"
+                    appendLine("  [$bName] '$ch': $dirX, $dirY (${off.count}次)")
+                }
+            }
+            appendLine()
+            appendLine("【2. 滑行混淆纠正（坏码 → 真码）】")
+            val topConf = confusions.entries.sortedByDescending { it.value }.take(8)
+            if (topConf.isEmpty()) appendLine("  暂无记录")
+            else topConf.forEach { (k, c) ->
+                val parts = k.split('\t')
+                if (parts.size >= 3) appendLine("  ${parts[1]} → ${parts[2]} (${c}次)")
+            }
+            appendLine()
+            appendLine("【3. 个人高频整句/词组热库】")
+            val topPhrases = phrases.values.sortedWith(compareByDescending<PhraseEntry> { it.freq }.thenByDescending { it.lastUsedMs }).take(8)
+            if (topPhrases.isEmpty()) appendLine("  暂无记录")
+            else topPhrases.forEach { p -> appendLine("  ${p.text} [${p.code}] (×${p.freq})") }
+            appendLine()
+            appendLine("【4. 联想自递进提权搭配】")
+            if (assocBoosts.isEmpty()) appendLine("  暂无记录")
+            else assocBoosts.forEach { appendLine("  $it") }
+            if (assocPenalties.isNotEmpty()) {
+                appendLine()
+                appendLine("【5. 联想误选 / 局部改错降权】")
+                assocPenalties.forEach { appendLine("  $it") }
+            }
+        }.trimEnd()
     }
 
     private inline fun writeAtomic(file: File, content: () -> String) {

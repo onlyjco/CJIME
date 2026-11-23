@@ -950,7 +950,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         }
     }
 
-    private fun currentGlideLearningKey(): String {
+    internal fun currentGlideLearningKey(): String {
         val state = service.uiState.value
         val prefs = SettingsPreferences.getPrefsPublic(service)
         val ext = com.kingzcheung.xime.glide.ExternalGlideEncodings.parse(
@@ -961,7 +961,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         )?.doublePinyin?.id ?: "pinyin"
     }
 
-    private fun personalChineseGlideLearningActive(): Boolean =
+    internal fun personalChineseGlideLearningActive(): Boolean =
         !com.kingzcheung.xime.settings.IncognitoState.active && !service.isSecretEditor() &&
             SettingsPreferences.getPrefsPublic(service).getBoolean("personal_chinese_glide_learning", true)
 
@@ -2590,6 +2590,11 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         val autoSpace = state.pendingEnglishText.isNotEmpty() && !emailSuffix &&
             service.uiState.value.let { (it.isAsciiMode || it.inputProfile.typesLettersDirectly) && !it.inputTarget.isInternal } &&
             SettingsPreferences.getPrefsPublic(service).getBoolean(EnglishAutoSpace.PREF_KEY, false)
+        val leftCtxBeforeAssoc = service.predictionManager.lastCommittedText
+        val shownAssocSnapshot = state.associationCandidates
+        val pickedAssocWord = associationWordAt(state, index)
+        val isChineseAssocPick = !service.uiState.value.isAsciiMode && state.pendingEnglishText.isEmpty() &&
+            !emailSuffix && !state.isDigitPhraseList
         val accepted = commitAssociationSelection(state, index,
             commit = { text ->
                 service.commitTextAndPredict(text, isPaste = false,
@@ -2602,6 +2607,11 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
             },
             suffix = if (autoSpace) " " else "")
         if (!accepted) return false
+        if (isChineseAssocPick && !pickedAssocWord.isNullOrEmpty()) {
+            service.predictionManager.recordPickedChineseAssociation(
+                service.uiState.value.inputSessionId, leftCtxBeforeAssoc, pickedAssocWord, shownAssocSnapshot
+            )
+        }
         val pickedEnglish = if (state.pendingEnglishText.isNotEmpty() && !emailSuffix && !state.isDigitPhraseList) {
             associationWordAt(state, index)
         } else null
@@ -2849,6 +2859,9 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                     }
                 }
                 val associationsToRestore = previousAssociations.takeIf { result.inputText.isEmpty() }
+                if (result.inputText.isEmpty()) {
+                    com.kingzcheung.xime.glide.PersonalGlideCalibration.noteGlideDeleted(owner)
+                }
                 sendTransformedResult(result) {
                     if (associationsToRestore != null) restorePreviousAssociations(associationsToRestore)
                     if (service.calculatorEngine.isActive()) updateCalculatorCandidates()
@@ -2869,6 +2882,8 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
 
             // 4. 无候选也无编码：直接回删已上屏文本
             else -> {
+                com.kingzcheung.xime.glide.PersonalGlideCalibration.noteGlideDeleted(owner)
+                AssociationManager.noteAssociationDeleted(service, owner)
                 service.predictionManager.deleteLastChar()
 
                 var deletedBefore: Pair<String, String>? = null

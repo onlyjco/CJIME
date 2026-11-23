@@ -137,4 +137,45 @@ class PersonalGlideCalibrationTest {
         assertEquals(0, cleared.confusionCount)
         assertFalse(File(tempDir, "personal_glide_offsets.tsv").exists())
     }
+
+    @Test
+    fun severeDeviationDeleteAndManualRetypeStillCalibratesOriginalTrace() {
+        val trueCode = "wmjbtxwqkdmy"
+        val badDecode = "wmjbtk" // 严重偏离且长度差达 6 个键（> 3）
+        val (xs, ys, ts) = trace(trueCode, dxBiasUnits = 0.30f, dyBiasUnits = 0.0f)
+
+        PersonalGlideCalibration.noteDispatched(55L, flypy.id, "p", keyboard, xs, ys, ts, badDecode)
+        PersonalGlideCalibration.noteGlideDeleted(55L)
+        PersonalGlideCalibration.noteManualTypingAfterGlide(55L)
+        PersonalGlideCalibration.onCommitted(tempDir, 55L, flypy.id, trueCode, "我们今天下午去看电影")
+
+        val stats = PersonalGlideCalibration.stats(tempDir)
+        assertTrue("Expected severe-deviation delete+retype to calibrate keys, got ${stats.calibratedKeys}",
+            stats.calibratedKeys >= 6)
+        assertEquals(1, stats.confusionCount)
+        assertEquals(1, stats.sampleCount)
+    }
+
+    @Test
+    fun sentenceEditFeedbackUpdatesCalibrationAndDiagnosticReportRenders() {
+        val initialCode = "wmjbtxwqkdmi"
+        val (xs, ys, ts) = trace("wmjbtxwqkdmy")
+        PersonalGlideCalibration.noteDispatched(77L, flypy.id, "p", keyboard, xs, ys, ts, initialCode)
+        PersonalGlideCalibration.onSentenceEditApplied(
+            dir = tempDir,
+            sessionId = 77L,
+            schemaKey = flypy.id,
+            sentenceBefore = "我们今天下午去看电迷",
+            badPartCode = "dmi",
+            goodPartCode = "dmy",
+            sentenceAfter = "我们今天下午去看电影",
+        )
+        com.kingzcheung.xime.association.PersonalAssociationBooster.recordContinuation(tempDir, "去看", "电影")
+
+        val report = PersonalGlideCalibration.buildDiagnosticReport(tempDir)
+        assertTrue(report.contains("滑行与联想本机自递进报告"))
+        assertTrue(report.contains("wmjbtxwqkdmi → wmjbtxwqkdmy"))
+        assertTrue(report.contains("我们今天下午去看电影"))
+        assertTrue(report.contains("去看 → 电影"))
+    }
 }

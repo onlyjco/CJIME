@@ -913,6 +913,14 @@ object SettingsPreferences {
     fun setSmartPredictionEnabled(context: Context, enabled: Boolean) {
         getPrefs(context).edit().putBoolean(KEY_SMART_PREDICTION_ENABLED, enabled).apply()
     }
+
+    fun isPersonalAssociationLearningEnabled(context: Context): Boolean {
+        return getPrefs(context).getBoolean("personal_association_learning", true)
+    }
+
+    fun setPersonalAssociationLearningEnabled(context: Context, enabled: Boolean) {
+        getPrefs(context).edit().putBoolean("personal_association_learning", enabled).apply()
+    }
     
     
     

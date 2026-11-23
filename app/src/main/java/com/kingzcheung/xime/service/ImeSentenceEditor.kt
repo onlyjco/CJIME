@@ -2,6 +2,7 @@ package com.kingzcheung.xime.service
 
 import com.kingzcheung.xime.rime.RimeEngine
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 internal const val SENTENCE_CODE_HIGHLIGHT_COLOR = 0x663399ff
@@ -244,11 +245,34 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
     }
 
     fun apply(owner: SentenceEditSession, segments: List<RimeEngine.SentenceEditCandidate>, commit: Boolean, reply: (Boolean) -> Unit) {
+        val leftCtx = service.predictionManager.lastCommittedText
+        val schemaKey = service.keyRouter.currentGlideLearningKey()
+        val learnGlide = service.keyRouter.personalChineseGlideLearningActive()
         service.keyRouter.postRimeJob("sentence_edit_apply") {
             val result = if (current(owner)) service.rimeEngine.applySentenceEdit(owner.snapshot,
                 owner.start, owner.end, segments) else null
-            if (result != null) withContext(Dispatchers.Main) {
-                if (current(owner)) service.sessionController.updateUIWithResult(result)
+            if (result != null) {
+                val goodWord = segments.joinToString("") { it.text }
+                val goodCode = segments.joinToString("") { it.code }
+                val sentenceAfter = owner.sentence(goodWord)
+                if (goodWord != owner.originalWord || goodCode != owner.originalCode) {
+                    service.predictionManager.recordSentenceEditAssociationFeedback(
+                        leftCtx, owner.snapshot.sentence, owner.start, owner.end,
+                        owner.originalWord, goodWord, sentenceAfter
+                    )
+                    if (learnGlide) {
+                        val filesDir = service.filesDir
+                        service.serviceScope.launch(Dispatchers.IO) {
+                            com.kingzcheung.xime.glide.PersonalGlideCalibration.onSentenceEditApplied(
+                                filesDir, owner.inputSessionId, schemaKey,
+                                owner.snapshot.sentence, owner.originalCode, goodCode, sentenceAfter
+                            )
+                        }
+                    }
+                }
+                withContext(Dispatchers.Main) {
+                    if (current(owner)) service.sessionController.updateUIWithResult(result)
+                }
             }
             if (result != null && commit && result.candidates.isNotEmpty() && current(owner)) service.keyRouter.selectCandidateAsync(0)
             withContext(Dispatchers.Main) {

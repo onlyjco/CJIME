@@ -3,7 +3,9 @@ package com.kingzcheung.xime.ui.settings
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectHorizontalDragGestures
 import androidx.compose.foundation.layout.*
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.twotone.SwapHoriz
 import androidx.compose.material.icons.twotone.OpenWith
 import androidx.compose.material.icons.twotone.SpaceBar
@@ -234,9 +236,20 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                         })
                     HorizontalDivider()
                     var glideStats by remember { mutableStateOf(com.kingzcheung.xime.glide.PersonalGlideCalibration.stats(context.filesDir)) }
+                    var assocStats by remember { mutableStateOf(com.kingzcheung.xime.association.PersonalAssociationBooster.stats(context.filesDir)) }
+                    var assocLearning by remember { mutableStateOf(SettingsPreferences.isPersonalAssociationLearningEnabled(context)) }
                     var tuningGlide by remember { mutableStateOf(false) }
                     var showResetDialog by remember { mutableStateOf(false) }
+                    var showReportDialog by remember { mutableStateOf(false) }
+                    var reportText by remember { mutableStateOf("") }
                     val tuneScope = rememberCoroutineScope()
+                    SettingsToggleItem(Icons.TwoTone.Spellcheck, "全输入联想与局部改错自递进",
+                        "打字/滑行/局部改错的选词、删词和句内纠错反馈会本机重排后续所有联想候选",
+                        checked = assocLearning, onCheckedChange = {
+                            assocLearning = it
+                            SettingsPreferences.setPersonalAssociationLearningEnabled(context, it)
+                        })
+                    HorizontalDivider()
                     SettingsToggleItem(Icons.TwoTone.Gesture, "个人整句自递进校准",
                         "仅在本机记住按键偏移、常用连划整句与纠错习惯，不上传",
                         checked = settings.personalChineseGlideLearning, onCheckedChange = {
@@ -244,6 +257,53 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                         },
                         lockMessage = "需先打开「中文滑行」"
                             .takeIf { !settings.personalChineseGlideLearning && !settings.chineseGlideTyping })
+                    if (settings.personalChineseGlideLearning || assocLearning) {
+                        HorizontalDivider()
+                        SettingsItem(
+                            Icons.TwoTone.Spellcheck,
+                            "查看 / 导出自学习校准数据",
+                            "滑行 ${glideStats.calibratedKeys} 键 · 混淆 ${glideStats.confusionCount} 组 · 联想 ${assocStats.boostCount} 强化 / ${assocStats.penaltyCount} 降权",
+                            onClick = {
+                                tuneScope.launch(Dispatchers.IO) {
+                                    val report = com.kingzcheung.xime.glide.PersonalGlideCalibration.buildDiagnosticReport(context.filesDir)
+                                    val g = com.kingzcheung.xime.glide.PersonalGlideCalibration.stats(context.filesDir)
+                                    val a = com.kingzcheung.xime.association.PersonalAssociationBooster.stats(context.filesDir)
+                                    kotlinx.coroutines.withContext(Dispatchers.Main) {
+                                        glideStats = g
+                                        assocStats = a
+                                        reportText = report
+                                        showReportDialog = true
+                                    }
+                                }
+                            },
+                        )
+                    }
+                    if (showReportDialog) {
+                        AlertDialog(
+                            onDismissRequest = { showReportDialog = false },
+                            title = { Text("本机自递进校准数据") },
+                            text = {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 360.dp)
+                                        .verticalScroll(rememberScrollState())
+                                ) {
+                                    Text(reportText, style = MaterialTheme.typography.bodySmall)
+                                }
+                            },
+                            confirmButton = {
+                                TextButton(onClick = {
+                                    val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                                    cm?.setPrimaryClip(android.content.ClipData.newPlainText("CJIME 自学习报告", reportText))
+                                    android.widget.Toast.makeText(context, "已复制校准报告到剪贴板", android.widget.Toast.LENGTH_SHORT).show()
+                                }) { Text("复制报告") }
+                            },
+                            dismissButton = {
+                                TextButton(onClick = { showReportDialog = false }) { Text("关闭") }
+                            },
+                        )
+                    }
                     if (settings.personalChineseGlideLearning) {
                         HorizontalDivider()
                         val subtitle = if (tuningGlide) "正在回放历史滑行样本并调优…"
@@ -295,20 +355,22 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                         HorizontalDivider()
                         SettingsItem(
                             Icons.TwoTone.ContentCut,
-                            "重置个人滑行校准数据",
-                            "清除本机记住的按键偏移、个人短语与历史样本",
+                            "重置个人自学习校准数据",
+                            "清除本机记住的滑行按键偏移、短语样本与联想自递进搭配",
                             onClick = { showResetDialog = true },
                         )
                         if (showResetDialog) {
                             AlertDialog(
                                 onDismissRequest = { showResetDialog = false },
-                                title = { Text("清空个人滑行校准数据？") },
-                                text = { Text("将清除本机记住的按键偏移、个人短语与历史样本，恢复默认识别权重。") },
+                                title = { Text("清空个人自学习校准数据？") },
+                                text = { Text("将清除本机记住的按键偏移、个人滑行短语、历史样本以及联想/局部改错自递进记录，恢复默认权重。") },
                                 confirmButton = {
                                     TextButton(onClick = {
                                         showResetDialog = false
                                         com.kingzcheung.xime.glide.PersonalGlideCalibration.clear(context.filesDir)
+                                        com.kingzcheung.xime.association.PersonalAssociationBooster.clear(context.filesDir)
                                         glideStats = com.kingzcheung.xime.glide.PersonalGlideCalibration.stats(context.filesDir)
+                                        assocStats = com.kingzcheung.xime.association.PersonalAssociationBooster.stats(context.filesDir)
                                     }) { Text("清空") }
                                 },
                                 dismissButton = { TextButton(onClick = { showResetDialog = false }) { Text("取消") } },

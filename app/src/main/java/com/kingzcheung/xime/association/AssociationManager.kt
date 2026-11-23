@@ -112,6 +112,63 @@ object AssociationManager {
     
     fun isInitialized(): Boolean = fusionEngine != null
     
+    fun recordPickedAssociation(
+        ctx: Context,
+        sessionId: Long,
+        contextText: String,
+        pickedWord: String,
+        shownWords: List<String>,
+    ) {
+        if (com.kingzcheung.xime.settings.IncognitoState.active) return
+        if (!SettingsPreferences.isPersonalAssociationLearningEnabled(ctx)) return
+        val dir = (ctx.applicationContext ?: ctx).filesDir
+        PersonalAssociationBooster.recordSelection(dir, sessionId, contextText, pickedWord, shownWords)
+    }
+
+    fun recordIgnoredAssociation(
+        ctx: Context,
+        shownContext: String,
+        shownWords: List<String>,
+        actualCommittedWord: String,
+    ) {
+        if (com.kingzcheung.xime.settings.IncognitoState.active) return
+        if (!SettingsPreferences.isPersonalAssociationLearningEnabled(ctx)) return
+        val dir = (ctx.applicationContext ?: ctx).filesDir
+        PersonalAssociationBooster.onShownAndCommittedOther(dir, shownContext, shownWords, actualCommittedWord)
+    }
+
+    fun recordPersonalContinuation(ctx: Context, contextText: String, committedWord: String, weight: Float = 1.0f) {
+        if (com.kingzcheung.xime.settings.IncognitoState.active) return
+        if (!SettingsPreferences.isPersonalAssociationLearningEnabled(ctx)) return
+        val dir = (ctx.applicationContext ?: ctx).filesDir
+        PersonalAssociationBooster.recordContinuation(dir, contextText, committedWord, weight)
+    }
+
+    fun noteAssociationDeleted(ctx: Context, sessionId: Long) {
+        if (com.kingzcheung.xime.settings.IncognitoState.active) return
+        if (!SettingsPreferences.isPersonalAssociationLearningEnabled(ctx)) return
+        val dir = (ctx.applicationContext ?: ctx).filesDir
+        PersonalAssociationBooster.noteAssociationUndone(dir, sessionId)
+    }
+
+    fun recordSentenceEditFeedback(
+        ctx: Context,
+        leftContext: String,
+        sentenceBefore: String,
+        start: Int,
+        end: Int,
+        badWord: String,
+        goodWord: String,
+        sentenceAfter: String,
+    ) {
+        if (com.kingzcheung.xime.settings.IncognitoState.active) return
+        if (!SettingsPreferences.isPersonalAssociationLearningEnabled(ctx)) return
+        val dir = (ctx.applicationContext ?: ctx).filesDir
+        PersonalAssociationBooster.onSentenceEditCorrection(
+            dir, leftContext, sentenceBefore, start, end, badWord, goodWord, sentenceAfter
+        )
+    }
+
     @Synchronized fun release() {
         generation.incrementAndGet()
         fusionEngine = null

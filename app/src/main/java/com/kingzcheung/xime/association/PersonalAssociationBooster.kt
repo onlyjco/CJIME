@@ -1,0 +1,391 @@
+package com.kingzcheung.xime.association
+
+import java.io.File
+import kotlin.math.ln
+import kotlin.math.max
+import kotlin.math.min
+
+/**
+ * 全输入模式通用的本机联想自递进重排器（严格保存在 [filesDir]，不上传网络）：
+ * 1. 按整词/词尾（1～4 字）上下文记录正反馈，包括点选联想、整句连续提交与「局部改错」改对的新词；
+ * 2. 对明确负反馈施压降权：忽略首选直接重打、选了联想又立即退格删除、「局部改错」被替换掉的原错词；
+ * 3. 在 [NgramFusionEngine.fuseCandidates] 出口联合重排，并可直接把高置信个人接续顶入候选。
+ */
+object PersonalAssociationBooster {
+    private const val BOOSTS_FILE = "personal_assoc_boosts.tsv"
+    private const val PENALTIES_FILE = "personal_assoc_penalties.tsv"
+    private const val MAX_BOOSTS = 4000
+    private const val MAX_PENALTIES = 1500
+    private const val UNDO_WINDOW_MS = 10_000L
+
+    data class Entry(
+        val ctx: String,
+        val word: String,
+        var score: Float,
+        var count: Int,
+        var lastUsedMs: Long,
+    )
+
+    data class Stats(
+        val boostCount: Int,
+        val penaltyCount: Int,
+        val totalEvents: Int,
+    )
+
+    private data class RecentPick(
+        val sessionId: Long,
+        val context: String,
+        val word: String,
+        val timestampMs: Long,
+    )
+
+    @Volatile private var loadedDir: String? = null
+    private val boosts = LinkedHashMap<String, Entry>()
+    private val penalties = LinkedHashMap<String, Entry>()
+    private val boostsByCtx = HashMap<String, ArrayList<Entry>>()
+    private val penaltiesByCtx = HashMap<String, ArrayList<Entry>>()
+    @Volatile private var recentPick: RecentPick? = null
+
+    @Synchronized
+    fun ensureLoaded(dir: File) {
+        val path = dir.absolutePath
+        if (loadedDir == path) return
+        loadedDir = path
+        boosts.clear()
+        penalties.clear()
+        boostsByCtx.clear()
+        penaltiesByCtx.clear()
+        loadEntries(File(dir, BOOSTS_FILE), boosts, boostsByCtx)
+        loadEntries(File(dir, PENALTIES_FILE), penalties, penaltiesByCtx)
+    }
+
+    @Synchronized
+    fun stats(dir: File): Stats {
+        ensureLoaded(dir)
+        val events = boosts.values.sumOf { it.count } + penalties.values.sumOf { it.count }
+        return Stats(boosts.size, penalties.size, events)
+    }
+
+    @Synchronized
+    fun clear(dir: File) {
+        loadedDir = dir.absolutePath
+        boosts.clear()
+        penalties.clear()
+        boostsByCtx.clear()
+        penaltiesByCtx.clear()
+        recentPick = null
+        File(dir, BOOSTS_FILE).delete()
+        File(dir, PENALTIES_FILE).delete()
+    }
+
+    @Synchronized
+    fun recordContinuation(dir: File, contextText: String, nextWord: String, weight: Float = 1.0f) {
+        ensureLoaded(dir)
+        val cleanWord = cleanChineseWord(nextWord)
+        if (cleanWord.isEmpty() || weight <= 0f) return
+        val contexts = trailingContexts(contextText)
+        if (contexts.isEmpty()) return
+        val now = System.currentTimeMillis()
+        var boostChanged = false
+        var penaltyChanged = false
+        for (ctx in contexts) {
+            boostChanged = addBoostLocked(ctx, cleanWord, weight, now) || boostChanged
+            penaltyChanged = decayPenaltyLocked(ctx, cleanWord, 0.5f) || penaltyChanged
+        }
+        if (boostChanged) saveEntries(File(dir, BOOSTS_FILE), boosts)
+        if (penaltyChanged) saveEntries(File(dir, PENALTIES_FILE), penalties)
+    }
+
+    @Synchronized
+    fun recordSelection(
+        dir: File,
+        sessionId: Long,
+        contextText: String,
+        pickedWord: String,
+        shownWords: List<String>,
+    ) {
+        ensureLoaded(dir)
+        val cleanWord = cleanChineseWord(pickedWord)
+        if (cleanWord.isEmpty()) return
+        val contexts = trailingContexts(contextText)
+        if (contexts.isEmpty()) return
+        val now = System.currentTimeMillis()
+        val pickedRank = shownWords.indexOf(pickedWord)
+        val positiveWeight = if (pickedRank > 0) 2.2f else 1.4f
+        var boostChanged = false
+        var penaltyChanged = false
+        for (ctx in contexts) {
+            boostChanged = addBoostLocked(ctx, cleanWord, positiveWeight, now) || boostChanged
+            penaltyChanged = decayPenaltyLocked(ctx, cleanWord, 0.4f) || penaltyChanged
+            if (pickedRank > 0) {
+                val skippedTop = cleanChineseWord(shownWords.firstOrNull().orEmpty())
+                if (skippedTop.isNotEmpty() && skippedTop != cleanWord) {
+                    penaltyChanged = addPenaltyLocked(ctx, skippedTop, 0.45f, now) || penaltyChanged
+                }
+            }
+        }
+        recentPick = RecentPick(sessionId, contextText, cleanWord, now)
+        if (boostChanged) saveEntries(File(dir, BOOSTS_FILE), boosts)
+        if (penaltyChanged) saveEntries(File(dir, PENALTIES_FILE), penalties)
+    }
+
+    @Synchronized
+    fun onShownAndCommittedOther(
+        dir: File,
+        shownContext: String,
+        shownWords: List<String>,
+        committedWord: String,
+    ) {
+        ensureLoaded(dir)
+        val actual = cleanChineseWord(committedWord)
+        if (actual.isEmpty()) return
+        val contexts = trailingContexts(shownContext)
+        if (contexts.isEmpty()) return
+        val now = System.currentTimeMillis()
+        val topShown = shownWords.asSequence()
+            .map(::cleanChineseWord)
+            .filter { it.isNotEmpty() && it != actual }
+            .distinct()
+            .take(2)
+            .toList()
+        var boostChanged = false
+        var penaltyChanged = false
+        for (ctx in contexts) {
+            boostChanged = addBoostLocked(ctx, actual, 1.3f, now) || boostChanged
+            for (ignored in topShown) {
+                if (ignored !in actual) {
+                    penaltyChanged = addPenaltyLocked(ctx, ignored, 0.28f, now) || penaltyChanged
+                }
+            }
+        }
+        if (boostChanged) saveEntries(File(dir, BOOSTS_FILE), boosts)
+        if (penaltyChanged) saveEntries(File(dir, PENALTIES_FILE), penalties)
+    }
+
+    @Synchronized
+    fun noteAssociationUndone(dir: File, sessionId: Long) {
+        ensureLoaded(dir)
+        val pick = recentPick ?: return
+        if (pick.sessionId != sessionId) return
+        val now = System.currentTimeMillis()
+        if (now - pick.timestampMs > UNDO_WINDOW_MS) {
+            recentPick = null
+            return
+        }
+        recentPick = null
+        val contexts = trailingContexts(pick.context)
+        if (contexts.isEmpty()) return
+        var penaltyChanged = false
+        for (ctx in contexts) {
+            penaltyChanged = addPenaltyLocked(ctx, pick.word, 1.8f, now) || penaltyChanged
+        }
+        if (penaltyChanged) saveEntries(File(dir, PENALTIES_FILE), penalties)
+    }
+
+    /**
+     * 直接复用「局部改错」信号：把原错词在该上文下强力降权，把改对的新词强力提权，
+     * 并学习「新词 → 句中后续部分」的真实整词搭配。
+     */
+    @Synchronized
+    fun onSentenceEditCorrection(
+        dir: File,
+        leftContext: String,
+        sentenceBefore: String,
+        start: Int,
+        end: Int,
+        badWord: String,
+        goodWord: String,
+        sentenceAfter: String,
+    ) {
+        ensureLoaded(dir)
+        val prefix = leftContext + sentenceBefore.take(start.coerceIn(0, sentenceBefore.length))
+        val cleanBad = cleanChineseWord(badWord)
+        val cleanGood = cleanChineseWord(goodWord)
+        if (cleanGood.isEmpty() && cleanBad.isEmpty()) return
+
+        val now = System.currentTimeMillis()
+        var boostChanged = false
+        var penaltyChanged = false
+        val editContexts = trailingContexts(prefix)
+        for (ctx in editContexts) {
+            if (cleanBad.isNotEmpty() && cleanBad != cleanGood) {
+                penaltyChanged = addPenaltyLocked(ctx, cleanBad, 2.0f, now) || penaltyChanged
+            }
+            if (cleanGood.isNotEmpty()) {
+                boostChanged = addBoostLocked(ctx, cleanGood, 2.8f, now) || boostChanged
+                penaltyChanged = decayPenaltyLocked(ctx, cleanGood, 0.25f) || penaltyChanged
+            }
+        }
+        // 顺带学习整句里「改对的词 → 紧接其后的词尾」，补强长词组衔接。
+        val afterOffset = (start + goodWord.length).coerceIn(0, sentenceAfter.length)
+        val tailAfterGood = cleanChineseWord(sentenceAfter.substring(afterOffset).take(4))
+        if (cleanGood.isNotEmpty() && tailAfterGood.isNotEmpty()) {
+            for (ctx in trailingContexts(cleanGood)) {
+                boostChanged = addBoostLocked(ctx, tailAfterGood, 1.8f, now) || boostChanged
+            }
+        }
+        if (boostChanged) saveEntries(File(dir, BOOSTS_FILE), boosts)
+        if (penaltyChanged) saveEntries(File(dir, PENALTIES_FILE), penalties)
+    }
+
+    /**
+     * 将本机个人联想权重叠加到 [NgramFusionEngine.fuseCandidates] 的概率分中。
+     * 按上下文长度 1..4 字逐层累加，越长匹配权重越高；高置信个人专属搭配也能主动进榜。
+     */
+    @Synchronized
+    fun applyToCandidates(dir: File, contextText: String, baseCandidates: MutableMap<String, Float>) {
+        ensureLoaded(dir)
+        if (boosts.isEmpty() && penalties.isEmpty()) return
+        val contexts = trailingContexts(contextText)
+        if (contexts.isEmpty()) return
+
+        for (ctx in contexts) {
+            val weight = contextWeight(ctx.length)
+            boostsByCtx[ctx]?.forEach { entry ->
+                val bonus = weight * ln(1.0 + entry.score).toFloat()
+                val existing = baseCandidates[entry.word]
+                if (existing != null) {
+                    baseCandidates[entry.word] = existing + bonus
+                } else if (entry.score >= 1.25f) {
+                    // 明确点选/局部改错/两次以上自然连续使用过的个人搭配，可直接补充进联想候选池。
+                    baseCandidates[entry.word] = bonus * 0.92f
+                }
+            }
+            penaltiesByCtx[ctx]?.forEach { entry ->
+                val existing = baseCandidates[entry.word] ?: return@forEach
+                val penalty = weight * 1.15f * ln(1.0 + entry.score).toFloat()
+                baseCandidates[entry.word] = (existing - penalty).coerceAtLeast(0.0001f)
+            }
+        }
+    }
+
+    @Synchronized
+    fun reportLines(dir: File, limit: Int = 10): Pair<List<String>, List<String>> {
+        ensureLoaded(dir)
+        val topBoosts = boosts.values
+            .sortedWith(compareByDescending<Entry> { it.score }.thenByDescending { it.lastUsedMs })
+            .take(limit)
+            .map { "${it.ctx} → ${it.word}（+${"%.1f".format(it.score)} / ${it.count}次）" }
+        val topPenalties = penalties.values
+            .sortedWith(compareByDescending<Entry> { it.score }.thenByDescending { it.lastUsedMs })
+            .take(limit)
+            .map { "${it.ctx} ✕ ${it.word}（-${"%.1f".format(it.score)} / ${it.count}次）" }
+        return topBoosts to topPenalties
+    }
+
+    private fun contextWeight(len: Int): Float = when (len) {
+        1 -> 0.14f
+        2 -> 0.24f
+        3 -> 0.30f
+        else -> 0.35f
+    }
+
+    private fun trailingContexts(contextText: String): List<String> {
+        val tail = contextText.takeLastWhile { isCjk(it) }.takeLast(4)
+        if (tail.isEmpty()) return emptyList()
+        return (tail.length downTo 1).map { len -> tail.substring(tail.length - len) }
+    }
+
+    private fun cleanChineseWord(text: String): String =
+        text.trim().filter(::isCjk).take(12)
+
+    private fun isCjk(c: Char): Boolean = c in '\u4e00'..'\u9fff'
+
+    private fun addBoostLocked(ctx: String, word: String, delta: Float, now: Long): Boolean {
+        val k = "$ctx\t$word"
+        val cur = boosts[k]
+        if (cur != null) {
+            cur.score = min(40f, cur.score + delta)
+            cur.count += 1
+            cur.lastUsedMs = now
+        } else {
+            val e = Entry(ctx, word, delta, 1, now)
+            boosts[k] = e
+            boostsByCtx.getOrPut(ctx) { ArrayList(4) }.add(e)
+            trimMapLocked(boosts, boostsByCtx, MAX_BOOSTS)
+        }
+        return true
+    }
+
+    private fun addPenaltyLocked(ctx: String, word: String, delta: Float, now: Long): Boolean {
+        val k = "$ctx\t$word"
+        val cur = penalties[k]
+        if (cur != null) {
+            cur.score = min(30f, cur.score + delta)
+            cur.count += 1
+            cur.lastUsedMs = now
+        } else {
+            val e = Entry(ctx, word, delta, 1, now)
+            penalties[k] = e
+            penaltiesByCtx.getOrPut(ctx) { ArrayList(4) }.add(e)
+            trimMapLocked(penalties, penaltiesByCtx, MAX_PENALTIES)
+        }
+        return true
+    }
+
+    private fun decayPenaltyLocked(ctx: String, word: String, factor: Float): Boolean {
+        val k = "$ctx\t$word"
+        val cur = penalties[k] ?: return false
+        cur.score *= factor
+        if (cur.score < 0.25f) {
+            penalties.remove(k)
+            penaltiesByCtx[ctx]?.remove(cur)
+        }
+        return true
+    }
+
+    private fun trimMapLocked(
+        map: LinkedHashMap<String, Entry>,
+        byCtx: HashMap<String, ArrayList<Entry>>,
+        cap: Int,
+    ) {
+        if (map.size <= cap) return
+        val victims = map.entries.sortedBy { it.value.score * 0.2 + it.value.lastUsedMs / 86_400_000.0 }
+            .take(map.size - cap)
+        for ((k, e) in victims) {
+            map.remove(k)
+            byCtx[e.ctx]?.remove(e)
+        }
+    }
+
+    private fun loadEntries(
+        file: File,
+        map: LinkedHashMap<String, Entry>,
+        byCtx: HashMap<String, ArrayList<Entry>>,
+    ) {
+        if (!file.isFile) return
+        runCatching {
+            file.forEachLine(Charsets.UTF_8) { line ->
+                val parts = line.split('\t')
+                if (parts.size < 5) return@forEachLine
+                val ctx = parts[0]
+                val word = parts[1]
+                val score = parts[2].toFloatOrNull() ?: return@forEachLine
+                val count = parts[3].toIntOrNull() ?: 1
+                val ts = parts[4].toLongOrNull() ?: 0L
+                if (ctx.isEmpty() || word.isEmpty()) return@forEachLine
+                val e = Entry(ctx, word, score, count, ts)
+                map["$ctx\t$word"] = e
+                byCtx.getOrPut(ctx) { ArrayList(4) }.add(e)
+            }
+        }
+    }
+
+    private fun saveEntries(file: File, map: Map<String, Entry>) {
+        runCatching {
+            file.parentFile?.mkdirs()
+            val text = buildString {
+                for (e in map.values) {
+                    append(e.ctx).append('\t')
+                        .append(e.word).append('\t')
+                        .append(e.score).append('\t')
+                        .append(e.count).append('\t')
+                        .append(e.lastUsedMs).append('\n')
+                }
+            }
+            val tmp = File(file.parentFile, "${file.name}.tmp")
+            tmp.writeText(text, Charsets.UTF_8)
+            tmp.renameTo(file)
+        }
+    }
+}

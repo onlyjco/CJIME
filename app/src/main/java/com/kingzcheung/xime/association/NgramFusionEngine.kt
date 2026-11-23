@@ -104,6 +104,13 @@ class NgramFusionEngine(private val context: Context, private val userNgramCache
             allCandidates[word] = (allCandidates[word] ?: 0f) + USER_WEIGHT * confidence * userScore
         }
 
+        if (com.kingzcheung.xime.settings.SettingsPreferences.isPersonalAssociationLearningEnabled(this.context)) {
+            runCatching {
+                val dir = (this.context.applicationContext ?: this.context).filesDir
+                PersonalAssociationBooster.applyToCandidates(dir, context, allCandidates)
+            }
+        }
+
         return allCandidates.map { (word, score) ->
             AssociationCandidate(word, score)
         }.sortedByDescending { it.score }
