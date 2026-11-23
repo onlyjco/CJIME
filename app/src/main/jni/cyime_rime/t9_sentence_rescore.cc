@@ -322,11 +322,19 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
     // With stray initials (Syllabifier::MarkStrayInitials) the typed reading stands only through initials weighed as
     // slips, so the corrected n-best is chosen by the word model too and leads (清晨 over 清真 in 是清晨的一杯).
     if (q.syllables.cyime_stray_initials && q.enable_correction && !slip_only) {
+      // t9/extra_corrections_pay_margin: every correction after a sentence's first costs `slip_margin` here too.
+      // Without it a sentence that also left out a letter pressed twice led for being a word shorter
+      // (nizhdjia...butinghuaa: 不听话 over 不听话啊; burannixanle: 不然闲了 over 不然你惨了).
+      const bool pay = slip_margin > 0 && q.translator && q.translator->extra_corrections_pay_margin();
       an<Sentence> fixed;
       double fixed_score = -std::numeric_limits<double>::infinity();
       for (const auto& sentence : *sentences) {
         if (!corrected(sentence)) continue;
-        const double value = total(*sentence);
+        double value = total(*sentence);
+        if (pay) {
+          const string marks = sentence->correction_marks();
+          value -= slip_margin * std::max<std::ptrdiff_t>(0, std::count(marks.begin(), marks.end(), '=') - 1);
+        }
         if (value > fixed_score) { fixed_score = value; fixed = sentence; }
       }
       if (fixed) {
