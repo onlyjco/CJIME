@@ -91,7 +91,7 @@ jobs:
           api-level: 29
           arch: x86_64
           profile: pixel_3a
-          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.kingzcheung.xime.ui.LayoutGeometryGateTest,com.kingzcheung.xime.ui.PanelLayoutAuditTest,com.kingzcheung.xime.ui.ExpandedCandidateLayoutTest,com.kingzcheung.xime.ui.OfflineEditionTest,com.kingzcheung.xime.ui.VisualStyleIntegrationTest,com.kingzcheung.xime.ui.IconAppearanceTest --no-daemon
+          script: ./gradlew :app:connectedDebugAndroidTest -Pandroid.testInstrumentationRunnerArguments.class=com.kingzcheung.xime.ui.LayoutGeometryGateTest,com.kingzcheung.xime.ui.PanelLayoutAuditTest,com.kingzcheung.xime.ui.ExpandedCandidateLayoutTest,com.kingzcheung.xime.ui.OfflineEditionTest,com.kingzcheung.xime.ui.VisualStyleIntegrationTest --no-daemon
 
       - name: Keep layout gate reports
         if: always()
@@ -114,7 +114,7 @@ jobs:
           api-level: 29
           arch: x86_64
           profile: pixel_3a
-          script: ./gradlew :app:connectedDebugAndroidTest -PbundleModels=true -PpythonExecutable=python3 -Pandroid.testInstrumentationRunnerArguments.class=com.kingzcheung.xime.ui.LayoutGeometryGateTest,com.kingzcheung.xime.ui.PanelLayoutAuditTest,com.kingzcheung.xime.ui.ExpandedCandidateLayoutTest,com.kingzcheung.xime.ui.OfflineEditionTest,com.kingzcheung.xime.ui.VisualStyleIntegrationTest,com.kingzcheung.xime.ui.IconAppearanceTest --no-daemon
+          script: ./gradlew :app:connectedDebugAndroidTest -PbundleModels=true -PpythonExecutable=python3 -Pandroid.testInstrumentationRunnerArguments.class=com.kingzcheung.xime.ui.LayoutGeometryGateTest,com.kingzcheung.xime.ui.PanelLayoutAuditTest,com.kingzcheung.xime.ui.ExpandedCandidateLayoutTest,com.kingzcheung.xime.ui.OfflineEditionTest,com.kingzcheung.xime.ui.VisualStyleIntegrationTest --no-daemon
 
       - name: Build offline Release APKs
         run: |
