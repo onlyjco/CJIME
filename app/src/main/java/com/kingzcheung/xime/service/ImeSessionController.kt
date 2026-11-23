@@ -85,7 +85,8 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             profile.mode != com.kingzcheung.xime.settings.InputMode.KEYBOARD ||
             state.inputText.length !in 4..80 || !pauseInputLetters(state.inputText, merged14)) return
         // 停顿后只补漏键和打反两种读法（双拼、14 键还有多键）：都关了就不再算一遍（引擎也不查，这里省掉这次调用）。
-        if (!pauseLookupWanted(doublePinyin || merged14, SettingsPreferences.getPrefsPublic(service).getBoolean("neighbor_correction", true)) {
+        // 14 键全拼停一下后引擎还要拿词组模型拼的整句和首选比一次（方案里的 t9/model_sentences_on_pause），纠错都关了也要算。
+        if (!merged14 && !pauseLookupWanted(doublePinyin || merged14, SettingsPreferences.getPrefsPublic(service).getBoolean("neighbor_correction", true)) {
                 com.kingzcheung.xime.settings.SpellingPatches.typo(service, it)
             }) return
         val length = state.inputText.length
