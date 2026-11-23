@@ -400,7 +400,11 @@ fun KeyboardView(
     }
     if (backgroundMotion != null) SideEffect { backgroundMotion.covered = candidatePageExpanded || overlayVisible }
     // Compose background and keys into the same layer before applying opacity.
-    val contentModifier = if (state.handwritingExpanded) previewModifier else previewModifier
+    // 动态背景开着：键盘本体单独一层。背景每动一帧，导航条、玻璃键这些按动态背景画的地方要重画，
+    // 每次都会让整个界面的根重新录一遍；不在这层里时整块键盘（每个键的底、阴影）都跟着重录（11-23 平板：每帧主线程约 10 ms）。
+    // 单独一层后根只录一句「画这一层」，这层本身不动就不重录。不改样子：没有透明度、不离屏。
+    val motionIsolation = if (backgroundMotion != null) Modifier.graphicsLayer() else Modifier
+    val contentModifier = if (state.handwritingExpanded) previewModifier else motionIsolation.then(previewModifier)
         .keyboardBackground(themeScheme.keyboardBackground, state.isDarkTheme, keyboardBgColor,
             imageSlot = backgroundImageSlot)
         .splitGapCutout(splitKeyboardGap)

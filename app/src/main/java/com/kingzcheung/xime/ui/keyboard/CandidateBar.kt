@@ -1551,7 +1551,7 @@ private fun Modifier.glassStripBoost(alpha: Float): Modifier {
     return onGloballyPositioned {
         origin = it.positionInWindow()
         backdrop?.reportSurfaceTop?.invoke(surfaceKey, origin.y)
-    }.drawBehind {
+    }.then(com.kingzcheung.xime.ui.theme.motionRedrawIsolation(backdrop?.motion)).drawBehind {
         drawUnderTopFeather(feather?.top?.value?.minus(origin.y), feather?.heightPx ?: 0f) {
             val image = backdrop?.image?.takeIf { backdrop.frame.size.width > 0 && backdrop.frame.size.height > 0 }
             if (image == null) drawRect(fallback.copy(alpha = 1f), alpha = alpha)
