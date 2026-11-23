@@ -90,6 +90,7 @@ object PersonalGlideCalibration {
         var deletedAtMs: Long = 0L,
         var hadManualEditAfterDelete: Boolean = false,
         var committedText: String = "",
+        var learnedConsumed: Boolean = false,
     )
 
     private val phraseRevisionCounter = AtomicLong(1L)
@@ -280,12 +281,14 @@ object PersonalGlideCalibration {
         badPartCode: String,
         goodPartCode: String,
         sentenceAfter: String,
+        fullInputCode: String = "",
     ) {
         ensureLoaded(dir)
-        val candidate = listOfNotNull(pendingGlide, lastCommittedGlide).firstOrNull { g ->
-            g.sessionId == sessionId && g.schemaKey == schemaKey &&
-                (g.committedText.isEmpty() || g.committedText in sentenceBefore || sentenceBefore in g.committedText)
-        } ?: return
+        val candidate = (listOfNotNull(pendingGlide, lastCommittedGlide) + recentPendingGlides.reversed())
+            .firstOrNull { g ->
+                g.sessionId == sessionId && g.schemaKey == schemaKey && !g.learnedConsumed &&
+                    (g.committedText.isEmpty() || g.committedText in sentenceBefore || sentenceBefore in g.committedText)
+            } ?: return
         val cleanBadPart = badPartCode.replace("'", "").lowercase().filter { it in 'a'..'z' }
         val cleanGoodPart = goodPartCode.replace("'", "").lowercase().filter { it in 'a'..'z' }
         val baseCode = candidate.code.replace("'", "").lowercase().filter { it in 'a'..'z' }
@@ -298,18 +301,28 @@ object PersonalGlideCalibration {
             cleanGoodPart
         }
         if (correctedCode.length < 2) return
+        val cleanFullInput = fullInputCode.replace("'", "").lowercase().filter { it in 'a'..'z' }
+        val isTailOnly = cleanFullInput.length > baseCode.length && cleanFullInput.endsWith(baseCode)
+        val sampleText = if (isTailOnly && schemaKey != "pinyin") {
+            val expectedChars = max(1, (correctedCode.length + 1) / 2)
+            if (sentenceAfter.length > expectedChars) sentenceAfter.takeLast(expectedChars) else sentenceAfter
+        } else {
+            sentenceAfter
+        }
         if (baseCode != correctedCode) {
             recordConfusionLocked(dir, schemaKey, baseCode, correctedCode)
         }
         if (abs(correctedCode.length - baseCode.length) <= maxOf(5, (correctedCode.length + 1) / 2)) {
             calibrateOffsetsFromTraceLocked(dir, candidate.bucket, candidate.keyboard, candidate.xs, candidate.ys, correctedCode)
-            recordSampleLocked(dir, schemaKey, candidate.bucket, candidate.keyboard, correctedCode, sentenceAfter,
+            recordSampleLocked(dir, schemaKey, candidate.bucket, candidate.keyboard, correctedCode, sampleText,
                 candidate.xs, candidate.ys, candidate.ts,
                 badCode = if (baseCode != correctedCode) baseCode else "", source = "sentence_edit")
         }
-        recordPhraseLocked(dir, schemaKey, correctedCode, sentenceAfter)
+        recordPhraseLocked(dir, schemaKey, correctedCode, sampleText)
         candidate.code = correctedCode
-        candidate.committedText = sentenceAfter
+        candidate.committedText = sampleText
+        candidate.learnedConsumed = true
+        recentPendingGlides.remove(candidate)
     }
 
     @Synchronized
@@ -317,7 +330,7 @@ object PersonalGlideCalibration {
         ensureLoaded(dir)
         val cleanChosen = chosenCode.replace("'", "").lowercase()
         if (cleanChosen.isEmpty() || chosenText.isEmpty()) return
-        val pending = pendingGlide?.takeIf { it.sessionId == sessionId && it.schemaKey == schemaKey }
+        val pending = pendingGlide?.takeIf { it.sessionId == sessionId && it.schemaKey == schemaKey && !it.learnedConsumed }
         if (pending != null) {
             val bad = pending.code.replace("'", "").lowercase()
             if (bad.isNotEmpty() && bad != cleanChosen) {
@@ -328,6 +341,8 @@ object PersonalGlideCalibration {
                 pending.xs, pending.ys, pending.ts, badCode = if (bad != cleanChosen) bad else "", source = "alt")
             pending.code = cleanChosen
             pending.committedText = chosenText
+            pending.learnedConsumed = true
+            recentPendingGlides.remove(pending)
         }
         recordPhraseLocked(dir, schemaKey, cleanChosen, chosenText)
     }
@@ -340,7 +355,6 @@ object PersonalGlideCalibration {
             pendingGlide = null
             return
         }
-        recordPhraseLocked(dir, schemaKey, cleanCode, committedText)
 
         val now = System.currentTimeMillis()
         val matchedFromQueue = recentPendingGlides.lastOrNull { g ->
@@ -355,7 +369,12 @@ object PersonalGlideCalibration {
             }
         if (matchedFromQueue != null) recentPendingGlides.remove(matchedFromQueue)
         if (pending === pendingGlide) pendingGlide = null
-        if (pending == null || pending.sessionId != sessionId || pending.schemaKey != schemaKey) return
+        val alreadyLearnedSameTail = pending != null && pending.learnedConsumed &&
+            pending.code.replace("'", "").lowercase() == cleanCode
+        if (!alreadyLearnedSameTail) {
+            recordPhraseLocked(dir, schemaKey, cleanCode, committedText)
+        }
+        if (pending == null || pending.sessionId != sessionId || pending.schemaKey != schemaKey || pending.learnedConsumed) return
 
         val pendingClean = pending.code.replace("'", "").lowercase()
         if (pending.deletedAtMs > 0L) {

@@ -331,10 +331,10 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     private val hardwareCapsLockState = mutableStateOf(false)
     private val quickSendItemsState = mutableStateOf<List<com.kingzcheung.xime.clipboard.ClipboardItem>>(emptyList())
     internal val recentClipboardItemsState = mutableStateOf<List<com.kingzcheung.xime.clipboard.ClipboardItem>>(emptyList())
-    /** 候选栏剪贴板胶囊的各项：每条原文，带链接的后面跟干净链接和 BV 号（见 ClipboardLinkChoices）。 */
+    /** 候选栏剪贴板胶囊的各项：直接显示原文本（敏感条目脱敏显示，不自动拆分链接/号码）。 */
     internal fun clipboardBarTexts(items: List<com.kingzcheung.xime.clipboard.ClipboardItem>): List<String> =
-        com.kingzcheung.xime.clipboard.ClipboardLinkChoices.expandItems(items).map {
-            com.kingzcheung.xime.clipboard.ClipboardLinkChoices.shownText(items, it)
+        items.map { item ->
+            if (item.sensitive) com.kingzcheung.xime.clipboard.ClipboardLinkChoices.SENSITIVE_MASK else item.text
         }
 
 
@@ -4127,7 +4127,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             // 回到输入框（微信退出聊天再进来）第一下退格只去收起这个看不见的剪贴板，不删字（用户 11-01）。
             candidateState.value = candidateState.value.copy(
                 candidates = clipboardBarTexts(recentClipboardItemsState.value),
-                clipboardExtractedCount = com.kingzcheung.xime.clipboard.ClipboardLinkChoices.extractedCount(recentClipboardItemsState.value),
+                clipboardExtractedCount = 0,
                 clipboardImage = recentImage,
                 smsVerificationCode = clipboardManager.verificationCode.value?.text,
                 candidateComments = emptyList(),
@@ -4152,7 +4152,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                     rimeEngine.clearComposition()
                     candidateState.value = candidateState.value.copy(
                         candidates = clipboardBarTexts(items),
-                        clipboardExtractedCount = com.kingzcheung.xime.clipboard.ClipboardLinkChoices.extractedCount(items),
+                        clipboardExtractedCount = 0,
                         clipboardImage = image,
                         smsVerificationCode = clipboardManager.verificationCode.value?.text,
                         candidateComments = emptyList(),

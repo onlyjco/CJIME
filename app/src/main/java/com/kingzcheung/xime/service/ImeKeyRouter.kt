@@ -3354,11 +3354,10 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         }
         
         val recentClipboard = service.recentClipboardItemsState.value
-        val clipboardChoice = if (service.candidateState.value.isShowingRecentClipboard)
-            com.kingzcheung.xime.clipboard.ClipboardLinkChoices.expandItems(recentClipboard).getOrNull(index) else null
-        if (clipboardChoice != null) {
-            // 干净链接、BV 号也算用掉了那一条：按原文标记，下次不再出现在候选栏。
-            service.textCommit.selectClipboardItem(clipboardChoice.text, source = recentClipboard[clipboardChoice.source].text)
+        val clipboardItem = if (service.candidateState.value.isShowingRecentClipboard)
+            recentClipboard.getOrNull(index) else null
+        if (clipboardItem != null) {
+            service.textCommit.selectClipboardItem(clipboardItem.text, source = clipboardItem.text)
             service.candidateState.value = service.candidateState.value.copy(
                 isShowingRecentClipboard = false,
                 candidates = emptyList(),

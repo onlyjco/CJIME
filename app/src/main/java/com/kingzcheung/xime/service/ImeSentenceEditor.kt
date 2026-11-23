@@ -262,10 +262,12 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
                     )
                     if (learnGlide) {
                         val filesDir = service.filesDir
+                        val fullInputCode = owner.snapshot.input
                         service.serviceScope.launch(Dispatchers.IO) {
                             com.kingzcheung.xime.glide.PersonalGlideCalibration.onSentenceEditApplied(
                                 filesDir, owner.inputSessionId, schemaKey,
-                                owner.snapshot.sentence, owner.originalCode, goodCode, sentenceAfter
+                                owner.snapshot.sentence, owner.originalCode, goodCode, sentenceAfter,
+                                fullInputCode = fullInputCode,
                             )
                         }
                     }

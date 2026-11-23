@@ -271,5 +271,26 @@ class PersonalGlideCalibrationTest {
         PersonalGlideCalibration.onCommitted(tempDir, 202L, flypy.id, "vegewuju", "这个数据")
         PersonalGlideCalibration.onCommitted(tempDir, 202L, flypy.id, "yswkti", "有问题")
         assertEquals(2, PersonalGlideCalibration.stats(tempDir).sampleCount)
+
+        // 4. 局部改错修正末尾滑行并立即上屏后：不二次记录同一轨迹、不二次校准偏移，且仅截取匹配的尾词“就毁了”。
+        PersonalGlideCalibration.clear(tempDir)
+        val (xsEdit, ysEdit, tsEdit) = trace("jqhvle")
+        PersonalGlideCalibration.noteDispatched(203L, flypy.id, "p", keyboard, xsEdit, ysEdit, tsEdit, "jqhvjlde")
+        PersonalGlideCalibration.onSentenceEditApplied(
+            tempDir, 203L, flypy.id, "不然英伟达就会觉得", "jqhvjlde", "jqhvle", "不然英伟达就毁了",
+            fullInputCode = "bur'j'yg'wm'da'jq'hv'jl'de",
+        )
+        PersonalGlideCalibration.onCommitted(tempDir, 203L, flypy.id, "bur'j'yg'wm'da'jq'hv'le", "不然英伟达就毁了")
+        assertEquals(1, PersonalGlideCalibration.stats(tempDir).sampleCount)
+        assertEquals(1, PersonalGlideCalibration.stats(tempDir).confusionCount)
+        assertEquals("就毁了", PersonalGlideCalibration.phraseTextOf(tempDir, flypy.id, "jqhvle"))
+        assertEquals("不然英伟达就毁了", PersonalGlideCalibration.phraseTextOf(tempDir, flypy.id, "burjygwmdajqhvle"))
+        val samplesLines = File(tempDir, "personal_glide_samples.tsv").readLines()
+        assertEquals(1, samplesLines.size)
+        val cols = samplesLines.first().split('\t')
+        assertEquals("jqhvle", cols[2])
+        assertEquals("就毁了", cols[3])
+        assertEquals("jqhvjlde", cols[7])
+        assertEquals("sentence_edit", cols[8])
     }
 }
