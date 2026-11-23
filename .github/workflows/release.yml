@@ -108,19 +108,6 @@ jobs:
           mkdir -p app/build/outputs/apk/distribution
           cp app/build/outputs/apk/release/CJIME-*.apk app/build/outputs/apk/distribution/
 
-      - name: Required offline edition gate
-        uses: reactivecircus/android-emulator-runner@v2
-        with:
-          api-level: 29
-          arch: x86_64
-          profile: pixel_3a
-          script: ./gradlew :app:connectedDebugAndroidTest -PbundleModels=true -PpythonExecutable=python3 -Pandroid.testInstrumentationRunnerArguments.class=com.kingzcheung.xime.ui.LayoutGeometryGateTest,com.kingzcheung.xime.ui.PanelLayoutAuditTest,com.kingzcheung.xime.ui.ExpandedCandidateLayoutTest,com.kingzcheung.xime.ui.OfflineEditionTest,com.kingzcheung.xime.ui.VisualStyleIntegrationTest --no-daemon
-
-      - name: Build offline Release APKs
-        run: |
-          ./gradlew assembleRelease -PbundleModels=true -PpythonExecutable=python3 --no-daemon
-          cp app/build/outputs/apk/release/CJIME-*-full-*.apk app/build/outputs/apk/distribution/
-
       - name: Build Plugin XIPKs (Unsigned)
         run: bash scripts/build-plugins.sh
 
