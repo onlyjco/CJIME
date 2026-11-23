@@ -1174,6 +1174,23 @@ class RimeEngine {
         }
     }
 
+    /**
+     * 只启停了方案时的快路（[RimeConfigHelper.ensureDeployment] 判定其他部署输入都没变）：不进维护状态，
+     * 只重编方案列表和 [added] 这几个新开的方案，不再把每个方案的词典都读一遍（11-23 平板：慢路 19–21 秒）。
+     * 和 [deployIncremental] 一样持锁、先关会话后重开；返回 false 时调用方走原来的维护部署。
+     */
+    fun deploySchemaListChange(added: List<String>): Boolean {
+        if (!isInitialized) return false
+        mutateLocked {
+            ensureT9SchemaPatchesForDeployedSchemas(userDataDir)
+            try {
+                val done = nativeDeploySchemaListChange(added.toTypedArray())
+                if (done) nativeUpdateLastBuildTime()
+                return done
+            } finally { sessionReplaced() }
+        }
+    }
+
     /** Read only the active translator's codes, keeping pronunciation dictionaries out of shape-code hints. */
     internal fun currentSchemeCodes(schema: String, candidates: List<String>): List<String> {
         if (!isInitialized) return emptyList()
@@ -1483,6 +1500,7 @@ class RimeEngine {
     private external fun nativeJoinMaintenance()
     private external fun nativeDeploy(): Boolean
     private external fun nativeDeploySchema(schemaId: String): Boolean
+    private external fun nativeDeploySchemaListChange(added: Array<String>): Boolean
     private external fun nativeLookupText(text: String, primaryOnly: Boolean): String
     private external fun nativeOpenccConvert(configPath: String, text: String): String
     private external fun nativeGetAvailableSchemas(): Array<String>?
