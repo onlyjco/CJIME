@@ -518,13 +518,29 @@ fun KeyboardLayout(
         // 这一笔开过实时预览就用预览开头那份：这时光标前已经有预览写进去的组合文字。
         val left = if (!chinese) null else com.kingzcheung.xime.glide.ChineseGlideContext.leftAtRelease(
             glideTrail.gesture, glidePreview.gesture, glidePreview.left) { runCatching { callbacks.t9LeftContext() }.getOrNull() }
+        val tsSnapshot = if (chinese) glideTrail.lastTraceTs else LongArray(0)
+        val personalLearning = chinese && glidePrefs.personalChineseGlideLearning
+        val glideSchemaKey = if (chinese) (doublePinyin?.id ?: "pinyin") else ""
+        val glideBucket = if (chinese) com.kingzcheung.xime.glide.PersonalGlideCalibration.bucketFor(keys) else "p"
         glideScope.launch {
             var handedOff = false
             try {
+            val baseKeyboard = com.kingzcheung.xime.glide.GlideLexicon.keyboard(keys)
             val candidates = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
                 // 词表读不出来时这一笔当没认出，不闪退（用户 11-12）。
-                com.kingzcheung.xime.glide.GlideLexicon.decodeStroke(glideContext,
-                    com.kingzcheung.xime.glide.GlideLexicon.keyboard(keys), chinese, doublePinyin, xs, ys, left)
+                com.kingzcheung.xime.glide.GlideLexicon.decodeStroke(
+                    glideContext,
+                    baseKeyboard,
+                    chinese,
+                    doublePinyin,
+                    xs,
+                    ys,
+                    left,
+                    ts = tsSnapshot.takeIf { it.size == xs.size },
+                    schemaKey = glideSchemaKey,
+                    bucket = glideBucket,
+                    personalCalibration = personalLearning,
+                )
             }
             if (candidates.isEmpty()) {
                 // 很短又认不出词：快打时手指一抖被当成了滑行，按点了起点那个键算，不吞这一下（用户 11-11）。
@@ -540,8 +556,26 @@ fun KeyboardLayout(
             }
             viewModel.onCharacterTyped()
             if (chinese) {
-                kotlinx.coroutines.withContext(inputContext) { callbacks.onGlideCode?.invoke(candidates.first().word,
-                    com.kingzcheung.xime.glide.chineseGlideAlternatives(candidates), heldPreview) }
+                val dispatch = com.kingzcheung.xime.glide.ChineseGlideDispatch(
+                    candidates = candidates,
+                    keyboard = baseKeyboard,
+                    xs = xs,
+                    ys = ys,
+                    ts = tsSnapshot,
+                    bucket = glideBucket,
+                    schemaKey = glideSchemaKey,
+                    leftContext = left,
+                    previewToken = heldPreview,
+                    personalLearning = personalLearning,
+                )
+                kotlinx.coroutines.withContext(inputContext) {
+                    callbacks.onGlideCandidates?.invoke(dispatch)
+                        ?: callbacks.onGlideCode?.invoke(
+                            candidates.first().word,
+                            com.kingzcheung.xime.glide.chineseGlideAlternatives(candidates),
+                            heldPreview,
+                        )
+                }
                 handedOff = true
                 return@launch
             }

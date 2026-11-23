@@ -48,8 +48,9 @@ class GlideDecoder(
     private val maxEndpoint: Float = MAX_ENDPOINT,
     /** 中文：另按音节逐键认一遍（[SyllableGlide]），词表里没有的连划（如「印度一」）也能出整串编码。 */
     syllables: List<String>? = null,
+    syllableParams: SyllableGlideParams = SyllableGlideParams(),
 ) {
-    private val syllableGlide = syllables?.let { SyllableGlide(keyboard, it) }
+    private val syllableGlide = syllables?.let { SyllableGlide(keyboard, it, syllableParams) }
     /** [shape] 是合并相邻重复字母后的写法，形状相同的词只比一次。 */
     private class Template(val word: String, val shape: String, val prior: Float, val xs: FloatArray, val ys: FloatArray)
 
@@ -86,7 +87,7 @@ class GlideDecoder(
     val size: Int get() = templates.size
 
     /** [xs]/[ys] 为与键中心同一坐标系的轨迹点；轨迹过短或没有足够接近的词时返回空表。 */
-    fun decode(xs: FloatArray, ys: FloatArray, limit: Int = 6): List<GlideCandidate> {
+    fun decode(xs: FloatArray, ys: FloatArray, limit: Int = 6, ts: LongArray? = null): List<GlideCandidate> {
         if (xs.size < 2 || xs.size != ys.size) return emptyList()
         val unit = keyboard.keyUnit
         val qx = FloatArray(xs.size) { xs[it] / unit }
@@ -133,22 +134,30 @@ class GlideDecoder(
             results += GlideCandidate(template.word, cost, geometry)
             if (kept.size < limit) kept += cost else if (cost < kept.peek()) { kept.poll(); kept += cost }
         }
-        // 按音节认出的编码不在词表里时，与词表结果用同一把尺子（形状 + 起止点）比，词频按比词表最后一名还差算。
-        // 直线路过的键加不加，形状几乎一样，按音节识别自己的名次（[SYLLABLE_RANK_COST]）分先后。
-        syllableGlide?.decode(xs, ys)?.forEachIndexed { rank, code ->
-            if (code in known || code.length > MAX_WORD) return@forEachIndexed
+        // 按音节认出的编码不在词表里时，与词表结果用同一把尺子（形状 + 起止点）比；
+        // 长句统一改用 64 点 DTW 重比，保证同一批候选之间使用相同采样分辨率、不因跨阈值产生分差。
+        val syllableBudget = max(limit * 2, 10)
+        val scoredSyllables = syllableGlide?.decodeScored(xs, ys, ts = ts, limit = syllableBudget).orEmpty()
+        val longSentence = scoredSyllables.firstOrNull()?.code?.let { collapseRepeats(it).length > 10 } == true
+        val sampleCount = if (longSentence) LONG_SAMPLES else SAMPLES
+        val (rx, ry) = if (longSentence) resampleTo(qx, qy, LONG_SAMPLES) else (sx to sy)
+        val maxShape = if (longSentence) LONG_MAX_SHAPE else MAX_SHAPE
+        scoredSyllables.forEachIndexed { rank, scored ->
+            val code = scored.code
+            if (code in known || code.length > MAX_SENTENCE_KEYS) return@forEachIndexed
             val shape = collapseRepeats(code)
             // 末尾多按几下同一个键（naer / naerrr）划出来一模一样，只留名次靠前的那串。
             if (results.any { collapseRepeats(it.word) == shape }) return@forEachIndexed
             val px = FloatArray(shape.length) { keyboard.centers.getValue(shape[it]).first / unit }
             val py = FloatArray(shape.length) { keyboard.centers.getValue(shape[it]).second / unit }
-            val (tx, ty) = resample(px, py)
-            val start = hypot(sx[0] - tx[0], sy[0] - ty[0])
-            val end = hypot(sx[last] - tx[last], sy[last] - ty[last])
+            val (tx, ty) = resampleTo(px, py, sampleCount)
+            val start = hypot(rx[0] - tx[0], ry[0] - ty[0])
+            val end = hypot(rx[sampleCount - 1] - tx[sampleCount - 1], ry[sampleCount - 1] - ty[sampleCount - 1])
             if (start > maxEndpoint || end > maxEndpoint) return@forEachIndexed
-            val dtw = shapes.getOrPut(shape) { dtw(sx, sy, tx, ty) }
-            if (dtw > MAX_SHAPE) return@forEachIndexed
-            val geometry = dtw + (start + end) / 2f * ENDPOINT_WEIGHT
+            val dtwScore = if (longSentence) dtwN(rx, ry, tx, ty, sampleCount, maxShape)
+                else shapes.getOrPut(shape) { dtw(sx, sy, tx, ty) }
+            if (dtwScore > maxShape) return@forEachIndexed
+            val geometry = dtwScore + (start + end) / 2f * ENDPOINT_WEIGHT
             results += GlideCandidate(code, geometry + UNLISTED_PRIOR * PRIOR_WEIGHT + rank * SYLLABLE_RANK_COST, geometry, listed = false)
         }
         return results.sortedWith(compareBy<GlideCandidate> { it.cost }.thenBy { it.word }).take(limit)
@@ -156,10 +165,13 @@ class GlideDecoder(
 
     companion object {
         const val SAMPLES = 32
+        const val LONG_SAMPLES = 64
         const val MAX_WORD = 20
+        const val MAX_SENTENCE_KEYS = 32
         const val MIN_PATH_KEYS = 0.75f
         const val MAX_ENDPOINT = 1.0f
         const val MAX_SHAPE = 1.0f
+        const val LONG_MAX_SHAPE = 1.2f
         const val ENDPOINT_WEIGHT = 0.35f
         /** 下界与 DTW 求和顺序不同，浮点误差留一点余量，保证筛掉的词 DTW 算完也一定超过 bound。 */
         private const val BOUND_SLACK = 1e-4f
@@ -250,9 +262,11 @@ class GlideDecoder(
          * 一整行都超过 [bound]（不超过 [MAX_SHAPE]）时提前结束、当作筛掉：累计代价逐行只增不减，
          * 最后的结果只会更大，这个词反正进不了前几名，排出的候选与算完一样。
          */
-        private fun dtw(ax: FloatArray, ay: FloatArray, bx: FloatArray, by: FloatArray, bound: Float = MAX_SHAPE): Float {
-            val n = SAMPLES
-            val band = max(1, BAND)
+        private fun dtw(ax: FloatArray, ay: FloatArray, bx: FloatArray, by: FloatArray, bound: Float = MAX_SHAPE): Float =
+            dtwN(ax, ay, bx, by, SAMPLES, bound)
+
+        private fun dtwN(ax: FloatArray, ay: FloatArray, bx: FloatArray, by: FloatArray, n: Int, bound: Float): Float {
+            val band = max(1, n / 4)
             var previous = FloatArray(n + 1) { Float.POSITIVE_INFINITY }
             var current = FloatArray(n + 1) { Float.POSITIVE_INFINITY }
             previous[0] = 0f

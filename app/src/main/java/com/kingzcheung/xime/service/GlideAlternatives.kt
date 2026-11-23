@@ -11,7 +11,7 @@ import com.kingzcheung.xime.rime.RimeCandidate
  */
 internal class GlideAlternatives {
     /** [input] 是换成这个编码后的整个输入，[caret] 是换完后的光标。 */
-    data class Choice(val text: String, val input: String, val caret: Int)
+    data class Choice(val text: String, val input: String, val caret: Int, val code: String = "")
 
     /**
      * [input] 是这一笔打完后的整个输入；在它出现之前（这一笔的编码还在一个个键地打）不作废，

@@ -223,6 +223,8 @@ data class KeyboardInputPreferences(
     val glideTyping: Boolean = false,
     /** 中文全拼、双拼 26 键滑行输入，与英文分开、默认关（用户 10-31：开着英文滑行的老用户不能被带着开）。 */
     val chineseGlideTyping: Boolean = false,
+    /** 本地自递进中文整句滑行学习（偏移校准、个人连续短语与历史纠偏，默认开）。 */
+    val personalChineseGlideLearning: Boolean = true,
     /** Delete the last syllable of an uncommitted Chinese glide as one unit. */
     val deleteChineseGlideCharacter: Boolean = false,
     /** 导入的自定义编码方案滑行用的编码（方案编号 → 全拼或双拼方案编号，#303），没选的不滑行。 */
@@ -523,6 +525,7 @@ data class KeyboardInputPreferences(
                 // 分不出是不是用户自己开的，所以只认新键；没有新键就是默认关。
                 glideTyping = prefs.getBoolean("glide_typing_v2", false),
                 chineseGlideTyping = prefs.getBoolean(CHINESE_GLIDE_KEY, false),
+                personalChineseGlideLearning = prefs.getBoolean("personal_chinese_glide_learning", true),
                 deleteChineseGlideCharacter = prefs.getBoolean(DELETE_CHINESE_GLIDE_CHARACTER_KEY, false),
                 externalGlideEncodings = com.kingzcheung.xime.glide.ExternalGlideEncodings.parse(
                     prefs.getString(com.kingzcheung.xime.glide.ExternalGlideEncodings.KEY, null)),
@@ -598,6 +601,7 @@ data class KeyboardInputPreferences(
             .putBoolean(CORNER_SYMBOL_INPUT_KEY, cornerSymbolInput)
             .putBoolean("glide_typing", glideTyping)
             .putBoolean(CHINESE_GLIDE_KEY, chineseGlideTyping)
+            .putBoolean("personal_chinese_glide_learning", personalChineseGlideLearning)
             .putBoolean(DELETE_CHINESE_GLIDE_CHARACTER_KEY, deleteChineseGlideCharacter)
             .putString(com.kingzcheung.xime.glide.ExternalGlideEncodings.KEY,
                 com.kingzcheung.xime.glide.ExternalGlideEncodings.format(externalGlideEncodings))

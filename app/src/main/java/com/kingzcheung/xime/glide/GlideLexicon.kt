@@ -169,24 +169,76 @@ object GlideLexicon {
 
     /**
      * 中文滑行：[doublePinyin] 为空时按全拼，否则按该双拼方案的编码。词表里没有的连划另按音节逐键认（#294）。
-     * 须在后台线程调用。
+     * 若开启个人校准，将合并个人高频连划短语并应用调优后的音节解码参数。须在后台线程调用。
      */
-    fun chineseDecoder(context: Context, keyboard: GlideKeyboard, doublePinyin: DoublePinyinScheme?): GlideDecoder =
-        cachedDecoder(if (doublePinyin == null) "py" else "sp", doublePinyin, keyboard,
-            syllables = { glideSyllables(pinyin(context), doublePinyin) }) { pinyinCodes(pinyin(context), doublePinyin) }
+    fun chineseDecoder(
+        context: Context,
+        keyboard: GlideKeyboard,
+        doublePinyin: DoublePinyinScheme?,
+        schemaKey: String = "",
+        personalCalibration: Boolean = false,
+    ): GlideDecoder {
+        val baseKey: Any? = if (personalCalibration) {
+            Triple(doublePinyin, PersonalGlideCalibration.phraseRevision(), PersonalGlideCalibration.paramsRevision())
+        } else {
+            doublePinyin
+        }
+        val params = if (personalCalibration) PersonalGlideCalibration.params(context.applicationContext.filesDir)
+            else SyllableGlideParams()
+        return cachedDecoder(
+            if (doublePinyin == null) "py" else "sp",
+            baseKey,
+            keyboard,
+            syllables = { glideSyllables(pinyin(context), doublePinyin) },
+            syllableParams = params,
+        ) {
+            val baseCodes = pinyinCodes(pinyin(context), doublePinyin)
+            if (!personalCalibration || schemaKey.isEmpty()) baseCodes
+            else {
+                val personal = PersonalGlideCalibration.hotPhraseCodes(context.applicationContext.filesDir, schemaKey)
+                if (personal.isEmpty()) baseCodes else (personal + baseCodes).distinct()
+            }
+        }
+    }
 
     /**
      * 抬手后的整笔识别。随包词表读不出来时（1.15.82 有人遇到 glide_pinyin.txt 找不到，一滑整个输入法闪退）
      * 不闪退：这一笔当没认出，日志只记第一次（用户 11-12）。须在后台线程调用。
      */
-    fun decodeStroke(context: Context, keyboard: GlideKeyboard, chinese: Boolean, doublePinyin: DoublePinyinScheme?,
-        xs: FloatArray, ys: FloatArray, left: String? = null): List<GlideCandidate> = decodeOrEmpty {
-        if (!chinese) return@decodeOrEmpty decodeTrimmingTail(xs, ys, keyboard.keyUnit, decoder(context, keyboard)::decode)
-        val candidates = decodeTrimmingTail(xs, ys, keyboard.keyUnit, chineseDecoder(context, keyboard, doublePinyin)::decode)
+    fun decodeStroke(
+        context: Context,
+        keyboard: GlideKeyboard,
+        chinese: Boolean,
+        doublePinyin: DoublePinyinScheme?,
+        xs: FloatArray,
+        ys: FloatArray,
+        left: String? = null,
+        ts: LongArray? = null,
+        schemaKey: String = "",
+        bucket: String = "p",
+        personalCalibration: Boolean = false,
+    ): List<GlideCandidate> = decodeOrEmpty {
+        if (!chinese) return@decodeOrEmpty decodeTrimmingTail(xs, ys, keyboard.keyUnit) { rx, ry ->
+            decoder(context, keyboard).decode(rx, ry)
+        }
+        val filesDir = context.applicationContext.filesDir
+        val calibratedKeyboard = if (personalCalibration) PersonalGlideCalibration.applyOffsets(filesDir, bucket, keyboard) else keyboard
+        val decoder = chineseDecoder(context, calibratedKeyboard, doublePinyin, schemaKey, personalCalibration)
+        val raw = decodeTrimmingTail(xs, ys, calibratedKeyboard.keyUnit) { rx, ry ->
+            val useTs = if (rx.size == xs.size) ts else null
+            decoder.decode(rx, ry, limit = 10, ts = useTs)
+        }
+        val adjusted = if (!personalCalibration || raw.isEmpty() || schemaKey.isEmpty()) raw else {
+            val allCodes = raw.map { it.word }
+            raw.map { c ->
+                val delta = PersonalGlideCalibration.candidateCostDelta(filesDir, schemaKey, c.word, allCodes)
+                if (delta == 0f) c else c.copy(cost = c.cost + delta)
+            }.sortedWith(compareBy<GlideCandidate> { it.cost }.thenBy { it.word })
+        }
         // 中文按前文重排（[ChineseGlideContext]）；没有前文就不碰词组模型。
-        if (left.isNullOrEmpty() || candidates.size < 2) candidates
-        else ChineseGlideContext.rerank(candidates, left, chineseWordOf(context, doublePinyin),
-            ChineseGlideContext.model(context.applicationContext.filesDir))
+        if (left.isNullOrEmpty() || adjusted.size < 2) adjusted
+        else ChineseGlideContext.rerank(adjusted, left, chineseWordOf(context, doublePinyin),
+            ChineseGlideContext.model(filesDir))
     }
 
     /** 中文滑行编码（全拼或双拼）→ 它最常用的词；全拼、各双拼方案各一份。两份词表行数对不上时一律查不到。 */
@@ -329,10 +381,11 @@ object GlideLexicon {
 
     private fun cachedDecoder(kind: String, source: Any?, keyboard: GlideKeyboard,
         maxEndpoint: Float = GlideDecoder.MAX_ENDPOINT, syllables: (() -> List<String>)? = null,
+        syllableParams: SyllableGlideParams = SyllableGlideParams(),
         words: () -> List<String>): GlideDecoder =
         synchronized(this) {
             cached[kind]?.takeIf { (cachedSource, decoder) -> cachedSource == source && decoder.revision == keyboard.revision }?.second
-                ?: GlideDecoder(keyboard, words(), maxEndpoint, syllables?.invoke()).also { cached[kind] = source to it }
+                ?: GlideDecoder(keyboard, words(), maxEndpoint, syllables?.invoke(), syllableParams).also { cached[kind] = source to it }
         }
 
     fun keyboard(keys: Map<Char, LetterKeyRect>): GlideKeyboard {

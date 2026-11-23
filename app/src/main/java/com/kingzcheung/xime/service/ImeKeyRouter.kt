@@ -950,6 +950,88 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         }
     }
 
+    private fun currentGlideLearningKey(): String {
+        val state = service.uiState.value
+        val prefs = SettingsPreferences.getPrefsPublic(service)
+        val ext = com.kingzcheung.xime.glide.ExternalGlideEncodings.parse(
+            prefs.getString(com.kingzcheung.xime.glide.ExternalGlideEncodings.KEY, null)
+        )
+        return com.kingzcheung.xime.glide.chineseGlideEncoding(
+            state.inputProfile, state.currentSchemaId, ext
+        )?.doublePinyin?.id ?: "pinyin"
+    }
+
+    private fun personalChineseGlideLearningActive(): Boolean =
+        !com.kingzcheung.xime.settings.IncognitoState.active && !service.isSecretEditor() &&
+            SettingsPreferences.getPrefsPublic(service).getBoolean("personal_chinese_glide_learning", true)
+
+    private fun recordPersonalChineseGlideCommit(inputCode: String, committedText: String) {
+        if (!personalChineseGlideLearningActive() || !chineseKeyboardActive()) return
+        val sessionId = service.uiState.value.inputSessionId
+        val schemaKey = currentGlideLearningKey()
+        val filesDir = service.filesDir
+        service.serviceScope.launch(Dispatchers.IO) {
+            com.kingzcheung.xime.glide.PersonalGlideCalibration.onCommitted(
+                filesDir, sessionId, schemaKey, inputCode, committedText
+            )
+        }
+    }
+
+    /**
+     * 中文连续滑行入口：先用 Rime 隔离预演 + WordNgram 对候选路径做语义重排，
+     * 选出最通顺的整句编码送入实打引擎，并同步记录待校验轨迹用于自递进学习。
+     */
+    internal fun dispatchChineseGlide(dispatch: com.kingzcheung.xime.glide.ChineseGlideDispatch) {
+        if (dispatch.candidates.isEmpty() || hasPendingCandidateCommit) {
+            if (hasPendingCandidateCommit) service.noteInputDropped("glide_pending_commit")
+            dispatch.previewToken?.let { service.finishGlidePreview(it, false) }
+            return
+        }
+        val schemaId = service.uiState.value.currentSchemaId
+        val sessionId = service.uiState.value.inputSessionId
+        val learn = dispatch.personalLearning && personalChineseGlideLearningActive()
+        postRimeJob("glide_rerank") {
+            val revision = service.rimeEngine.glidePreviewRevision()
+            val lm = com.kingzcheung.xime.glide.ChineseGlideContext.model(service.filesDir)
+            val reranked = com.kingzcheung.xime.glide.ChineseSentenceGlideScorer.rerank(
+                candidates = dispatch.candidates,
+                leftContext = dispatch.leftContext,
+                lm = lm,
+                personalDelta = { code, all ->
+                    if (learn) com.kingzcheung.xime.glide.PersonalGlideCalibration.candidateCostDelta(
+                        service.filesDir, dispatch.schemaKey, code, all
+                    ) else 0f
+                },
+            ) { code ->
+                runCatching {
+                    service.rimeEngine.glidePreview(code, revision)?.let { res ->
+                        com.kingzcheung.xime.glide.ChineseSentenceGlideScorer.SentencePreview(
+                            topCandidate = res.candidates.firstOrNull()?.text.orEmpty(),
+                            preeditText = res.preeditText,
+                        )
+                    }
+                }.getOrNull()
+            }
+            val winnerCode = reranked.winnerCode.ifEmpty { dispatch.candidates.first().word }
+            if (learn && service.uiState.value.currentSchemaId == schemaId &&
+                service.uiState.value.inputSessionId == sessionId) {
+                com.kingzcheung.xime.glide.PersonalGlideCalibration.noteDispatched(
+                    sessionId = sessionId,
+                    schemaKey = dispatch.schemaKey,
+                    bucket = dispatch.bucket,
+                    keyboard = dispatch.keyboard,
+                    xs = dispatch.xs,
+                    ys = dispatch.ys,
+                    ts = dispatch.ts,
+                    code = winnerCode,
+                )
+            }
+            withEditor {
+                typeGlideCode(winnerCode, reranked.alternativeCodes, dispatch.previewToken)
+            }
+        }
+    }
+
     /**
      * 中文滑行：一个词的编码按点按同一路径逐键送进 Rime，已打的拼音、分段选词、邻键纠错和候选刷新都不变。
      * 接在未上屏的编码后面时先补音节分隔符（xi 后面划 an 是 xi'an，不会并成 xian）。
@@ -1049,7 +1131,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 val text = preview.candidates.firstOrNull()?.text?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
                 val (next, nextCaret) = GlideAlternatives.inserted(input, caret, alternative)
                 if (preview.inputText != next) return@mapNotNull null
-                GlideAlternatives.Choice(text, next, nextCaret)
+                GlideAlternatives.Choice(text, next, nextCaret, alternative)
             }
             if (choices.isEmpty()) return@postRimeJob
             val typed = GlideAlternatives.inserted(input, caret, code).first
@@ -1077,6 +1159,16 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         if (selection == null) { sendTransformedResult(updated); return }
         com.kingzcheung.xime.stats.TypingStats.onCandidatePicked(index,
             snapshot.correctedCandidates[choice.text].orEmpty())
+        if (personalChineseGlideLearningActive()) {
+            val chosenSuffix = choice.code.ifEmpty { choice.input }
+            val schemaKey = currentGlideLearningKey()
+            val filesDir = service.filesDir
+            service.serviceScope.launch(Dispatchers.IO) {
+                com.kingzcheung.xime.glide.PersonalGlideCalibration.onAlternativeChosen(
+                    filesDir, state.inputSessionId, schemaKey, chosenSuffix, choice.text
+                )
+            }
+        }
         if (selection.committedText.isNotEmpty()) {
             deliverCandidateCommit(PendingCandidateCommit(
                 InputCommandOwner.requireOwner(), selection.committedText, false
@@ -2116,7 +2208,16 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                                         sendTransformedResult(result) { if (service.calculatorEngine.isActive()) updateCalculatorCandidates() }
                                     } else {
                                         if (committed.isNotEmpty()) {
+                                            if (candState.inputText.isNotEmpty()) {
+                                                recordPersonalChineseGlideCommit(candState.inputText, committed)
+                                            }
                                             withEditor { service.commitText(committed) }
+                                        }
+                                        if (candState.isComposing && key.length == 1 && key[0].lowercaseChar() in 'a'..'z' &&
+                                            !submittingGlide && personalChineseGlideLearningActive()) {
+                                            com.kingzcheung.xime.glide.PersonalGlideCalibration.noteManualTypingAfterGlide(
+                                                service.uiState.value.inputSessionId
+                                            )
                                         }
                                         sendTransformedResult(result, clearPreviousAssociation = deferAssociationClear) { if (service.calculatorEngine.isActive()) updateCalculatorCandidates() }
                                     }
@@ -2643,6 +2744,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 service.rimeEngine.applyPinyinEdit(current.input, lastGlide.remainingInput, lastGlide.removeStart,
                     current.confirmed, current.confirmedText, expectedSchema = current.schema)) {
                 chineseGlideDeletes.removed(chineseGlideState())
+                com.kingzcheung.xime.glide.PersonalGlideCalibration.noteGlideDeleted(service.uiState.value.inputSessionId)
                 service.rimeEngine.readQueuedResult()?.let { sendTransformedResult(it) }
                 return
             }
@@ -2951,6 +3053,9 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 }
             } else {
                 textToMerge
+            }
+            if (!isT9 && snapshot.inputText.isNotEmpty()) {
+                recordPersonalChineseGlideCommit(snapshot.inputText, fullCommitText)
             }
             deliverCandidateCommit(PendingCandidateCommit(
                 InputCommandOwner.requireOwner(), fullCommitText, isT9

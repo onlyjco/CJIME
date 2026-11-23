@@ -29,6 +29,7 @@ internal class GlideTrail {
     var points by mutableStateOf<List<Offset>>(emptyList())
     var gesture = 0
         private set
+    var lastTraceTs: LongArray = LongArray(0)
 
     fun startGesture() { gesture++ }
 }
@@ -129,9 +130,10 @@ internal fun Modifier.glideTyping(
                         if (tracker.claimed) {
                             change.consume()
                             traced = true
-                            val xs = tracker.xs(); val ys = tracker.ys()
+                            val xs = tracker.xs(); val ys = tracker.ys(); val ts = tracker.ts()
+                            trail.lastTraceTs = ts
                             // 「贡献滑行轨迹」页开着时才有人收，平时直接返回。
-                            com.kingzcheung.xime.glide.GlideSampleRecorder.record("qwerty", keys, xs, ys, tracker.ts())
+                            com.kingzcheung.xime.glide.GlideSampleRecorder.record("qwerty", keys, xs, ys, ts)
                             currentOnTrace(xs, ys)
                         } else next = awaitNextDown(event)
                         break

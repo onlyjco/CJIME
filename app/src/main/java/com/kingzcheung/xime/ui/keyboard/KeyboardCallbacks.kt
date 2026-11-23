@@ -15,6 +15,8 @@ data class KeyboardCallbacks(
     val onGlideWord: ((List<com.kingzcheung.xime.glide.GlideCandidate>, (String) -> String) -> Unit)? = null,
     /** 中文滑行：识别出的一个词的编码（全拼或双拼），按点按同一路径接进当前编码；其后几个编码作候选栏里的备选。 */
     val onGlideCode: ((String, List<String>, Long?) -> Unit)? = null,
+    /** 中文连续整句滑行（本地个人自递进模式）：传递多候选路径与轨迹，由后端联合语言模型重排并自校准。 */
+    val onGlideCandidates: ((com.kingzcheung.xime.glide.ChineseGlideDispatch) -> Unit)? = null,
     /** 九键滑行：这一笔要打入的数字串和同一笔的备选词，在打入之前登记；候选栏在首选之后给出（#214）。 */
     val onT9GlideAlternatives: ((String, List<String>) -> Unit)? = null,
     /** 英文滑行实时预览：每笔开头取一次，返回按上下文算“现在抬手会上屏什么”的函数（可在后台线程调用）。 */

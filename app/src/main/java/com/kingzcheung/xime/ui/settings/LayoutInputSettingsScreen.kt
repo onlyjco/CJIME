@@ -232,6 +232,89 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                         checked = settings.deleteChineseGlideCharacter, onCheckedChange = {
                             settings = settings.copy(deleteChineseGlideCharacter = it); settings.save(context)
                         })
+                    HorizontalDivider()
+                    var glideStats by remember { mutableStateOf(com.kingzcheung.xime.glide.PersonalGlideCalibration.stats(context.filesDir)) }
+                    var tuningGlide by remember { mutableStateOf(false) }
+                    var showResetDialog by remember { mutableStateOf(false) }
+                    val tuneScope = rememberCoroutineScope()
+                    SettingsToggleItem(Icons.TwoTone.Gesture, "个人整句自递进校准",
+                        "仅在本机记住按键偏移、常用连划整句与纠错习惯，不上传",
+                        checked = settings.personalChineseGlideLearning, onCheckedChange = {
+                            settings = settings.copy(personalChineseGlideLearning = it); settings.save(context)
+                        },
+                        lockMessage = "需先打开「中文滑行」"
+                            .takeIf { !settings.personalChineseGlideLearning && !settings.chineseGlideTyping })
+                    if (settings.personalChineseGlideLearning) {
+                        HorizontalDivider()
+                        val subtitle = if (tuningGlide) "正在回放历史滑行样本并调优…"
+                        else "已校准 ${glideStats.calibratedKeys} 键 · 个人短语 ${glideStats.phraseCount} 条 · 历史样本 ${glideStats.sampleCount} 条（点击调优）"
+                        SettingsItem(
+                            Icons.TwoTone.Spellcheck,
+                            "整句滑行历史调优",
+                            subtitle,
+                            onClick = {
+                                if (!tuningGlide) {
+                                    tuningGlide = true
+                                    tuneScope.launch(Dispatchers.IO) {
+                                        val schemaId = SettingsPreferences.getCurrentSchema(context)
+                                        val external = com.kingzcheung.xime.glide.ExternalGlideEncodings.parse(
+                                            SettingsPreferences.getPrefsPublic(context).getString(com.kingzcheung.xime.glide.ExternalGlideEncodings.KEY, null))
+                                        val encoding = com.kingzcheung.xime.glide.chineseGlideEncoding(
+                                            com.kingzcheung.xime.settings.InputProfiles.describe(schemaId), schemaId, external)
+                                        val dp = encoding?.doublePinyin
+                                        val sKey = dp?.id ?: "pinyin"
+                                        val result = com.kingzcheung.xime.glide.PersonalGlideCalibration.stats(context.filesDir)
+                                        val msg = if (result.sampleCount < 12) {
+                                            "当前本机样本 ${result.sampleCount} 条（满 12 条后可基于历史轨迹自动调优，多滑几句即可）"
+                                        } else {
+                                            val defaultKeys = buildMap {
+                                                listOf("qwertyuiop" to 0f, "asdfghjkl" to 0.5f, "zxcvbnm" to 1.5f).forEachIndexed { r, (row, inset) ->
+                                                    row.forEachIndexed { idx, c ->
+                                                        put(c, com.kingzcheung.xime.keyboard.LetterKeyRect((inset + idx) * 60f, r * 80f, 60f, 80f))
+                                                    }
+                                                }
+                                            }
+                                            val kb = com.kingzcheung.xime.glide.PersonalGlideCalibration.applyOffsets(
+                                                context.filesDir, "p", com.kingzcheung.xime.glide.GlideLexicon.keyboard(defaultKeys))
+                                            val syllables = com.kingzcheung.xime.glide.glideSyllables(
+                                                com.kingzcheung.xime.glide.GlideLexicon.pinyin(context), dp)
+                                            val tune = com.kingzcheung.xime.glide.PersonalGlideCalibration.tuneFromHistory(
+                                                context.filesDir, sKey, kb, syllables)
+                                            if (tune.updated) "调优完成（${tune.sampleCount} 句）：首选命中 ${tune.beforeTop1} → ${tune.afterTop1}"
+                                            else "当前权重已是最优（${tune.sampleCount} 句回放首选命中 ${tune.beforeTop1}）"
+                                        }
+                                        kotlinx.coroutines.withContext(Dispatchers.Main) {
+                                            glideStats = com.kingzcheung.xime.glide.PersonalGlideCalibration.stats(context.filesDir)
+                                            tuningGlide = false
+                                            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                }
+                            },
+                        )
+                        HorizontalDivider()
+                        SettingsItem(
+                            Icons.TwoTone.ContentCut,
+                            "重置个人滑行校准数据",
+                            "清除本机记住的按键偏移、个人短语与历史样本",
+                            onClick = { showResetDialog = true },
+                        )
+                        if (showResetDialog) {
+                            AlertDialog(
+                                onDismissRequest = { showResetDialog = false },
+                                title = { Text("清空个人滑行校准数据？") },
+                                text = { Text("将清除本机记住的按键偏移、个人短语与历史样本，恢复默认识别权重。") },
+                                confirmButton = {
+                                    TextButton(onClick = {
+                                        showResetDialog = false
+                                        com.kingzcheung.xime.glide.PersonalGlideCalibration.clear(context.filesDir)
+                                        glideStats = com.kingzcheung.xime.glide.PersonalGlideCalibration.stats(context.filesDir)
+                                    }) { Text("清空") }
+                                },
+                                dismissButton = { TextButton(onClick = { showResetDialog = false }) { Text("取消") } },
+                            )
+                        }
+                    }
                 })
                 }
             }
