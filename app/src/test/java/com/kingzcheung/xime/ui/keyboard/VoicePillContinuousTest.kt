@@ -28,6 +28,7 @@ class VoicePillContinuousTest {
     @get:Rule val rule = createComposeRule()
 
     private fun setPill(continuous: Boolean?, onChange: (Boolean) -> Unit = {}) {
+        AppFonts.initialize(androidx.test.core.app.ApplicationProvider.getApplicationContext())
         rule.setContent {
             Box(Modifier.size(400.dp, 300.dp)) {
                 VoiceCollapsedPill(
@@ -44,6 +45,7 @@ class VoicePillContinuousTest {
     }
 
     @Test fun `tapping the switch flips continuous voice and shows the new state`() {
+        AppFonts.initialize(androidx.test.core.app.ApplicationProvider.getApplicationContext())
         val changes = mutableListOf<Boolean>()
         var on by mutableStateOf(false)
         rule.setContent {

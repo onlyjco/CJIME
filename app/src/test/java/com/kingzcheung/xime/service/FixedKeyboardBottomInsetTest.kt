@@ -234,7 +234,7 @@ class FixedKeyboardBottomInsetTest {
         val insets = WindowInsets.Builder().setInsets(WindowInsets.Type.navigationBars(), Insets.of(0, 0, 0, 48)).build()
         val line = bottomNavDiagnostic(activity, readBottomNav(insets, activity, activity.window),
             SettingsPreferences.KeyboardBottomPosition.AUTO, -4, 44)
-        for (part in listOf("Android ", "CyIME ", "navigation_mode=0", "导航栏 48", "第2步 三键", "底部位置 自动 调整 -4 dp", "留 44 dp"))
+        for (part in listOf("Android ", "CJIME ", "navigation_mode=0", "导航栏 48", "第2步 三键", "底部位置 自动 调整 -4 dp", "留 44 dp"))
             org.junit.Assert.assertTrue("$part 不在 $line", part in line)
         SettingsPreferences.setKeyboardBottomDiagnostic(activity, line)
         assertEquals(line, SettingsPreferences.getKeyboardBottomDiagnostic(activity))
