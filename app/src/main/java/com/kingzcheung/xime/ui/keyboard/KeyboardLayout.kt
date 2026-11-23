@@ -1973,6 +1973,8 @@ internal fun ShiftCapsKeyButton(
                     // 键面已是「分词」（打拼音中）：这一按只管分词，不按住 Shift、不拖出大写，键盘不闪大写，
                     // 也不会按住打出大写字母把拼音打断（#464）。
                     val splitTap = currentSplit?.invoke() == true
+                    // 按住 Shift 之前按下、还没抬的字母先按原样出（见 KeyPressOrder），不被这次 Shift 变成大写。
+                    if (!splitTap) KeyPressOrder.settleAll()
                     if (!splitTap) viewModel.beginShiftHold()
                     var released = false
                     var dragged = false
@@ -1990,6 +1992,8 @@ internal fun ShiftCapsKeyButton(
                             if (!change.pressed) {
                                 released = true
                                 upTime = change.uptimeMillis
+                                // 这个键松手要生效了（分词、长音、切大小写）：比它早按下、还没抬的字母先出。
+                                KeyPressOrder.settleAll()
                                 // 键缝动效：从 Shift 拖到字母上松手，大写收到那个字母上（换成按键区里的位置）。
                                 if (dragged && target != null && targets != null && targets.keyboardBounds.contains(target.bounds.center)) {
                                     currentGapLight?.aim(target.bounds.center - targets.keyboardBounds.topLeft)

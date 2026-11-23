@@ -253,10 +253,26 @@ fun SpaceKeyButton(
                             }
                         }
                     }
+                    // 和字母键排同一队（[KeyPressOrder]）：空格还按着、后按的键先抬手出字时，这一下还是点按就先输入空格
+                    // （以前字母先进了正在打的拼音，空格后到），之后只等手指抬起。
+                    var settled = false
+                    val press = KeyPressOrder.begin {
+                        if (!settled && !endsLock && !guarded && !held && !movedBeforeHold && !(swipeUp != null && swipeUpArmed)) {
+                            settled = true
+                            timer.cancel()
+                            gapLightTrigger.tap()
+                            currentClick()
+                        }
+                    }
                     try {
                         while (true) {
                             val event = awaitPointerEvent()
                             val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (settled) {
+                                change.consume()
+                                if (!change.pressed) break
+                                continue
+                            }
                             if (change.isConsumed) break
                             if (held && holdAction == SpaceHoldAction.REPEAT &&
                                 (change.position.x < 0f || change.position.x > size.width ||
@@ -343,12 +359,16 @@ fun SpaceKeyButton(
                                     drawingStroke = false
                                     strokePoints.clear()
                                     if (ch != null) spaceStroke?.onStrokeTriggered?.invoke(ch)
-                                } else if (endsLock) {
-                                    voiceLock?.locked = false
-                                    onVoiceHoldEnd?.invoke()
-                                } else if (!held && !movedBeforeHold && !guarded) {
-                                    gapLightTrigger.tap()
-                                    currentClick()
+                                } else {
+                                    // 比空格早按下、还没抬的键先出字（按着最后一个字母就点了空格）。
+                                    KeyPressOrder.settleOlderThan(press)
+                                    if (endsLock) {
+                                        voiceLock?.locked = false
+                                        onVoiceHoldEnd?.invoke()
+                                    } else if (!held && !movedBeforeHold && !guarded) {
+                                        gapLightTrigger.tap()
+                                        currentClick()
+                                    }
                                 }
                                 break
                             }
@@ -360,6 +380,7 @@ fun SpaceKeyButton(
                             drawingStroke = false
                             strokePoints.clear()
                         }
+                        KeyPressOrder.end(press)
                         if (cursorActive) {
                             SpaceAfterCursorGuard.mark(android.os.SystemClock.uptimeMillis())
                             SpaceCursorShift.end()
