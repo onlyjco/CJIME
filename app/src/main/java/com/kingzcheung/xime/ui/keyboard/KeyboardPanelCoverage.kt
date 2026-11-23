@@ -34,10 +34,11 @@ internal fun Modifier.inheritsKeyboardBackground(): Boolean = any { it === Inher
 /**
  * Keep hidden pages measured and composed, but never paint their keys through a replacement panel.
  *
- * [covering] is a panel laid over this whole page. While it is fully drawn the page is not painted at all:
- * that needs only the panel's progress, not window bounds. Bounds and origin come from layout callbacks
- * and are suspected of lagging one frame: the whole keyboard showed through the fully drawn expanded
- * candidate page while ▴ was held (his video 11-23, image theme). The curtain still clips by bounds.
+ * [covering] is a panel laid over exactly this page (same slot, same size). It is cut out in this page's own
+ * coordinates from its progress alone, and while it is fully drawn the page is not painted at all. The other
+ * [panels] are cut out by window bounds and origin, which come from layout callbacks and can lag a frame:
+ * the whole keyboard showed through the expanded candidate page while ▴ was held (his video 11-23,
+ * image theme with 动态背景 on his phone).
  */
 @Composable
 internal fun Modifier.excludeRevealedKeyboardPanels(
@@ -48,7 +49,8 @@ internal fun Modifier.excludeRevealedKeyboardPanels(
     if (!enabled) return this
     var origin by remember { mutableStateOf(Offset.Zero) }
     return onGloballyPositioned { origin = it.positionInWindow() }.drawWithContent {
-        if (covering != null && covering.progress.value >= 1f) return@drawWithContent
+        val cover = covering?.progress?.value?.coerceIn(0f, 1f) ?: 0f
+        if (cover >= 1f) return@drawWithContent
         fun drawOutside(index: Int) {
             if (index == panels.size) {
                 drawContent()
@@ -57,7 +59,7 @@ internal fun Modifier.excludeRevealedKeyboardPanels(
             val panel = panels[index]
             val bounds = panel.boundsInWindow
             val progress = panel.progress.value.coerceIn(0f, 1f)
-            if (progress <= 0f || bounds.width <= 0f || bounds.height <= 0f) {
+            if (panel === covering || progress <= 0f || bounds.width <= 0f || bounds.height <= 0f) {
                 drawOutside(index + 1)
             } else {
                 clipRect(bounds.left - origin.x, bounds.top - origin.y,
@@ -65,7 +67,8 @@ internal fun Modifier.excludeRevealedKeyboardPanels(
                     ClipOp.Difference) { drawOutside(index + 1) }
             }
         }
-        drawOutside(0)
+        if (cover > 0f) clipRect(0f, 0f, size.width, size.height * cover, ClipOp.Difference) { drawOutside(0) }
+        else drawOutside(0)
     }
 }
 
