@@ -618,7 +618,12 @@ val prepareChineseDictionaries by tasks.registering {
             // made clearly worse, all are right again). Sixteen sentences cost 8% on the per-key p95 of short input,
             // eight 2%; for all lengths eight cost 5% on long input (cloud engine, rough).
             "  sentence_short_max_sentences: 8\n")
-            .lineSequence().filterNot { it.contains("- lua_filter@*long_word_filter") }
+            // rime-ice's force_gc translator runs a Lua collection step on every key. librime-lua already does one when
+            // each of its translations is released and a full collection every 256, so this one only costs time:
+            // 2026-11-17 host engine, exact instruction counts over 546 keys: 4.8% of a key; the Lua heap goes from
+            // 0.78 to 0.98 MB, the process +0.4 MB (median), the candidates are the same on every key.
+            .also { check(it.contains("\n    - lua_translator@*force_gc")) { "Upstream rime_ice translator list changed" } }
+            .lineSequence().filterNot { it.contains("- lua_filter@*long_word_filter") || it.contains("- lua_translator@*force_gc") }
             .flatMap { if (it.contains("- lua_filter@*autocap_filter")) sequenceOf(it, "    - lua_filter@*cyime_shortcut_order", "    - lua_filter@*cyime_acronym_filter",
                 "    - lua_filter@*cyime_single_syllable", "    - lua_filter@*cyime_en_memory")
                 else if (it == "    - script_translator") sequenceOf(it, "    - lua_translator@*cyime_mixed_input",
@@ -827,6 +832,9 @@ val prepareChineseDictionaries by tasks.registering {
             "  sentence_position_initial_only: [把, 被]\n" +
             "  max_sentences: 4\n  sentence_cutoff_threshold: 100\n")
             .replace("  filters:\n", "  filters:\n    - cyime_candidate_policy\n")
+            // No force_gc translator, as in full pinyin above.
+            .also { check(it.contains("\n    - lua_translator@*force_gc")) { "Upstream double_pinyin_flypy translator list changed" } }
+            .lineSequence().filterNot { it.contains("- lua_translator@*force_gc") }.joinToString("\n")
             .let { withUserPhraseForms(withGreekLetters(withSymbolNames(withDatetimeHints(it)))) }
             // 生僻字 also for double pinyin (GitHub #72, same default-off switch): the Lua translator maps the two keys
             // through this scheme's preedit_format; DoublePinyinScheme copies both lines into every generated scheme.

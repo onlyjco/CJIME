@@ -162,9 +162,30 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
         return std::max(a, b) + std::log1p(std::exp(-std::fabs(a - b)));
       };
       const int32_t root = ngram_sentence_start ? ngram->Bos() : ::T9NgramModel::kUnseen;
+      // The states after a character depend only on the text up to it (and on the model and the start rule),
+      // and the sentences of one n-best, and of the next key's, mostly begin alike. They are kept by prefix and
+      // a sentence starts from its longest prefix kept: the same states and the same sum, without working them
+      // out again for every sentence. A sentence with a mixed word scored whole is worked out on its own.
+      thread_local std::unordered_map<string, vector<State>> kept;
+      thread_local const T9NgramModel* kept_model = nullptr;
+      thread_local bool kept_start = false;
+      if (kept_model != ngram || kept_start != ngram_sentence_start || kept.size() > 2048) {
+        kept.clear();
+        kept_model = ngram;
+        kept_start = ngram_sentence_start;
+      }
+      const bool keep = wholes.empty();
       vector<vector<State>> states(n + 1);
       states[0].push_back({0, root, root, false});
-      for (size_t end = 1; end <= n; ++end) {
+      size_t first = 1;
+      string prefix;
+      for (; keep && first <= n; ++first) {
+        prefix.assign(text, 0, at[first]);
+        const auto known = kept.find(prefix);
+        if (known == kept.end()) break;
+        states[first] = known->second;
+      }
+      for (size_t end = first; end <= n; ++end) {
         auto& here = states[end];
         for (size_t start = end > 8 ? end - 8 : 0; start < end; ++start) {
           if (states[start].empty()) continue;
@@ -190,6 +211,10 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
                                           [](const State& a, const State& b) { return a.value < b.value; });
             if (value > worst->value) *worst = next;
           }
+        }
+        if (keep) {
+          prefix.assign(text, 0, at[end]);
+          kept.emplace(prefix, here);
         }
       }
       double total = -std::numeric_limits<double>::infinity();
