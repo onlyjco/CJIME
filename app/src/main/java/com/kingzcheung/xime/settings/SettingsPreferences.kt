@@ -1302,8 +1302,7 @@ object SettingsPreferences {
     }
 
     fun getKeyboardHeightDp(context: Context, isLandscape: Boolean): Int {
-        val key = if (isLandscape) KEY_KEYBOARD_HEIGHT_DP_LANDSCAPE else KEY_KEYBOARD_HEIGHT_DP
-        val stored = getPrefs(context).getInt(key, -1)
+        val stored = storedFixedHeightDp(getPrefs(context), isLandscape, fixedGeometryScreen(context))
         if (stored > 0) return if (isLandscape) stored.coerceIn(com.kingzcheung.xime.ui.keyboard.keyboardHeightBounds(context.resources.configuration.screenHeightDp, true)) else stored
         // 横竖屏各存一份：横屏没调过就用横屏默认高度，不再借竖屏存的高度（竖屏 40% 多的高度放到横屏会盖住大半个屏幕，用户 11-02）。
         return getDefaultKeyboardHeightDp(context, isLandscape)
@@ -1311,8 +1310,34 @@ object SettingsPreferences {
 
     fun setKeyboardHeightDp(context: Context, heightDp: Int, isLandscape: Boolean = false) {
         val key = if (isLandscape) KEY_KEYBOARD_HEIGHT_DP_LANDSCAPE else KEY_KEYBOARD_HEIGHT_DP
-        getPrefs(context).edit().putInt(key, heightDp).apply()
+        val screen = fixedGeometryScreen(context)
+        // 和固定宽度一样（#37）：不带屏的旧键照样写（监听它的地方不变），另存一份带屏的，并记下是哪块屏调的。
+        getPrefs(context).edit().putInt(key, heightDp)
+            .putInt("${key}_sw$screen", heightDp)
+            .putInt(fixedHeightScreenKey(isLandscape), screen).apply()
     }
+
+    private fun fixedHeightScreenKey(isLandscape: Boolean) =
+        if (isLandscape) "keyboard_height_screen_landscape" else "keyboard_height_screen"
+
+    /**
+     * 这块屏存的固定键盘高度，0 = 没调过（GitHub #396）。折叠屏外屏、内屏都是竖屏，原来共用一份，
+     * 外屏调好的高度展开后带到内屏。规则同 [resolveFixedGeometry]：旧版本存的、同一块屏上的照旧用；
+     * 换到大小差很多的另一块屏时用那块屏自己的，没调过按默认高度。单屏手机、平板不变。
+     */
+    internal fun storedFixedHeightDp(prefs: SharedPreferences, isLandscape: Boolean, screen: Int): Int {
+        val key = if (isLandscape) KEY_KEYBOARD_HEIGHT_DP_LANDSCAPE else KEY_KEYBOARD_HEIGHT_DP
+        val own = "${key}_sw$screen"
+        return resolveFixedGeometry(
+            ownValue = if (prefs.contains(own)) prefs.getInt(own, 0) else null,
+            sharedValue = prefs.getInt(key, 0).coerceAtLeast(0),
+            sharedScreen = prefs.getInt(fixedHeightScreenKey(isLandscape), 0),
+            screen = screen,
+        )
+    }
+
+    internal fun storedFixedHeightDp(context: Context, isLandscape: Boolean): Int =
+        storedFixedHeightDp(getPrefs(context), isLandscape, fixedGeometryScreen(context))
 
     fun getDefaultKeyboardHeightDp(context: Context, isLandscape: Boolean = false): Int {
         val config = context.resources.configuration
