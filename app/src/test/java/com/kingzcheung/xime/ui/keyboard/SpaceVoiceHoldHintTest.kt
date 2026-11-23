@@ -179,9 +179,9 @@ class SpaceVoiceHoldHintTest {
         settle()
     }
 
-    @Test fun `sliding to the top-right corner and letting go keeps listening until space is tapped`() {
+    @Test fun `sliding to the top-left corner and letting go keeps listening until space is tapped`() {
         setKeyWithBar(swipeCancel = false)
-        holdAndSlide { androidx.compose.ui.geometry.Offset(width - 4f, -height * 0.4f) }
+        holdAndSlide { androidx.compose.ui.geometry.Offset(4f, -height * 0.4f) }
         assertEquals(state(), listOf("松手锁定"), hint())
         // 按住说话时锁按钮浮出来，松手后收起（锁定后空格自己带锁）。
         assertEquals(state(), 1, rule.onAllNodesWithTag("space-voice-lock-button", useUnmergedTree = true).fetchSemanticsNodes().size)
@@ -207,14 +207,25 @@ class SpaceVoiceHoldHintTest {
         assertEquals(state(), emptyList<String>(), hint())
     }
 
-    @Test fun `the corner wins over swipe-up cancel even above the cancel line`() {
+    @Test fun `the top-left corner wins over swipe-up cancel even above the cancel line, while top-right cancels`() {
         setKeyWithBar(swipeCancel = true)
-        // 高过取消线（空格顶边以上一个键高），但在右上角那一格：锁定，不取消。
-        holdAndSlide { androidx.compose.ui.geometry.Offset(width - 4f, -height * 1.3f) }
+        // 高过取消线（空格顶边以上一个键高），但在左上角那一格：锁定，不取消。
+        holdAndSlide { androidx.compose.ui.geometry.Offset(4f, -height * 1.3f) }
         assertEquals(state(), listOf("松手锁定"), hint())
         rule.onNodeWithTag("space").performTouchInput { up() }
         settle()
-        assertTrue("corner locks instead of cancelling\n${state()}", listening && lock.locked && !cancelled)
+        assertTrue("top-left corner locks instead of cancelling\n${state()}", listening && lock.locked && !cancelled)
+
+        // 重置状态并测试右上角高过取消线：已去掉右上角锁定，因此触发取消而非锁定。
+        rule.onNodeWithTag("space").performTouchInput { down(center); up() }
+        settle()
+        cancelled = false
+        holdAndSlide { androidx.compose.ui.geometry.Offset(width - 4f, -height * 1.3f) }
+        assertFalse("top-right must not lock\n${state()}", lock.lockReady)
+        assertEquals(state(), listOf("松手取消"), hint())
+        rule.onNodeWithTag("space").performTouchInput { up() }
+        settle()
+        assertTrue("top-right above line cancels\n${state()}", cancelled && !listening && !lock.locked)
     }
 
     @Test fun `straight up past the line still cancels`() {
@@ -264,7 +275,7 @@ class SpaceVoiceHoldHintTest {
 
     @Test fun `no lock button and no lock when the microphone did not start`() {
         setKeyWithBar(swipeCancel = false, micStarts = false)
-        holdAndSlide(expectMic = false) { androidx.compose.ui.geometry.Offset(width - 4f, -height * 0.4f) }
+        holdAndSlide(expectMic = false) { androidx.compose.ui.geometry.Offset(4f, -height * 0.4f) }
         assertEquals(state(), 0, rule.onAllNodesWithTag("space-voice-lock-button", useUnmergedTree = true).fetchSemanticsNodes().size)
         assertFalse(state(), lock.lockReady)
         rule.onNodeWithTag("space").performTouchInput { up() }

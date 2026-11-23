@@ -62,8 +62,8 @@ internal class SpaceVoiceLockState {
     var armed by mutableStateOf(false)
     /** 手指在哪一把锁上：-1 左、1 右、0 都不在（画哪一把「到位」）。 */
     var side by mutableIntStateOf(0)
-    /** 刚锁上的是哪一把：外框闪在那一把上。 */
-    var lockedSide by mutableIntStateOf(1)
+    /** 刚锁上的是哪一把：外框闪在左上角那一把上。 */
+    var lockedSide by mutableIntStateOf(-1)
     /** 这次按住说话开了「上滑取消」：中间出取消按钮。 */
     var cancelShown by mutableStateOf(false)
     /** 手指在取消区：取消按钮涨满。 */
@@ -111,16 +111,13 @@ internal class SpaceVoiceLockLayout(val left: Offset, val right: Offset, val zon
     fun center(side: Int): Offset = if (side < 0) left else right
 
     /**
-     * 锁定区：锁按钮外一圈弧线以内，以及往外侧冲过头（锁的外侧、弧线底边以上，包括冲出键盘顶边、侧边）。
-     * 中间（两条弧线之间）不算。
+     * 锁定区：仅保留左上角锁按钮外一圈弧线以内，以及往左上外侧冲过头（包括冲出键盘顶边、左边）。
+     * 中间及右侧（弧线以右）不算锁定。
      */
     fun sideAt(point: Offset): Int {
-        for (side in intArrayOf(-1, 1)) {
-            val c = center(side)
-            val outward = (point.x - c.x) * side
-            if ((point - c).getDistance() <= zone || (outward >= 0f && point.y <= c.y + zone)) return side
-        }
-        return 0
+        val c = left
+        val outward = c.x - point.x
+        return if ((point - c).getDistance() <= zone || (outward >= 0f && point.y <= c.y + zone)) -1 else 0
     }
 }
 
@@ -190,14 +187,12 @@ internal fun SpaceVoiceLockLayer(state: SpaceVoiceLockState?, accent: Color, sur
     val shown by animateFloatAsState(if (state.holding) 1f else 0f,
         if (state.holding) spring(dampingRatio = 0.62f, stiffness = 520f) else tween(140, easing = FastOutSlowInEasing),
         label = "voiceLockShown")
-    // 左右两把各自的「到位」：手指从一边挪到另一边时，这边退、那边涨。
+    // 左上角锁定「到位」动画。
     val leftAnim by animateFloatAsState(if (state.lockReady && state.side < 0) 1f else 0f,
         spring(dampingRatio = 0.55f, stiffness = 700f), label = "voiceLockLeft")
-    val rightAnim by animateFloatAsState(if (state.lockReady && state.side > 0) 1f else 0f,
-        spring(dampingRatio = 0.55f, stiffness = 700f), label = "voiceLockRight")
     val cancelAnim by animateFloatAsState(if (state.holding && state.cancelShown && state.cancelArmed) 1f else 0f,
         tween(140), label = "voiceCancelArmed")
-    // 锁上的那一下：那一把留住半秒，外框亮一圈白边闪一下再淡出（用户 11-22：锁定的反馈不够显著）。
+    // 锁上的那一下：左上角锁留住半秒，外框亮一圈白边闪一下再淡出。
     val flash = remember { Animatable(0f) }
     var flashing by remember { mutableStateOf(false) }
     LaunchedEffect(state.locked) {
@@ -217,28 +212,23 @@ internal fun SpaceVoiceLockLayer(state: SpaceVoiceLockState?, accent: Color, sur
         val origin = state.host.topLeft
         val visible = if (flashing) 1f else shown
         val alpha = visible.coerceIn(0f, 1f)
-        fun armedOf(side: Int) = if (flashing) (if (side == state.lockedSide) 1f else 0f) else if (side < 0) leftAnim else rightAnim
+        val armed = if (flashing) 1f else leftAnim
         val zone = layout.zone
-        // 区域和弧线（锁上后闪的那半秒不画，只留那一把锁）。
+        // 区域和弧线（锁上后闪的那半秒不画，只留锁按钮）。
         if (!flashing) clipRect {
-            var lockAreas = Path()
-            for (side in intArrayOf(-1, 1)) {
-                val c = layout.center(side) - origin
-                val area = Path().apply {
-                    addOval(Rect(c, zone))
-                    addRect(if (side > 0) Rect(c.x, -zone, size.width + zone, c.y + zone) else Rect(-zone, -zone, c.x, c.y + zone))
-                }
-                lockAreas = Path().apply { op(lockAreas, area, PathOperation.Union) }
-                val armed = armedOf(side)
-                drawPath(area, accent.copy(alpha = (0.07f + 0.22f * armed) * alpha))
-                // 弧线：锁定区朝中间的半圈，底下接一段横线到键区边上。
-                val stroke = Stroke((1.5f + 0.5f * armed).dp.toPx())
-                val line = accent.copy(alpha = (0.55f + 0.4f * armed) * alpha)
-                drawArc(line, if (side > 0) 90f else -90f, 180f, false, c - Offset(zone, zone), Size(zone * 2f, zone * 2f), style = stroke)
-                drawLine(line, Offset(c.x, c.y + zone), Offset(if (side > 0) size.width else 0f, c.y + zone), stroke.width)
+            val c = layout.left - origin
+            val lockAreas = Path().apply {
+                addOval(Rect(c, zone))
+                addRect(Rect(-zone, -zone, c.x, c.y + zone))
             }
+            drawPath(lockAreas, accent.copy(alpha = (0.07f + 0.22f * armed) * alpha))
+            // 弧线：左上角锁定区朝中间的半圈，底下接一段横线到键区左边。
+            val stroke = Stroke((1.5f + 0.5f * armed).dp.toPx())
+            val line = accent.copy(alpha = (0.55f + 0.4f * armed) * alpha)
+            drawArc(line, -90f, 180f, false, c - Offset(zone, zone), Size(zone * 2f, zone * 2f), style = stroke)
+            drawLine(line, Offset(c.x, c.y + zone), Offset(0f, c.y + zone), stroke.width)
             if (state.cancelShown) {
-                // 取消区：空格顶边以上一个键高往上，扣掉两边的锁定区。
+                // 取消区：空格顶边以上一个键高往上，扣掉左上角锁定区。
                 val lineY = state.space.top - state.space.height - origin.y
                 if (lineY > 0f) {
                     val band = Path().apply { addRect(Rect(0f, 0f, size.width, lineY)) }
@@ -260,10 +250,8 @@ internal fun SpaceVoiceLockLayer(state: SpaceVoiceLockState?, accent: Color, sur
                     colorFilter = ColorFilter.tint(lerp(SPACE_VOICE_CANCEL_RED, Color.White, cancelAnim))) }
             }
         }
-        for (side in intArrayOf(-1, 1)) {
-            if (flashing && side != state.lockedSide) continue
-            val armed = armedOf(side)
-            val c0 = layout.center(side)
+        run {
+            val c0 = layout.left
             val pull = spaceVoiceLockPull(c0, state.finger, 8.dp.toPx()) * armed
             val r = metrics.radius * (0.6f + 0.4f * visible) * (1f + 0.12f * armed)
             // 光晕连同吸过去的那几 dp 都不出键区（键区外是别的应用，画出去会被截掉一块）。
@@ -274,7 +262,7 @@ internal fun SpaceVoiceLockLayer(state: SpaceVoiceLockState?, accent: Color, sur
             if (armed > 0f) drawCircle(accent.copy(alpha = 0.22f * armed * alpha), glow, center)
             drawCircle(lerp(idleFill, accent, armed).copy(alpha = alpha), r, center)
             drawCircle(accent.copy(alpha = 0.55f * (1f - armed) * alpha), r, center, style = Stroke(1.5f.dp.toPx()))
-            val f = if (side == state.lockedSide) flash.value else 0f
+            val f = flash.value
             if (f > 0f) {
                 // 锁上了：外框闪一下。外面一圈强调色粗边往外扩（扩到键区边为止，不被截掉），按钮边上一圈白边亮起；
                 // 浅色、深色主题都看得见（白边压在强调色上，强调色边压在键盘底色上）。

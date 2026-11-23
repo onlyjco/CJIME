@@ -64,24 +64,23 @@ class SpaceVoiceLockZoneTest {
         assertFalse(SpaceVoiceLockState().zoneContains(Offset(0f, 0f)))
     }
 
-    @Test fun `inside either arc and overshooting outward lock, each on its own side`() {
+    @Test fun `inside the left arc and overshooting outward lock while top-right does not lock`() {
         val l = phoneLayout()
-        assertEquals("on the right button", 1, l.sideAt(Offset(985f, 795f)))
         assertEquals("on the left button", -1, l.sideAt(Offset(95f, 795f)))
-        assertEquals("inside the right arc, lower-left", 1, l.sideAt(Offset(872f, 908f)))
         assertEquals("inside the left arc, lower-right", -1, l.sideAt(Offset(208f, 908f)))
-        assertEquals("above the keyboard on the right", 1, l.sideAt(Offset(1000f, 600f)))
         assertEquals("above the keyboard on the left", -1, l.sideAt(Offset(80f, 600f)))
-        assertEquals("past the right edge", 1, l.sideAt(Offset(1100f, 760f)))
         assertEquals("past the left edge", -1, l.sideAt(Offset(-20f, 760f)))
+        assertEquals("top-right button area does not lock", 0, l.sideAt(Offset(985f, 795f)))
+        assertEquals("above the keyboard on the right does not lock", 0, l.sideAt(Offset(1000f, 600f)))
+        assertEquals("past the right edge does not lock", 0, l.sideAt(Offset(1100f, 760f)))
     }
 
-    @Test fun `the middle between the arcs and the keys below them do not lock`() {
+    @Test fun `the middle, right side and keys below do not lock`() {
         val l = phoneLayout()
         assertEquals("straight up", 0, l.sideAt(Offset(540f, 760f)))
         assertEquals("straight up out of the keyboard", 0, l.sideAt(Offset(540f, 600f)))
-        assertEquals("just outside the right arc", 0, l.sideAt(Offset(780f, 800f)))
-        assertEquals("below the right arc", 0, l.sideAt(Offset(985f, 1000f)))
+        assertEquals("just outside the left arc", 0, l.sideAt(Offset(300f, 800f)))
+        assertEquals("below the right side", 0, l.sideAt(Offset(985f, 1000f)))
         assertEquals("below the left arc", 0, l.sideAt(Offset(95f, 1000f)))
     }
 

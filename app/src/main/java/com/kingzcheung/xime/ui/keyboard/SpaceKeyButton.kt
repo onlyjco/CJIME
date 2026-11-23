@@ -374,7 +374,7 @@ fun SpaceKeyButton(
                             when {
                                 // 锁定：手指离开也一直听，点一下空格结束。和锁按钮画「到位」用同一个条件（[SpaceVoiceLockState.lockReady]）。
                                 lockNow -> {
-                                    voiceLock?.lockedSide = voiceLock?.side?.takeIf { it != 0 } ?: 1
+                                    voiceLock?.lockedSide = voiceLock?.side?.takeIf { it != 0 } ?: -1
                                     voiceLock?.locked = true
                                     view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
                                 }
