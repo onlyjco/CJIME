@@ -207,6 +207,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         private const val GLASS_BLUR_HIDE_DELAY_MS = 1_000L
         /** 键盘收起后多久卸载手写模型：游戏、聊天里一句一句发，收起再弹出通常在这之内。 */
         private const val HANDWRITING_RELEASE_DELAY_MS = 30_000L
+        /** 收起后多久让键盘界面停下：收起动画和收起时的界面清理都在这之内做完。 */
+        private const val HIDDEN_QUIET_DELAY_MS = 1_500L
         private const val VOICE_PILL_SHOW_TIMEOUT_MS = 1500L
         /** 悬浮条出现、上一段收尾后稍等再开麦：避开键盘弹出动画和发送后输入框的重启。 */
         private const val VOICE_PILL_RESUME_DELAY_MS = 500L
@@ -233,6 +235,44 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
 
     override val lifecycle: Lifecycle
         get() = lifecycleRegistry
+
+    /** 输入会话要的状态（有输入框为 RESUMED，否则 STARTED）；键盘收起静下来时先记着，弹出再还原。 */
+    private var inputLifecycleResumed = false
+    /** 键盘收起超过 [HIDDEN_QUIET_DELAY_MS]：界面不画、Compose 帧钟停（见 [quietHiddenKeyboard]）。 */
+    private var hiddenQuiet = false
+
+    /** 输入会话开始/结束：只记要的状态；收起静下来时不真的回到 STARTED，免得帧钟又走起来。 */
+    private fun setInputLifecycleResumed(resumed: Boolean) {
+        inputLifecycleResumed = resumed
+        if (!hiddenQuiet) lifecycleRegistry.handleLifecycleEvent(
+            if (resumed) Lifecycle.Event.ON_RESUME else Lifecycle.Event.ON_PAUSE)
+    }
+
+    /**
+     * 键盘收起后让键盘界面彻底停下（用户 11-23：电池页 CyIME 大多算在后台）。
+     *
+     * 系统收起输入法只是把窗口藏起来，输入法自己的视图仍算可见、Compose 的帧钟也一直走（生命周期从不到 STOP），
+     * 收起期间任何动画、计时器改的状态都会照样重组、重画，只是画了没人看见。他手机上：键盘收起亮屏 4 小时 54 分
+     * 耗电 54.7 mAh，比打字的 49 分钟（33 mAh）还多；熄屏没有帧，几乎不耗。
+     *
+     * 这里在收起 [HIDDEN_QUIET_DELAY_MS] 后：生命周期退到 CREATED（Compose 帧钟暂停，重组和按帧的动画都停，
+     * 按生命周期收的数据流也停），键盘根视图设为 INVISIBLE（再有失效也不画）。弹出（onStartInputView /
+     * onWindowShown）时先恢复，再画第一帧。
+     */
+    private val quietHiddenKeyboard = Runnable {
+        if (imeWindowShown || hiddenQuiet) return@Runnable
+        hiddenQuiet = true
+        lifecycleRegistry.currentState = Lifecycle.State.CREATED
+        if (::keyboardContainer.isInitialized) keyboardContainer.visibility = View.INVISIBLE
+    }
+
+    private fun wakeHiddenKeyboard() {
+        mainHandler.removeCallbacks(quietHiddenKeyboard)
+        if (!hiddenQuiet) return
+        hiddenQuiet = false
+        if (::keyboardContainer.isInitialized) keyboardContainer.visibility = View.VISIBLE
+        lifecycleRegistry.currentState = if (inputLifecycleResumed) Lifecycle.State.RESUMED else Lifecycle.State.STARTED
+    }
 
     override val savedStateRegistry: SavedStateRegistry
         get() = savedStateRegistryController.savedStateRegistry
@@ -4018,7 +4058,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         if (resumeCompositionAfterRestart(attribute, restarting, resumingAfterLock)) {
             lockCompositionSuspended = false
             if (resumingAfterLock) {
-                lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+                setInputLifecycleResumed(true)
                 refreshLockResumedCandidates()
             }
             return
@@ -4072,7 +4112,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         }
         schemaController.resetEditorSelection()
         schemaController.observeEditorSelection(attribute?.initialSelStart ?: -1, attribute?.initialSelEnd ?: -1)
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_RESUME)
+        setInputLifecycleResumed(true)
         loadDarkModePreference()
 
         val editorPresentation = beginEditorField(attribute, restarting)
@@ -4219,6 +4259,10 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             val app = applicationContext
             serviceScope.launch(Dispatchers.IO) { com.kingzcheung.xime.handwriting.HandwritingEngine.warmUp(app) }
         }
+        // 要弹出了：先恢复界面，这次输入框的状态变化马上重组，弹出的第一帧就是新的。
+        // 窗口没跟着显示（少见）就过一会儿再静下来。
+        wakeHiddenKeyboard()
+        if (!imeWindowShown) mainHandler.postDelayed(quietHiddenKeyboard, HIDDEN_QUIET_DELAY_MS)
         KeyboardPanelLaunch.previewVisible = settingsPreviewEditor
         // 动态背景开着才查应用类别（每个包名只查一次，见 HardwareGamePackages）。
         backgroundMotionGame.value = com.kingzcheung.xime.settings.BackgroundMotionPreferences.read(this).enabled &&
@@ -4760,7 +4804,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         if (::clipboardManager.isInitialized) clipboardManager.images.dismissPresentedPreview()
         runtimeObserver?.stop()
         inlineSuggestionManager?.clear()
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_PAUSE)
+        setInputLifecycleResumed(false)
         clearInputState()
         recentClipboardItemsState.value = emptyList()
     }
@@ -4840,6 +4884,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         // 子窗口，键盘收完会跟着一起藏，晚拆不会多露一块；1 秒内又弹出来（切聊天框）就直接接着用，不重建。
         mainHandler.removeCallbacks(hideGlassBlurWindows)
         mainHandler.postDelayed(hideGlassBlurWindows, GLASS_BLUR_HIDE_DELAY_MS)
+        // 收起动画放完、收起时要清的界面状态重组完，再让界面停下（见 [quietHiddenKeyboard]）。
+        mainHandler.removeCallbacks(quietHiddenKeyboard)
+        mainHandler.postDelayed(quietHiddenKeyboard, HIDDEN_QUIET_DELAY_MS)
         clearHardwareSurfaceBounds()
         if (::clipboardManager.isInitialized) clipboardManager.images.dismissPresentedPreview()
         if (::clipboardManager.isInitialized) clipboardManager.images.setKeyboardVisible(false)
@@ -4866,6 +4913,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         com.kingzcheung.xime.gloss.CandidateGlossary.physicalShiftHeld.value = false
         backgroundMotionWindowShown.value = true
         imeWindowShown = true
+        wakeHiddenKeyboard()
         inputStallWatchdog?.start()
         HeapReclaim.onKeyboardShown()
         KeyboardPanelLaunch.previewVisible = settingsPreviewEditor
@@ -5446,7 +5494,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         ExtensionManager.release()
         com.kingzcheung.xime.association.NativeOnnxEngine.releaseSharedEnv()
         keyProcessingDispatcher.close()
-        lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
+        mainHandler.removeCallbacks(quietHiddenKeyboard)
+        if (!hiddenQuiet) lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_STOP)
         lifecycleRegistry.handleLifecycleEvent(Lifecycle.Event.ON_DESTROY)
     }
     
