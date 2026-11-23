@@ -76,6 +76,8 @@ val prepareChineseDictionaries by tasks.registering {
     inputs.file(removedNames)
     val removedPoetry = file("data/cyime_removed_poetry.txt")
     inputs.file(removedPoetry)
+    val removedFragments = file("data/cyime_removed_fragments.txt")
+    inputs.file(removedFragments)
     val removedParticleHomophones = file("data/cyime_removed_particle_homophones.txt")
     inputs.file(removedParticleHomophones)
     val acronymFilter = file("data/cyime_acronym_filter.lua")
@@ -201,6 +203,10 @@ val prepareChineseDictionaries by tasks.registering {
         // the word model scores 何枝可依 as one word, so one rare word beat three common ones). They belong in the
         // optional 古诗词名句 pack; how the list was chosen is in its header.
         removedPoetry.readLines().filter { it.isNotBlank() && !it.startsWith("#") }.mapTo(removed) { it.trim() }
+        // Phrase fragments: a dictionary word glued to a function character (逼一逼你, 比香港), rare (ext/tencent weight
+        // under 150) and never in base.dict (2026-11-23: nine-key ai'zi'bing showed 逼一逼你 and 比香港 after 艾滋病).
+        // Rime still composes them from the word and the character; how the list was chosen is in its header.
+        removedFragments.readLines().filter { it.isNotBlank() && !it.startsWith("#") }.mapTo(removed) { it.trim() }
         // A common word plus a homophone of a sentence-final particle that chat writes far less often than the word plus
         // the particle (2026-11-15: shengxiaoma gave 生肖马, not 生效吗, on every keyboard). One whole word beat 生效 + 吗 in
         // the sentence; the list is built by tools/ime_lab/particle_homophone_words.py, which never lists a base.dict word.

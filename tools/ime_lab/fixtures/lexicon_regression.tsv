@@ -1331,3 +1331,7 @@ lex1122b-neg-xieshang	26	xieshangmingzi	写上名字	1	反例	2026-11-22	第二�
 lex1122b-neg-zhifu	26	chuanzhezhifu	穿着制服	1	反例	2026-11-22	第二批提权后整句不能变
 lex1122b-neg-zhongjie	26	zhongjiezhezhanzheng	终结这场战争	1	反例	2026-11-22	第二批提权后整句不能变
 lex1122b-neg-daozhang	26	zhangdaozhang	张道长	1	反例	2026-11-22	第二批提权后整句不能变
+user-aizibing-9	9	24942464	艾滋病	1	user	2026-11-23	九键 ai'zi'bing 曾在第三个出 逼一逼你（ext 词组碎片）
+user-aizibing-9-nofrag	9	24942464	!逼一逼你	1	user	2026-11-23	同上
+frag-biyibini-26	26	biyibini	逼一逼你	3	反例	2026-11-23	删掉整词后仍要能拼出来
+frag-bixianggang-26	26	bixianggang	比香港	3	反例	2026-11-23	删掉整词后仍要能拼出来
