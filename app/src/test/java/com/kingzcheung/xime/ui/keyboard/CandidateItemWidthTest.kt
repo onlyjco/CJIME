@@ -18,9 +18,10 @@ class CandidateItemWidthTest {
     }
 
     @Test fun learnedMarkScalesWithCandidateFont() {
-        assertEquals(5f, learnedMarkSize(20.sp).value, 0.001f)
-        // 跟着注释时字和注释之间让出角标：20sp 时 6dp，小字不少于原来的 3dp。
-        assertEquals(6f, learnedCommentGap(20.sp).value, 0.001f)
+        // 用户 11-23：角标太小看不清，放大到字高的 0.4（20sp 时 8sp），仍不占候选宽度。
+        assertEquals(8f, learnedMarkSize(20.sp).value, 0.001f)
+        // 跟着注释时字和注释之间让出角标：20sp 时 9dp，小字不少于原来的 3dp。
+        assertEquals(9f, learnedCommentGap(20.sp).value, 0.001f)
         assertEquals(3f, learnedCommentGap(5.sp).value, 0.001f)
     }
 }

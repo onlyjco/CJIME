@@ -1421,13 +1421,18 @@ fun CandidateItem(
     }
 }
 
-/** 「打过的词」小图标的边长（约四分之一字高）。图标不占宽度，只在后面有注释时让出 [learnedCommentGap]。 */
+/**
+ * 「打过的词」小图标的边长（约字高的 0.4；原来四分之一太小看不清，用户 11-23）。
+ * 图标不占宽度，只在后面有注释时让出 [learnedCommentGap]。
+ */
 internal fun learnedMarkSize(fontSize: androidx.compose.ui.unit.TextUnit): androidx.compose.ui.unit.TextUnit =
-    (fontSize.value * 0.25f).sp
+    (fontSize.value * LEARNED_MARK_RATIO).sp
 
 /** 有角标的候选后面跟注释时，字和注释之间的空：角标宽再留 1dp。画和量候选宽度共用。 */
 internal fun learnedCommentGap(fontSize: androidx.compose.ui.unit.TextUnit): androidx.compose.ui.unit.Dp =
-    maxOf(3.dp, fontSize.value.dp * 0.25f + 1.dp)
+    maxOf(3.dp, fontSize.value.dp * LEARNED_MARK_RATIO + 1.dp)
+
+private const val LEARNED_MARK_RATIO = 0.4f
 
 /** 候选后面那段小字：有纠错显示纠错，否则显示注释（和 [CandidateItem] 一致）。 */
 internal fun candidateSecondaryText(comment: String, correction: String,
