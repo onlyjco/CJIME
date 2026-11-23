@@ -226,6 +226,9 @@ object DoublePinyinSchemes {
             else current.take(after + 1) + id + current.drop(after + 1)
         } else current.filterNot { it == id }.ifEmpty { listOf("rime_ice") }
         if (updated == current) return
+        // 新打开的双拼排在已打开的方案最后，不挤动用户原来的顺序（11-23）。
+        if (enabled) InputModes.placeNewlyEnabledLast(context,
+            SchemaManager.discoverSchemas(context).map { it.toSchemaInfo() }, current, listOf(id))
         // 隐藏方案时它的 14 键版本跟着隐藏，正在用 14 键版本也要换掉。
         if (!enabled && SettingsPreferences.getCurrentSchema(context).let { it == id || it == DoublePinyinScheme.k14Id(id) ||
                 isOnLayout(it) && baseId(it) == id })
