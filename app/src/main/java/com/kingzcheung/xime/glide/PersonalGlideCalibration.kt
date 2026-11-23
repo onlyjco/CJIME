@@ -347,12 +347,13 @@ object PersonalGlideCalibration {
         val pendingClean = pending.code.replace("'", "").lowercase()
         if (pending.deletedAtMs > 0L) {
             val lenDiff = abs(cleanCode.length - pendingClean.length)
-            val compatibleLen = lenDiff <= maxOf(4, min(cleanCode.length, pendingClean.length) / 2)
+            val shortLen = min(cleanCode.length, pendingClean.length)
+            val longLen = max(cleanCode.length, pendingClean.length)
+            val compatibleLen = longLen <= shortLen * 2 + 2 && lenDiff <= maxOf(5, (cleanCode.length + 1) / 2)
             if (now - pending.deletedAtMs <= REJECT_WINDOW_MS && pendingClean.isNotEmpty() && pendingClean != cleanCode && compatibleLen) {
                 recordConfusionLocked(dir, schemaKey, pendingClean, cleanCode)
                 // 就算识别偏离很多（比如 12 键错认成 6 键），只要在删除后手动补打出了真实拼音，仍可把原始偏离轨迹对齐回去校准指腹落点。
-                val lenTolerance = maxOf(5, (cleanCode.length + 1) / 2)
-                if (pending.hadManualEditAfterDelete && lenDiff <= lenTolerance) {
+                if (pending.hadManualEditAfterDelete) {
                     calibrateOffsetsFromTraceLocked(dir, pending.bucket, pending.keyboard, pending.xs, pending.ys, cleanCode)
                     recordSampleLocked(dir, schemaKey, pending.bucket, pending.keyboard, cleanCode, committedText,
                         pending.xs, pending.ys, pending.ts, badCode = pendingClean, source = "delete_retype")
