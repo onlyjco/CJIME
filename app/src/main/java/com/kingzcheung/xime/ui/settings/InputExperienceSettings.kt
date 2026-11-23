@@ -35,7 +35,7 @@ internal enum class InputExperiencePart { SYMBOLS, DELETE, FLICK_DISC, CURSOR, E
 
 /** 「时长与距离」里的几项（设置搜索点中其中一项时自动展开，见 [InputExperienceSettings] 的 collapsedSummary）。 */
 internal val TIMING_SEARCH_KEYS = setOf("长按空格多久开始", "从中间滑到边缘走几行", "光标每移动一字所需距离",
-    "长按语言键弹出列表", "长按语言键切换输入法", "符号键松手打开符号的时限", "时长与距离")
+    "长按语言键弹出列表", "符号键松手打开符号的时限", "时长与距离")
 
 @Composable
 internal fun InputExperienceSettings(
@@ -390,6 +390,19 @@ internal fun InputExperienceSettings(
                 if (SettingsPreferences.isSoundEnabled(context)) cursorStepSwitch("移动光标时播放按键音",
                     "光标每移一字响一下", settings.cursorStepSound, "cursor-step-sound") { settings.copy(cursorStepSound = it) }
             }
+            HorizontalDivider()
+            // 从「时长与距离」折叠块提出来放到明面，方便开启，并同时作用于键盘语言键与底部留白语言键。
+            Row(Modifier.settingsSearchAnchor("长按语言键切换输入法", bleed = 16.dp, bleedVertical = 6.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("长按语言键切换输入法", style = MaterialTheme.typography.titleSmall)
+                    Text("长按键盘语言键或底部留白语言键时，打开系统的输入法选择框", style = MaterialTheme.typography.bodySmall)
+                    PerformanceCostNote(com.kingzcheung.xime.settings.PerformanceCosts.Item.LANGUAGE_KEY_IME_PICKER)
+                }
+                Switch(checked = settings.languageKeyImePicker, colors = settingsSwitchColors(),
+                    modifier = Modifier.testTag("language-key-ime-picker"), onCheckedChange = {
+                        settings = settings.copy(languageKeyImePicker = it); settings.save(context)
+                    })
+            }
             }
             if (InputExperiencePart.TIMING in parts) {
             divider()
@@ -420,18 +433,6 @@ internal fun InputExperienceSettings(
                     Slider(value = settings.cursorStepDp, onValueChange = { settings = settings.copy(cursorStepDp = it) },
                         onValueChangeFinished = { settings.save(context) }, valueRange = 6f..24f, steps = 17)
                 }
-            }
-            // 长按语言键切换输入法（GitHub #60 #68，默认关）：打开后长按弹系统的输入法选择框，语言靠点按语言键轮换。
-            Row(Modifier.settingsSearchAnchor("长按语言键切换输入法", bleed = 16.dp, bleedVertical = 6.dp).fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text("长按语言键切换输入法", style = MaterialTheme.typography.titleSmall)
-                    Text("长按语言键打开系统的输入法选择框", style = MaterialTheme.typography.bodySmall)
-                    PerformanceCostNote(com.kingzcheung.xime.settings.PerformanceCosts.Item.LANGUAGE_KEY_IME_PICKER)
-                }
-                Switch(checked = settings.languageKeyImePicker, colors = settingsSwitchColors(),
-                    modifier = Modifier.testTag("language-key-ime-picker"), onCheckedChange = {
-                        settings = settings.copy(languageKeyImePicker = it); settings.save(context)
-                    })
             }
             Column(Modifier.settingsSearchAnchor("长按语言键弹出列表", bleed = 16.dp, bleedVertical = 6.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
                 // 开着「长按语言键切换输入法」时长按弹的是系统输入法框，不是列表；时长照样管它，标题跟着说实话。

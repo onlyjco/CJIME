@@ -108,7 +108,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
     val layouts = "$input › 键盘布局"
     val qwertyPath = "$layouts › 26 键"
     val ninePath = "$layouts › 九键与 14 键"
-    val glidePath = "$layouts › 滑行输入"
+    val glidePath = "$input › 滑行输入"
     val gestures = "$input › 按键与手势"
     val hardware = "$input › 物理键盘"
     val theme = "$look › 主题与外观"
@@ -178,8 +178,8 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         // 输入 › 键盘布局
         page("26 键", layouts, qwerty, "26键 全键盘 全拼 qwerty 中英混输"),
         page("九键与 14 键", layouts, nine, "九键 9键 14键 拂动 触发距离"),
-        // 英文、中文、九键滑行 11-09 合到一页（原来分在 26 键、九键两页）。
-        page("滑行输入", layouts, glide, "滑行 划词 滑动输入 手势输入 swype 英文滑行 中文滑行 九键滑行 26键 九键"),
+        // 滑行输入提升到首页「输入」一级入口。
+        page("滑行输入", input, glide, "滑行 划词 滑动输入 手势输入 swype 英文滑行 中文滑行 九键滑行 26键 九键"),
         SettingsSearchEntry("布局管理", layouts, SEARCH_TARGET_CUSTOM_LAYOUT, "自定义布局 自定义按键布局 切换栏 隐藏布局 布局排序 新建布局 复制 编辑按键排列", anchor = null),
         SettingsSearchEntry("横竖屏分开记布局", layouts, layoutIndex, "横屏 竖屏 转屏 旋转 方向 横屏26键 竖屏九键 不同布局 分别 各自 记住布局"),
         SettingsSearchEntry("按键符号", layouts, layoutIndex, "角标 符号编辑 字母键符号 上下角标 下滑符号 14键符号 自定义布局符号 侧栏 笔画 短语 常用符号栏 手写符号 数字行 数字侧栏 数字键盘 滑动动作 zxcv 撤销 剪切 复制 粘贴 全选 段首 段尾"),
@@ -192,9 +192,6 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("加宽按键", layouts, layoutIndex, "按键宽度 键宽 宽键 按键间距 键间距 间隙 缝 留白 边距 误触 按错 手机"),
         SettingsSearchEntry("合并键均匀排布", layouts, layoutIndex, "合并键 合并 14键 17键 18键 20键 自定义布局 键宽 均匀 等宽 单键 放宽 对齐 小屏 窄屏"),
         SettingsSearchEntry("数字框自动数字键盘", layouts, layoutIndex, "数字 验证码 号码 电话 数字键盘 自动弹出"),
-        SettingsSearchEntry("数字出短语", layouts, layoutIndex, "数字 短语 我的短语 自定义短语 邮箱 网址 号码 数字串 数字键盘 候选"),
-        SettingsSearchEntry("英文出短语", layouts, layoutIndex, "英文 字母 短语 我的短语 自定义短语 编码 英文状态 候选"),
-        SettingsSearchEntry("联想常用数字", layouts, layoutIndex, "数字 常用数字 号码 电话 联想 学习 数字键盘 候选"),
         SettingsSearchEntry("数字键盘左栏符号", layouts, layoutIndex, "数字键盘 左栏 侧栏 符号 运算符 加减乘除 + - * / 冒号 自定义 顺序 上下滑 数字侧栏"),
         SettingsSearchEntry("数字行", layouts, layoutIndex, "数字行 数字栏 一排数字 顶部数字 第五行 平板 1234567890 数字顺序 数字位置 自定义数字"),
         page("键盘尺寸与位置", layouts, SettingsRoutes.KeyboardResize, "尺寸 大小 高度 宽度 调整尺寸 键盘调节 悬浮 浮动 分体 透明度 底部留白 单手 单手模式 位置 旋转"),
@@ -241,7 +238,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("清空滑动距离", gestures, gesturePage, "删除键 清空 撤回 撤销 上滑 下滑 距离 灵敏度 滑不到 屏幕边缘", section = "删除键"),
         SettingsSearchEntry("打字中清空整个输入框", gestures, gesturePage, "清空 删除键 上滑 拼音 候选 输入框 全部 一次 跳过候选", section = "删除键"),
         SettingsSearchEntry("只清空光标前的内容", gestures, gesturePage, "清空 删除键 上滑 下滑 光标前 光标后 保留 部分 一半", section = "删除键"),
-        SettingsSearchEntry("长按语言键切换输入法", gestures, gesturePage, "语言键 地球键 长按 切换输入法 选择输入法 其他输入法 系统输入法 KeePassDX 密码键盘", section = "时长与距离"),
+        SettingsSearchEntry("长按语言键切换输入法", gestures, gesturePage, "语言键 地球键 底部留白 长按 切换输入法 选择输入法 其他输入法 系统输入法 KeePassDX 密码键盘"),
         SettingsSearchEntry("长按语言键弹出列表", gestures, gesturePage, "语言键 切换语言 长按 时长 语言列表 秒", section = "时长与距离"),
         SettingsSearchEntry("符号键松手打开符号的时限", gestures, gesturePage, "符号键 !@# Ctrl 控制键 快捷键 复制 粘贴 剪切 撤销 全选 长按 时长 时限 过期 秒", section = "时长与距离"),
         SettingsSearchEntry("键盘面板滑动光标", gestures, gesturePage, "光标 移动 滑动 整个键盘 键盘滑动 滑动移动光标 整个键盘滑动移动光标 关闭", section = "光标与空格"),
@@ -341,6 +338,13 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("锁定词序", prediction, SettingsRoutes.SmartPrediction, "锁定词权 词权 词频 调频 固定 顺序 盲打 专业 不学习 候选顺序", section = "无痕"),
         SettingsSearchEntry("显示自造词角标", prediction, SettingsRoutes.SmartPrediction, "自造词 编辑 角标 铅笔 图标 学到的词 用户词 隐藏", section = "无痕"),
         SettingsSearchEntry("用户学习数据", prediction, SettingsRoutes.SmartPrediction, "学习 记忆 个人语料 导出 导入 保存 统计 学习文件"),
+        SettingsSearchEntry("数字出短语", prediction, SettingsRoutes.SmartPrediction, "数字 短语 我的短语 自定义短语 邮箱 网址 号码 数字串 候选"),
+        SettingsSearchEntry("英文出短语", prediction, SettingsRoutes.SmartPrediction, "英文 字母 短语 我的短语 自定义短语 编码 英文状态 候选"),
+        SettingsSearchEntry("联想常用数字", prediction, SettingsRoutes.SmartPrediction, "数字 常用数字 号码 电话 联想 学习 候选"),
+        SettingsSearchEntry("全输入联想与局部改错自递进", prediction, SettingsRoutes.SmartPrediction, "联想 自递进 局部改错 重排 自学习"),
+        SettingsSearchEntry("个人整句滑行自递进校准", prediction, SettingsRoutes.SmartPrediction, "滑行 整句 自递进 校准 偏移 个人短语"),
+        SettingsSearchEntry("查看 / 导出自学习校准数据", prediction, SettingsRoutes.SmartPrediction, "导出 备份 脱敏 轨迹 样本 报告 自学习 校准"),
+        SettingsSearchEntry("整句滑行历史调优", prediction, SettingsRoutes.SmartPrediction, "滑行 历史 调优 参数 回放"),
         // 智能 › 语音转文本
         SettingsSearchEntry("屏蔽外放音", speech, SettingsRoutes.SpeechToText, "屏蔽 外放 压低音量 暂停播放 不屏蔽 静音 音乐 视频 媒体 声音 其他声音 音频焦点 录音 语音", section = "语音输入"),
         SettingsSearchEntry("连续语音", speech, SettingsRoutes.SpeechToText, "连续语音 开车连续语音 开车 驾驶 免手 连续 自动 接着听 悬浮条 浮窗 发送 语音", section = "语音输入"),

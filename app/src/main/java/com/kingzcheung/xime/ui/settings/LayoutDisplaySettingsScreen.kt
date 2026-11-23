@@ -115,7 +115,8 @@ private fun LayoutDisplayPage(
         ) {
             if (page == null) item {
                 SettingsSection(title = "各布局", content = {
-                    LayoutInputCategory.entries.forEachIndexed { index, category ->
+                    val boardCategories = LayoutInputCategory.entries.filter { it != LayoutInputCategory.Glide }
+                    boardCategories.forEachIndexed { index, category ->
                         if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 16.dp))
                         SettingsItem(category.icon, category.title, category.description,
                             onClick = { onOpenLayout(category.route) }, showArrow = true)
@@ -259,34 +260,6 @@ private fun LayoutDisplayPage(
                         onClick = { com.kingzcheung.xime.ui.keyboard.openSideSymbolEditor(context,
                             com.kingzcheung.xime.ui.keyboard.SideSymbolTarget.NUMBER_ROW) },
                         showArrow = true)
-                    HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-                    // 打数字出短语（别人请求，默认关）：见 service/DigitPhrases.kt。
-                    var digitPhrases by remember { mutableStateOf(com.kingzcheung.xime.service.DigitPhrases.isEnabled(context)) }
-                    SettingsToggleItem(Icons.TwoTone.Dialpad, "数字出短语",
-                        "打数字时，候选里给出编码相符的「我的短语」",
-                        checked = digitPhrases, onCheckedChange = {
-                            digitPhrases = it
-                            com.kingzcheung.xime.service.DigitPhrases.setEnabled(context, it)
-                        },
-                        costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.DIGIT_PHRASES)
-                    HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-                    // 英文出短语（别人请求 #269，默认关）：见 service/EnglishPhrases.kt。
-                    var englishPhrases by remember { mutableStateOf(com.kingzcheung.xime.service.EnglishPhrases.isEnabled(context)) }
-                    SettingsToggleItem(Icons.TwoTone.Dialpad, "英文出短语",
-                        "英文打出短语编码时，候选里给出「我的短语」",
-                        checked = englishPhrases, onCheckedChange = {
-                            englishPhrases = it
-                            com.kingzcheung.xime.service.EnglishPhrases.setEnabled(context, it)
-                        })
-                    HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-                    // 联想常用数字（用户 11-04 要求，默认开）：见 service/NumberHistory.kt。关掉即清空记下的数字。
-                    var numberHistory by remember { mutableStateOf(com.kingzcheung.xime.service.NumberHistory.isEnabled(context)) }
-                    SettingsToggleItem(Icons.TwoTone.Dialpad, "联想常用数字",
-                        "打过的常用长数字，打开头时直接给出",
-                        checked = numberHistory, onCheckedChange = {
-                            numberHistory = it
-                            com.kingzcheung.xime.service.NumberHistory.setEnabled(context, it)
-                        })
                 })
             }
             if (page == "candidates") item {
@@ -858,6 +831,14 @@ private fun FixedBottomCalibrationSettings() {
                 },
             )
         }
+        HorizontalDivider(Modifier.padding(horizontal = 16.dp))
+        SettingsJumpText(
+            "「底部留白滑动移动光标」见「按键与手势 › 光标与空格」。",
+            jumps = listOf("按键与手势 › 光标与空格"),
+            modifier = Modifier.padding(horizontal = 16.dp, vertical = 10.dp),
+            style = MaterialTheme.typography.bodySmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
         // 底部诊断（11-19）：反馈「被挡住」「底下有缝」时把这一行一起发来，就知道是哪种手机、系统报了什么、按哪一步判断的。
         diagnostic?.let { line ->
             HorizontalDivider(Modifier.padding(horizontal = 16.dp))

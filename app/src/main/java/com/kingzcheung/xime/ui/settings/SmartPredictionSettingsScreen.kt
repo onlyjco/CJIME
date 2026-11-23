@@ -11,11 +11,14 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
+import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.twotone.AutoAwesome
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
@@ -27,9 +30,14 @@ import androidx.compose.material.icons.filled.Check
 import androidx.compose.material.icons.filled.CloudDownload
 import androidx.compose.material.icons.filled.Info
 import androidx.compose.material.icons.filled.Settings
+import androidx.compose.material.icons.twotone.ContentCut
+import androidx.compose.material.icons.twotone.Dialpad
 import androidx.compose.material.icons.twotone.Edit
+import androidx.compose.material.icons.twotone.Gesture
 import androidx.compose.material.icons.twotone.Lock
+import androidx.compose.material.icons.twotone.Spellcheck
 import androidx.compose.material.icons.twotone.VisibilityOff
+import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -47,6 +55,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Switch
 import androidx.compose.material3.SwitchDefaults
 import com.kingzcheung.xime.ui.i18n.Text
+import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
@@ -54,7 +63,9 @@ import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import kotlinx.coroutines.launch
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -302,6 +313,315 @@ fun SmartPredictionSettingsContent(
                     // 不按类型筛：md、srt 等在很多手机上没有 text/plain 类型，选了再看内容是不是文字（用户 11-15：md 都选不了）
                     onImport = { importFile.launch(arrayOf("*/*")) }
                 )
+            }
+
+            item {
+                SettingsSection(title = "短语与数字联想", content = {
+                    var digitPhrases by remember { mutableStateOf(com.kingzcheung.xime.service.DigitPhrases.isEnabled(context)) }
+                    SettingsToggleItem(
+                        Icons.TwoTone.Dialpad,
+                        "数字出短语",
+                        "打数字时，候选里给出编码相符的「我的短语」",
+                        checked = digitPhrases,
+                        onCheckedChange = {
+                            digitPhrases = it
+                            com.kingzcheung.xime.service.DigitPhrases.setEnabled(context, it)
+                        },
+                        costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.DIGIT_PHRASES,
+                    )
+                    HorizontalDivider(Modifier.padding(start = 16.dp))
+                    var englishPhrases by remember { mutableStateOf(com.kingzcheung.xime.service.EnglishPhrases.isEnabled(context)) }
+                    SettingsToggleItem(
+                        Icons.TwoTone.Dialpad,
+                        "英文出短语",
+                        "英文打出短语编码时，候选里给出「我的短语」",
+                        checked = englishPhrases,
+                        onCheckedChange = {
+                            englishPhrases = it
+                            com.kingzcheung.xime.service.EnglishPhrases.setEnabled(context, it)
+                        },
+                    )
+                    HorizontalDivider(Modifier.padding(start = 16.dp))
+                    var numberHistory by remember { mutableStateOf(com.kingzcheung.xime.service.NumberHistory.isEnabled(context)) }
+                    SettingsToggleItem(
+                        Icons.TwoTone.Dialpad,
+                        "联想常用数字",
+                        "打过的常用长数字，打开头时直接给出",
+                        checked = numberHistory,
+                        onCheckedChange = {
+                            numberHistory = it
+                            com.kingzcheung.xime.service.NumberHistory.setEnabled(context, it)
+                        },
+                    )
+                })
+            }
+
+            item {
+                val savedGlidePrefs = com.kingzcheung.xime.ui.keyboard.rememberKeyboardInputPreferences()
+                var glidePrefs by remember(savedGlidePrefs) { mutableStateOf(savedGlidePrefs) }
+                var assocLearning by remember { mutableStateOf(SettingsPreferences.isPersonalAssociationLearningEnabled(context)) }
+                var glideStats by remember { mutableStateOf(com.kingzcheung.xime.glide.PersonalGlideCalibration.stats(context.filesDir)) }
+                var assocStats by remember { mutableStateOf(com.kingzcheung.xime.association.PersonalAssociationBooster.stats(context.filesDir)) }
+                var tuningGlide by remember { mutableStateOf(false) }
+                var showResetDialog by remember { mutableStateOf(false) }
+                var showReportDialog by remember { mutableStateOf(false) }
+                var reportText by remember { mutableStateOf("") }
+                val tuneScope = rememberCoroutineScope()
+
+                SettingsSection(title = "自递进校准与数据", content = {
+                    SettingsToggleItem(
+                        Icons.TwoTone.Spellcheck,
+                        "全输入联想与局部改错自递进",
+                        "打字/滑行/局部改错的选词、删词和句内纠错反馈会本机重排后续所有联想候选",
+                        checked = assocLearning,
+                        onCheckedChange = {
+                            assocLearning = it
+                            SettingsPreferences.setPersonalAssociationLearningEnabled(context, it)
+                        },
+                    )
+                    HorizontalDivider(Modifier.padding(start = 16.dp))
+                    SettingsToggleItem(
+                        Icons.TwoTone.Gesture,
+                        "个人整句滑行自递进校准",
+                        "仅在本机记住按键偏移、常用连划整句与纠错习惯，不上传",
+                        checked = glidePrefs.personalChineseGlideLearning,
+                        onCheckedChange = {
+                            glidePrefs = glidePrefs.copy(personalChineseGlideLearning = it)
+                            glidePrefs.save(context)
+                        },
+                        lockMessage = "需先打开「中文滑行」"
+                            .takeIf { !glidePrefs.personalChineseGlideLearning && !glidePrefs.chineseGlideTyping },
+                    )
+                    if (glidePrefs.personalChineseGlideLearning || assocLearning) {
+                        HorizontalDivider(Modifier.padding(start = 16.dp))
+                        SettingsItem(
+                            Icons.TwoTone.Spellcheck,
+                            "查看 / 导出自学习校准数据",
+                            "滑行 ${glideStats.calibratedKeys} 键 · 混淆 ${glideStats.confusionCount} 组 · 联想 ${assocStats.boostCount} 强化 / ${assocStats.penaltyCount} 降权",
+                            onClick = {
+                                tuneScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                    val report = com.kingzcheung.xime.glide.PersonalGlideCalibration.buildDiagnosticReport(context.filesDir)
+                                    val g = com.kingzcheung.xime.glide.PersonalGlideCalibration.stats(context.filesDir)
+                                    val a = com.kingzcheung.xime.association.PersonalAssociationBooster.stats(context.filesDir)
+                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                        glideStats = g
+                                        assocStats = a
+                                        reportText = report
+                                        showReportDialog = true
+                                    }
+                                }
+                            },
+                        )
+                    }
+                    if (glidePrefs.personalChineseGlideLearning) {
+                        HorizontalDivider(Modifier.padding(start = 16.dp))
+                        val subtitle = if (tuningGlide) "正在回放历史滑行样本并调优…"
+                        else "已校准 ${glideStats.calibratedKeys} 键 · 个人短语 ${glideStats.phraseCount} 条 · 历史样本 ${glideStats.sampleCount} 条（点击调优）"
+                        SettingsItem(
+                            Icons.TwoTone.Spellcheck,
+                            "整句滑行历史调优",
+                            subtitle,
+                            onClick = {
+                                if (!tuningGlide) {
+                                    tuningGlide = true
+                                    tuneScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                        val schemaId = SettingsPreferences.getCurrentSchema(context)
+                                        val external = com.kingzcheung.xime.glide.ExternalGlideEncodings.parse(
+                                            SettingsPreferences.getPrefsPublic(context)
+                                                .getString(com.kingzcheung.xime.glide.ExternalGlideEncodings.KEY, null)
+                                        )
+                                        val encoding = com.kingzcheung.xime.glide.chineseGlideEncoding(
+                                            com.kingzcheung.xime.settings.InputProfiles.describe(schemaId),
+                                            schemaId,
+                                            external,
+                                        )
+                                        val dp = encoding?.doublePinyin
+                                        val sKey = dp?.id ?: "pinyin"
+                                        val result = com.kingzcheung.xime.glide.PersonalGlideCalibration.stats(context.filesDir)
+                                        val msg = if (result.sampleCount < 12) {
+                                            "当前本机样本 ${result.sampleCount} 条（满 12 条后可基于历史轨迹自动调优，多滑几句即可）"
+                                        } else {
+                                            val defaultKeys = buildMap {
+                                                listOf("qwertyuiop" to 0f, "asdfghjkl" to 0.5f, "zxcvbnm" to 1.5f)
+                                                    .forEachIndexed { r, (row, inset) ->
+                                                        row.forEachIndexed { idx, c ->
+                                                            put(
+                                                                c,
+                                                                com.kingzcheung.xime.keyboard.LetterKeyRect(
+                                                                    (inset + idx) * 60f,
+                                                                    r * 80f,
+                                                                    60f,
+                                                                    80f,
+                                                                ),
+                                                            )
+                                                        }
+                                                    }
+                                            }
+                                            val kb = com.kingzcheung.xime.glide.PersonalGlideCalibration.applyOffsets(
+                                                context.filesDir,
+                                                "p",
+                                                com.kingzcheung.xime.glide.GlideLexicon.keyboard(defaultKeys),
+                                            )
+                                            val syllables = com.kingzcheung.xime.glide.glideSyllables(
+                                                com.kingzcheung.xime.glide.GlideLexicon.pinyin(context),
+                                                dp,
+                                            )
+                                            val tune = com.kingzcheung.xime.glide.PersonalGlideCalibration.tuneFromHistory(
+                                                context.filesDir,
+                                                sKey,
+                                                kb,
+                                                syllables,
+                                            )
+                                            if (tune.updated) "调优完成（${tune.sampleCount} 句）：首选命中 ${tune.beforeTop1} → ${tune.afterTop1}"
+                                            else "当前权重已是最优（${tune.sampleCount} 句回放首选命中 ${tune.beforeTop1}）"
+                                        }
+                                        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                            glideStats = com.kingzcheung.xime.glide.PersonalGlideCalibration.stats(context.filesDir)
+                                            tuningGlide = false
+                                            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_LONG).show()
+                                        }
+                                    }
+                                }
+                            },
+                        )
+                    }
+                    HorizontalDivider(Modifier.padding(start = 16.dp))
+                    SettingsItem(
+                        Icons.TwoTone.ContentCut,
+                        "重置个人自学习校准数据",
+                        "清除本机记住的滑行按键偏移、短语样本与联想自递进搭配",
+                        onClick = { showResetDialog = true },
+                    )
+                })
+
+                if (showReportDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showReportDialog = false },
+                        title = { Text("本机自递进校准数据") },
+                        text = {
+                            Column(modifier = Modifier.fillMaxWidth()) {
+                                Column(
+                                    modifier = Modifier
+                                        .fillMaxWidth()
+                                        .heightIn(max = 280.dp)
+                                        .verticalScroll(rememberScrollState())
+                                ) {
+                                    Text(reportText, style = MaterialTheme.typography.bodySmall)
+                                }
+                                HorizontalDivider(modifier = Modifier.padding(vertical = 8.dp))
+                                Row(
+                                    modifier = Modifier.fillMaxWidth(),
+                                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                                ) {
+                                    OutlinedButton(
+                                        modifier = Modifier.weight(1f),
+                                        onClick = {
+                                            tuneScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                                val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US)
+                                                    .format(java.util.Date())
+                                                val tmp = java.io.File(context.cacheDir, "cjime-self-learn-backup-$stamp.zip")
+                                                val summary = com.kingzcheung.xime.glide.PersonalGlideCalibration
+                                                    .exportFullBackupZip(context.filesDir, tmp)
+                                                val res = com.kingzcheung.xime.settings.RimeExportManager
+                                                    .exportPreparedFile(context, tmp, "application/zip")
+                                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                    val err = res.exceptionOrNull()
+                                                    if (res.isSuccess) {
+                                                        android.widget.Toast.makeText(
+                                                            context,
+                                                            "已导出完整备份（${summary.fileCount} 份数据 / ${summary.recordCount} 条）至「下载/${res.getOrNull()?.fileName}」",
+                                                            android.widget.Toast.LENGTH_LONG,
+                                                        ).show()
+                                                    } else if (err is com.kingzcheung.xime.settings.ExportSaveException) {
+                                                        com.kingzcheung.xime.settings.RimeExportManager.shareSingleFile(context, err.kept)
+                                                    } else {
+                                                        android.widget.Toast.makeText(
+                                                            context,
+                                                            "导出失败：${err?.message ?: "未知错误"}",
+                                                            android.widget.Toast.LENGTH_LONG,
+                                                        ).show()
+                                                    }
+                                                }
+                                            }
+                                        },
+                                    ) { Text("导出完整备份 (.zip)") }
+                                    OutlinedButton(
+                                        modifier = Modifier.weight(1f),
+                                        onClick = {
+                                            tuneScope.launch(kotlinx.coroutines.Dispatchers.IO) {
+                                                val stamp = java.text.SimpleDateFormat("yyyyMMdd-HHmmss", java.util.Locale.US)
+                                                    .format(java.util.Date())
+                                                val tmp = java.io.File(context.cacheDir, "cjime-glide-sanitized-$stamp.jsonl.gz")
+                                                val summary = com.kingzcheung.xime.glide.PersonalGlideCalibration
+                                                    .exportSanitizedSamplesJsonlGz(context.filesDir, tmp)
+                                                if (summary.recordCount == 0) {
+                                                    tmp.delete()
+                                                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                        android.widget.Toast.makeText(
+                                                            context,
+                                                            "暂无可导出的滑行轨迹样本（先多滑几句再导出）",
+                                                            android.widget.Toast.LENGTH_LONG,
+                                                        ).show()
+                                                    }
+                                                    return@launch
+                                                }
+                                                val res = com.kingzcheung.xime.settings.RimeExportManager
+                                                    .exportPreparedFile(context, tmp, "application/gzip")
+                                                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                                                    val err = res.exceptionOrNull()
+                                                    if (res.isSuccess) {
+                                                        android.widget.Toast.makeText(
+                                                            context,
+                                                            "已导出脱敏轨迹 ${summary.recordCount} 条（不含汉字原文）至「下载/${res.getOrNull()?.fileName}」",
+                                                            android.widget.Toast.LENGTH_LONG,
+                                                        ).show()
+                                                    } else if (err is com.kingzcheung.xime.settings.ExportSaveException) {
+                                                        com.kingzcheung.xime.settings.RimeExportManager.shareSingleFile(context, err.kept)
+                                                    } else {
+                                                        android.widget.Toast.makeText(
+                                                            context,
+                                                            "导出失败：${err?.message ?: "未知错误"}",
+                                                            android.widget.Toast.LENGTH_LONG,
+                                                        ).show()
+                                                    }
+                                                }
+                                            }
+                                        },
+                                    ) { Text("导出脱敏样本") }
+                                }
+                            }
+                        },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                val cm = context.getSystemService(android.content.Context.CLIPBOARD_SERVICE)
+                                    as? android.content.ClipboardManager
+                                cm?.setPrimaryClip(android.content.ClipData.newPlainText("CJIME 自学习报告", reportText))
+                                android.widget.Toast.makeText(context, "已复制校准报告到剪贴板", android.widget.Toast.LENGTH_SHORT).show()
+                            }) { Text("复制报告") }
+                        },
+                        dismissButton = {
+                            TextButton(onClick = { showReportDialog = false }) { Text("关闭") }
+                        },
+                    )
+                }
+
+                if (showResetDialog) {
+                    AlertDialog(
+                        onDismissRequest = { showResetDialog = false },
+                        title = { Text("清空个人自学习校准数据？") },
+                        text = { Text("将清除本机记住的按键偏移、个人滑行短语、历史样本以及联想/局部改错自递进记录，恢复默认权重。") },
+                        confirmButton = {
+                            TextButton(onClick = {
+                                showResetDialog = false
+                                com.kingzcheung.xime.glide.PersonalGlideCalibration.clear(context.filesDir)
+                                com.kingzcheung.xime.association.PersonalAssociationBooster.clear(context.filesDir)
+                                glideStats = com.kingzcheung.xime.glide.PersonalGlideCalibration.stats(context.filesDir)
+                                assocStats = com.kingzcheung.xime.association.PersonalAssociationBooster.stats(context.filesDir)
+                            }) { Text("清空") }
+                        },
+                        dismissButton = { TextButton(onClick = { showResetDialog = false }) { Text("取消") } },
+                    )
+                }
             }
         }
     }

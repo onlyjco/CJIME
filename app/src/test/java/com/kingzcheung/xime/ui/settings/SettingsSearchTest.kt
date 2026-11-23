@@ -73,11 +73,11 @@ class SettingsSearchTest {
     /** 「时长与距离」默认收起：里面每一项搜到都要能让它自动展开（用户 10-31）。 */
     @Test fun foldedTimingItemsExpandOnSearch() {
         val folded = SettingsSearchIndex.filter { it.section == "时长与距离" }.map { it.title }
-        assertEquals(6, folded.size)
+        assertEquals(5, folded.size)
         assertTrue("没登记自动展开：${folded - TIMING_SEARCH_KEYS}", TIMING_SEARCH_KEYS.containsAll(folded))
     }
 
-    /** 滑行（英文、中文、九键和两个选项）11-09 合到「键盘布局 › 滑行输入」一页，搜「滑行输入」先出这一页，各项都在同一页。 */
+    /** 滑行（英文、中文、九键和两个选项）已提升到一级菜单「输入 › 滑行输入」，搜「滑行输入」先出这一页，各项都在同一页。 */
     @Test fun glideSettingsLiveOnOnePage() {
         val found = searchSettings("滑行输入")
         assertEquals("滑行输入", found.first().title)
@@ -85,7 +85,7 @@ class SettingsSearchTest {
         for (title in listOf("英文滑行", "中文滑行", "九键滑行", "滑行时实时显示词", "逐字删除中文滑行")) {
             val entry = found.single { it.title == title }
             assertEquals(title, LayoutInputCategory.Glide.route, entry.target)
-            assertEquals(title, "输入 › 键盘布局 › 滑行输入", entry.path)
+            assertEquals(title, "输入 › 滑行输入", entry.path)
         }
         assertTrue("九键滑行" in titles("九宫格 滑行"))
     }

@@ -29,6 +29,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.twotone.Speed
 import androidx.compose.material.icons.twotone.AutoAwesome
 import androidx.compose.material.icons.twotone.Backup
+import androidx.compose.material.icons.twotone.Gesture
 
 import androidx.compose.material.icons.twotone.Build
 import androidx.compose.material.icons.twotone.CloudDownload
@@ -249,6 +250,18 @@ fun SettingsMainContent(
                         title = stringResource(R.string.item_gestures_title), searchKey = "按键与手势",
                         subtitle = stringResource(R.string.item_gestures_summary),
                         onClick = { onNavigateToRoute("${SettingsRoutes.LayoutDisplay}?page=gestures") },
+                        showArrow = true
+                    )
+                    HorizontalDivider(
+                        modifier = Modifier.padding(start = 56.dp),
+                        thickness = 0.5.dp,
+                        color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
+                    )
+                    SettingsItem(
+                        icon = Icons.TwoTone.Gesture,
+                        title = "滑行输入", searchKey = "滑行输入",
+                        subtitle = "英文、中文、九键滑行",
+                        onClick = { onNavigateToRoute(LayoutInputCategory.Glide.route) },
                         showArrow = true
                     )
                     HorizontalDivider(

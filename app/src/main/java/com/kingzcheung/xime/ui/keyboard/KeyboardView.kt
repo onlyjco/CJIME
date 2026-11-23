@@ -610,7 +610,20 @@ fun KeyboardView(
             }
         }
         val bottomLiftOpenSchemaList: () -> Unit = {
-            viewModel.toggleOverlay(OverlayRoute.SchemaList)
+            if (inputPreferences.languageKeyImePicker) {
+                onHapticFeedback?.invoke()
+                val switched = callbacks.onSwitchKeyboard
+                if (switched != null) {
+                    switched.invoke()
+                } else {
+                    val imm = keyboardContext.getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
+                        as? android.view.inputmethod.InputMethodManager
+                    @Suppress("DEPRECATION")
+                    imm?.showInputMethodPicker()
+                }
+            } else {
+                viewModel.toggleOverlay(OverlayRoute.SchemaList)
+            }
         }
 
     FloatingKeyboardContainer(
