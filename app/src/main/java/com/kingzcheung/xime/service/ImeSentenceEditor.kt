@@ -261,15 +261,14 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
                         owner.originalWord, goodWord, sentenceAfter
                     )
                     if (learnGlide) {
-                        val filesDir = service.filesDir
-                        val fullInputCode = owner.snapshot.input
-                        service.serviceScope.launch(Dispatchers.IO) {
-                            com.kingzcheung.xime.glide.PersonalGlideCalibration.onSentenceEditApplied(
-                                filesDir, owner.inputSessionId, schemaKey,
-                                owner.snapshot.sentence, owner.originalCode, goodCode, sentenceAfter,
-                                fullInputCode = fullInputCode,
-                            )
-                        }
+                        // 仅在内存中更新待提交轨迹的真实编码与原始错码（同步执行避免与紧随其后的 selectCandidateAsync 竞态），
+                        // 待真正 onCommitted 上屏时按最终句一次性落盘，消除多步改错中间态。
+                        com.kingzcheung.xime.glide.PersonalGlideCalibration.onSentenceEditApplied(
+                            service.filesDir, owner.inputSessionId, schemaKey,
+                            owner.snapshot.sentence, owner.originalCode, goodCode, sentenceAfter,
+                            fullInputCode = owner.snapshot.input,
+                            deferredUntilCommit = true,
+                        )
                     }
                 }
                 withContext(Dispatchers.Main) {

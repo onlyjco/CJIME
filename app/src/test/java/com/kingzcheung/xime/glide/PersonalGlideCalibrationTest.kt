@@ -293,4 +293,44 @@ class PersonalGlideCalibrationTest {
         assertEquals("jqhvjlde", cols[7])
         assertEquals("sentence_edit", cols[8])
     }
+
+    @Test
+    fun multiStepSentenceEditRecordsOnlyFinalTruthAndBlocksShortFragmentConfusion() {
+        // 1. 同一句连续两次局部改错后才上屏：只落盘最终句（你在说什么呀），不留中间态（你在说二类的呀）。
+        PersonalGlideCalibration.clear(tempDir)
+        val (xs, ys, ts) = trace("nizleoekmeya")
+        PersonalGlideCalibration.noteDispatched(301L, flypy.id, "p", keyboard, xs, ys, ts, "niyzhleoerkmdeya")
+        PersonalGlideCalibration.onSentenceEditApplied(
+            tempDir, 301L, flypy.id, "你有还说二类的呀", "yzhleo", "zleo", "你在说二类的呀",
+            fullInputCode = "ni'yz'hl'eo'er'km'de'ya", deferredUntilCommit = true,
+        )
+        assertEquals(0, PersonalGlideCalibration.stats(tempDir).sampleCount)
+        assertEquals(0, PersonalGlideCalibration.stats(tempDir).confusionCount)
+        PersonalGlideCalibration.onSentenceEditApplied(
+            tempDir, 301L, flypy.id, "你在说二类的呀", "erkmde", "ekme", "你在说什么呀",
+            fullInputCode = "ni'zl'eo'er'km'de'ya", deferredUntilCommit = true,
+        )
+        PersonalGlideCalibration.onCommitted(tempDir, 301L, flypy.id, "ni'zl'eo'ek'me'ya", "你在说什么呀")
+
+        assertEquals(1, PersonalGlideCalibration.stats(tempDir).sampleCount)
+        assertEquals(1, PersonalGlideCalibration.stats(tempDir).confusionCount)
+        assertEquals("你在说什么呀", PersonalGlideCalibration.phraseTextOf(tempDir, flypy.id, "nizleoekmeya"))
+        assertEquals(null, PersonalGlideCalibration.phraseTextOf(tempDir, flypy.id, "nizleoerkmdeya"))
+        val sampleCols = File(tempDir, "personal_glide_samples.tsv").readLines().single().split('\t')
+        assertEquals("nizleoekmeya", sampleCols[2])
+        assertEquals("你在说什么呀", sampleCols[3])
+        assertEquals("niyzhleoerkmdeya", sampleCols[7])
+        assertEquals("sentence_edit", sampleCols[8])
+
+        // 2. 局部改错片段编码不在原串中且长度悬殊（10键 vs 2键）：绝不写入异常混淆或错位短语。
+        PersonalGlideCalibration.clear(tempDir)
+        val (xs2, ys2, ts2) = trace("vemetjma")
+        PersonalGlideCalibration.noteDispatched(302L, flypy.id, "p", keyboard, xs2, ys2, ts2, "vemgeymnba")
+        PersonalGlideCalibration.onSentenceEditApplied(
+            tempDir, 302L, flypy.id, "这么谈吗", "tj", "tj", "这么弹吗",
+            fullInputCode = "", deferredUntilCommit = false,
+        )
+        assertEquals(0, PersonalGlideCalibration.stats(tempDir).confusionCount)
+        assertEquals(null, PersonalGlideCalibration.phraseTextOf(tempDir, flypy.id, "tj"))
+    }
 }

@@ -91,6 +91,8 @@ object PersonalGlideCalibration {
         var hadManualEditAfterDelete: Boolean = false,
         var committedText: String = "",
         var learnedConsumed: Boolean = false,
+        var originalBadCode: String = "",
+        var editedBySentenceEdit: Boolean = false,
     )
 
     private val phraseRevisionCounter = AtomicLong(1L)
@@ -268,9 +270,19 @@ object PersonalGlideCalibration {
         }
     }
 
+    private fun isCompatibleCodeLength(a: String, b: String): Boolean {
+        if (a.isEmpty() || b.isEmpty()) return false
+        val lenDiff = abs(a.length - b.length)
+        val shortLen = min(a.length, b.length)
+        val longLen = max(a.length, b.length)
+        return longLen <= shortLen * 2 + 2 && lenDiff <= maxOf(5, (longLen + 1) / 2)
+    }
+
     /**
      * 局部改错直接联动滑行校准：当用户在候选栏拖选修改了一句（部分偏离/同音错字）时，
      * 将改错后的片段编码拼回原句并把原始轨迹重新对齐到真实拼音串上。
+     * [deferredUntilCommit] 为 true 时仅在内存中更新待提交轨迹的真实编码与原始错码，
+     * 等真正 [onCommitted] 上屏时再按最终定稿一次性落盘，避免同一句连续多次局部改错写入中间态。
      */
     @Synchronized
     fun onSentenceEditApplied(
@@ -282,8 +294,9 @@ object PersonalGlideCalibration {
         goodPartCode: String,
         sentenceAfter: String,
         fullInputCode: String = "",
+        deferredUntilCommit: Boolean = false,
     ) {
-        ensureLoaded(dir)
+        if (!deferredUntilCommit) ensureLoaded(dir)
         val candidate = (listOfNotNull(pendingGlide, lastCommittedGlide) + recentPendingGlides.reversed())
             .firstOrNull { g ->
                 g.sessionId == sessionId && g.schemaKey == schemaKey && !g.learnedConsumed &&
@@ -294,33 +307,37 @@ object PersonalGlideCalibration {
         val baseCode = candidate.code.replace("'", "").lowercase().filter { it in 'a'..'z' }
         if (cleanBadPart.isEmpty() || cleanGoodPart.isEmpty() || baseCode.isEmpty()) return
 
-        val idx = baseCode.indexOf(cleanBadPart)
-        val correctedCode = if (idx >= 0) {
-            baseCode.substring(0, idx) + cleanGoodPart + baseCode.substring(idx + cleanBadPart.length)
-        } else {
-            cleanGoodPart
-        }
-        if (correctedCode.length < 2) return
         val cleanFullInput = fullInputCode.replace("'", "").lowercase().filter { it in 'a'..'z' }
-        val isTailOnly = cleanFullInput.length > baseCode.length && cleanFullInput.endsWith(baseCode)
+        val idx = baseCode.indexOf(cleanBadPart)
+        val fullIdx = if (idx < 0 && cleanFullInput.isNotEmpty()) cleanFullInput.indexOf(cleanBadPart) else -1
+        val correctedCode = when {
+            idx >= 0 -> baseCode.substring(0, idx) + cleanGoodPart + baseCode.substring(idx + cleanBadPart.length)
+            fullIdx >= 0 -> cleanFullInput.substring(0, fullIdx) + cleanGoodPart + cleanFullInput.substring(fullIdx + cleanBadPart.length)
+            else -> cleanGoodPart
+        }
+        val origBad = candidate.originalBadCode.ifEmpty { baseCode }
+        if (correctedCode.length < 2 || !isCompatibleCodeLength(origBad, correctedCode)) return
+        val isTailOnly = cleanFullInput.length > baseCode.length && cleanFullInput.endsWith(baseCode) && idx >= 0
         val sampleText = if (isTailOnly && schemaKey != "pinyin") {
             val expectedChars = max(1, (correctedCode.length + 1) / 2)
             if (sentenceAfter.length > expectedChars) sentenceAfter.takeLast(expectedChars) else sentenceAfter
         } else {
             sentenceAfter
         }
-        if (baseCode != correctedCode) {
-            recordConfusionLocked(dir, schemaKey, baseCode, correctedCode)
-        }
-        if (abs(correctedCode.length - baseCode.length) <= maxOf(5, (correctedCode.length + 1) / 2)) {
-            calibrateOffsetsFromTraceLocked(dir, candidate.bucket, candidate.keyboard, candidate.xs, candidate.ys, correctedCode)
-            recordSampleLocked(dir, schemaKey, candidate.bucket, candidate.keyboard, correctedCode, sampleText,
-                candidate.xs, candidate.ys, candidate.ts,
-                badCode = if (baseCode != correctedCode) baseCode else "", source = "sentence_edit")
-        }
-        recordPhraseLocked(dir, schemaKey, correctedCode, sampleText)
+        if (candidate.originalBadCode.isEmpty()) candidate.originalBadCode = baseCode
         candidate.code = correctedCode
         candidate.committedText = sampleText
+        candidate.editedBySentenceEdit = true
+        if (deferredUntilCommit) return
+
+        if (origBad != correctedCode) {
+            recordConfusionLocked(dir, schemaKey, origBad, correctedCode)
+        }
+        calibrateOffsetsFromTraceLocked(dir, candidate.bucket, candidate.keyboard, candidate.xs, candidate.ys, correctedCode)
+        recordSampleLocked(dir, schemaKey, candidate.bucket, candidate.keyboard, correctedCode, sampleText,
+            candidate.xs, candidate.ys, candidate.ts,
+            badCode = if (origBad != correctedCode) origBad else "", source = "sentence_edit")
+        recordPhraseLocked(dir, schemaKey, correctedCode, sampleText)
         candidate.learnedConsumed = true
         recentPendingGlides.remove(candidate)
     }
@@ -419,9 +436,16 @@ object PersonalGlideCalibration {
             if (!isWholeTrace && sampleText.isNotEmpty()) {
                 recordPhraseLocked(dir, schemaKey, pendingClean, sampleText)
             }
+            val origBad = pending.originalBadCode.replace("'", "").lowercase().filter { it in 'a'..'z' }
+            val validBad = if (pending.editedBySentenceEdit && origBad.isNotEmpty() && origBad != pendingClean &&
+                isCompatibleCodeLength(origBad, pendingClean)) origBad else ""
+            if (validBad.isNotEmpty()) {
+                recordConfusionLocked(dir, schemaKey, validBad, pendingClean)
+            }
             recordSampleLocked(dir, schemaKey, pending.bucket, pending.keyboard, pendingClean, sampleText,
-                pending.xs, pending.ys, pending.ts, badCode = "", source = "confirm")
-            lastCommittedGlide = pending.copy(code = pendingClean, createdAtMs = now, committedText = sampleText)
+                pending.xs, pending.ys, pending.ts,
+                badCode = validBad, source = if (pending.editedBySentenceEdit) "sentence_edit" else "confirm")
+            lastCommittedGlide = pending.copy(code = pendingClean, createdAtMs = now, committedText = sampleText, learnedConsumed = true)
         }
     }
 
