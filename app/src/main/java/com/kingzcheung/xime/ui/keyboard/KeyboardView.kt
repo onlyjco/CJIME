@@ -112,6 +112,7 @@ import com.kingzcheung.xime.service.highlightedCandidateIndex
 import com.kingzcheung.xime.service.shownPreedit
 import com.kingzcheung.xime.service.focusedT9AssociationIndex
 import com.kingzcheung.xime.service.usesT9CandidateNavigation
+import com.kingzcheung.xime.service.showsTypedEnglishWord
 import com.kingzcheung.xime.service.ExpandedCandidatePager
 import com.kingzcheung.xime.settings.KeysConfigHelper
 import com.kingzcheung.xime.settings.SettingsPreferences
@@ -1669,7 +1670,7 @@ fun KeyboardView(
                         inputText = cs.inputText,
                         preeditText = cs.shownPreedit(state.inputProfile),
                         isComposing = cs.isComposing,
-                        associationCandidates = if (cs.pendingEnglishText.isNotEmpty() && cs.englishReplaceSupported) {
+                        associationCandidates = if (cs.showsTypedEnglishWord) {
                             listOf(cs.pendingEnglishText) + cs.associationCandidates
                         } else {
                             visibleAssociations

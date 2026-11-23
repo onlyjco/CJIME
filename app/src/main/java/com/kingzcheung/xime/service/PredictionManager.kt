@@ -322,7 +322,8 @@ class PredictionManager(
     
     suspend fun getEnglishAssociations(text: String, limit: Int = MAX_ASSOCIATION_COUNT): List<String> {
         return try {
-            val words = AssociationService.getAssociations(context, text, true, limit)
+            val words = if (!SettingsPreferences.isSmartPredictionEnabled(context)) emptyList()
+            else AssociationService.getAssociations(context, text, true, limit)
             // 英文出短语（默认关）：编码正好是这串字母的「我的短语」排在补全词前面，见 EnglishPhrases。
             if (!EnglishPhrases.isEnabled(context)) words
             else EnglishPhrases.merge(withContext(Dispatchers.IO) {

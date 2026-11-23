@@ -52,11 +52,9 @@ fun HardwareKeyboardSettingsContent(onBack: () -> Unit) {
             }
             Text("浮窗", style = MaterialTheme.typography.titleMedium)
             HardwareOption("候选跟随光标", "候选窗显示在光标旁边", options.followCursor) { save("follow_cursor", it) }
-            // 联想词只在「智能联想」开着时才有（PredictionManager）；关着时这项没有效果，置灰写明。
-            val predictionOn = remember { com.kingzcheung.xime.settings.SettingsPreferences.isSmartPredictionEnabled(context) }
-            HardwareOption("联想也显示在候选窗", "联想词也显示在候选浮窗里",
-                options.associationInWindow,
-                lockMessage = if (predictionOn) null else "「智能联想」关着，没有联想词") { save("association_in_window", it) }
+            // 联想词和英文直接输入的补全都只在「智能联想」开着时才有（11-23 起补全也归它管）；「英文出短语」、邮箱后缀照样按这项放，所以不置灰（#526）。
+            HardwareOption("联想也显示在候选窗", "联想词和英文补全也显示在候选浮窗里",
+                options.associationInWindow) { save("association_in_window", it) }
             HardwareOption("自动避开输入区域", "浮窗不挡住正在输入的地方", options.avoidEditor) { save("avoid_editor", it) }
             HardwareOption("靠边停靠", "浮窗拖到屏幕边缘时贴边停靠", options.dockAtEdge) { save("dock_edge", it) }
             // 原「底边使用三星式通栏」（用户 11-01 改名「底部候选」）：只在停靠到底边时起作用（HardwareKeyboardToolbar 里

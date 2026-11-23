@@ -693,7 +693,8 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
             val current = service.candidateState.value
             if (!markJoinsWord(mark, language, current.pendingEnglishText)) return@withEditor null
             service.predictionManager.invalidatePendingPredictions()
-            val committed = commitEnglishLetter(current, mark, false, service::supportsEnglishCandidateReplace) {
+            val committed = commitEnglishLetter(current, mark, false, service::supportsEnglishCandidateReplace,
+                completionOn = SettingsPreferences.isSmartPredictionEnabled(service)) {
                 service.commitTextAndPredict(it, isPaste = false, allowPrediction = false).accepted
             }
             if (committed != null) {
@@ -911,7 +912,8 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                     candidates = emptyList(), candidateComments = emptyList(), candidateActions = emptyList(),
                     pendingEnglishText = if (plan.pair && head != null) head + text else word, glidedWord = word,
                     associationCandidates = if (service.isSecretEditor()) emptyList() else plan.alternatives,
-                    englishReplaceSupported = replaceSupported,
+                    // 滑行是整词输入，像英文单词方案一样照常给候选，不看「智能联想」。
+                    englishReplaceSupported = replaceSupported, englishCompletionOff = false,
                     hasNextPage = false, hasPrevPage = false, isShowingRecentClipboard = false,
                 )
                 } finally {
@@ -1567,7 +1569,8 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                     val autoCaps = hardwareEvent == null && !isShifted && !ExplicitLowercase.consume(key) && capitalizeEnglishHere()
                     if (current.pendingEnglishText.isEmpty() || afterGlide) directEnglishAutoCapped = autoCaps
                     val next = commitEnglishLetter(current, key, isShifted || autoCaps,
-                        service::supportsEnglishCandidateReplace, afterGlide = afterGlide) {
+                        service::supportsEnglishCandidateReplace, afterGlide = afterGlide,
+                        completionOn = SettingsPreferences.isSmartPredictionEnabled(service)) {
                         service.commitTextAndPredict(it, isPaste = false, allowPrediction = false).accepted
                     }
                     if (next != null) {

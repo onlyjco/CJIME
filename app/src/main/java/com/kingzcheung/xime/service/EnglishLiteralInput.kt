@@ -38,6 +38,8 @@ internal fun commitEnglishLetter(
     replaceSupported: () -> Boolean,
     /** 光标紧跟刚滑行上屏的词：这个字母开始新词，前面补空格。 */
     afterGlide: Boolean = false,
+    /** 「智能联想」开着：打的词给补全；关着时候选栏什么都不放，见 [showsTypedEnglishWord]。 */
+    completionOn: Boolean = true,
     commit: (String) -> Boolean,
 ): CandidateState? {
     // 撇号、马来语的连字符（[markJoinsWord]）也像字母一样接进当前词，补全按整个词找。
@@ -52,10 +54,11 @@ internal fun commitEnglishLetter(
         candidates = emptyList(), candidateComments = emptyList(), candidateActions = emptyList(),
         pendingEnglishText = pending, glidedWord = "",
         // Keep only suggestions that still match until the updated list arrives.
-        associationCandidates = if (!afterGlide && state.pendingEnglishText.isNotEmpty() && supportsCompletion &&
+        associationCandidates = if (!afterGlide && state.pendingEnglishText.isNotEmpty() && supportsCompletion && completionOn &&
             !EmailSuffixes.isSuggestionList(state.associationCandidates))
             state.associationCandidates.filter { it.startsWith(pending, ignoreCase = true) } else emptyList(),
         englishReplaceSupported = supportsCompletion,
+        englishCompletionOff = !completionOn,
         hasNextPage = false, hasPrevPage = false, isShowingRecentClipboard = false,
     )
 }

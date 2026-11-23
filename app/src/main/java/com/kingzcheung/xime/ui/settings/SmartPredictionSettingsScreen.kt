@@ -142,7 +142,7 @@ fun SmartPredictionSettingsContent(
                                 fontWeight = FontWeight.Medium
                             )
                             Text(
-                                text = "上屏后接着给出下一个词",
+                                text = "上屏后接着给出下一个词；英文直接输入时补全单词",
                                 style = MaterialTheme.typography.bodySmall,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant
                             )
