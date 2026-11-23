@@ -288,19 +288,23 @@ private fun T9KeyboardSwipeOverlay(
                 val inputContext = runCatching { callbacks.captureInputContext() }.getOrNull() ?: return@t9GlideTyping
                 val dictionary = glideDictionary
                 val doublePinyin = glideDoublePinyin
+                // 这一笔之前组合里已有的数字，同一条线按它挑（他 11-23：先打 hua 再划 xing 永远出 zhong）。在主线程读。
+                val before = runCatching { callbacks.t9GlideComposition() }.getOrNull().orEmpty()
                 glideScope.launch {
                     // 很短又认不出：快打时手指一抖被当成了滑行，按点了起点那个键算，不吞这一下（用户 11-11）。
                     val glide = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
                         runCatching {
-                            com.kingzcheung.xime.glide.GlideLexicon.t9Glide(glideContext, keys, xs, ys, dictionary, doublePinyin)
+                            com.kingzcheung.xime.glide.GlideLexicon.t9Glide(glideContext, keys, xs, ys, dictionary, doublePinyin,
+                                before = before)
                         }.getOrNull()
                     }
                     val digits = glide?.digits.orEmpty()
                         .ifEmpty { com.kingzcheung.xime.glide.shortGlideTapKey(keys, xs, ys)?.toString().orEmpty() }
                     if (digits.isEmpty()) return@launch
                     kotlinx.coroutines.withContext(inputContext) {
-                        // 同一笔的其他词（#214）：先登记，打入的数字串整笔出现时候选栏在首选之后给出。
-                        callbacks.onT9GlideAlternatives?.invoke(digits, glide?.alternatives.orEmpty().takeIf { glide?.digits == digits }.orEmpty())
+                        // 同一笔的其他词（#214）：先登记，打入后整个组合（前面已有的 + 这一笔）出现时候选栏在首选之后给出。
+                        callbacks.onT9GlideAlternatives?.invoke(before + digits,
+                            glide?.alternatives.orEmpty().takeIf { glide?.digits == digits }.orEmpty())
                         for (digit in digits) {
                             val key = digit.toString()
                             if (callbacks.onPreeditKeyInput?.invoke(key) != true) controller.onDigitPressed(key)

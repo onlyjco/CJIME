@@ -100,6 +100,10 @@ internal fun rememberImeKeyboardCallbacks(
                     service.isSecretEditor()) null
                 else runCatching { service.currentInputConnection?.getTextBeforeCursor(16, 0)?.toString() }.getOrNull()
             },
+            t9GlideComposition = {
+                if (service.t9PartialSegments.isNotEmpty()) ""
+                else T9GlideAlternatives.digitsOf(service.candidateState.value.inputText).orEmpty()
+            },
             inputCommands = service.inputCommands,
             onT9UnconsumedDelete = service.keyRouter::processDeleteKey,
             onRetryRejectedCommit = service.keyRouter::retryRejectedCommit,
