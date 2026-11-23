@@ -38,8 +38,10 @@ internal fun keyTipGroups(settings: KeyboardInputPreferences): List<KeyTipGroup>
     val hold = "%.1f".format(com.kingzcheung.xime.ui.keyboard.normalizeSymbolKeyHoldSeconds(settings.symbolKeyHoldSeconds))
     return listOf(
         KeyTipGroup("Shift", listOf(
-            KeyTip("点一下 Shift", "下一个字母大写，打完自动回到小写。"),
-            KeyTip("连点两下 Shift", "大写锁定，再点一下解除。"),
+            // 「点一下 Shift 锁定大写」开着时点一下就是锁定（用户 11-23）。
+            *(if (settings.shiftTapLocks) arrayOf(KeyTip("点一下 Shift", "大写锁定，再点一下解除。"))
+            else arrayOf(KeyTip("点一下 Shift", "下一个字母大写，打完自动回到小写。"),
+                KeyTip("连点两下 Shift", "大写锁定，再点一下解除。"))),
             KeyTip("按住 Shift 再点字母", "按住期间一直是大写。"),
             KeyTip("从 Shift 拖到字母上松手", "只把这一个字母打成大写。"),
             KeyTip("按住 Shift 看候选", "有英文的候选换成英文。"),

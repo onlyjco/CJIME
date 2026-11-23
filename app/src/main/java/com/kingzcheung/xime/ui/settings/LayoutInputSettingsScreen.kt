@@ -8,6 +8,7 @@ import androidx.compose.material.icons.twotone.SwapHoriz
 import androidx.compose.material.icons.twotone.OpenWith
 import androidx.compose.material.icons.twotone.SpaceBar
 import androidx.compose.material.icons.twotone.ContentCut
+import androidx.compose.material.icons.twotone.KeyboardCapslock
 import androidx.compose.material.icons.twotone.Gesture
 import androidx.compose.material.icons.twotone.Abc
 import androidx.compose.material.icons.twotone.Spellcheck
@@ -116,6 +117,13 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                         lockMessage = com.kingzcheung.xime.ui.keyboard.InputGestureLocks.lockFor(settings, com.kingzcheung.xime.ui.keyboard.InputGestureLock.Option.SHIFT_SYLLABLE_SPLIT, true)
                             ?.takeIf { !settings.shiftSyllableSplit }?.message)
                     ShiftSyllableSplitLegend(settings.shiftSyllableSplit)
+                    HorizontalDivider()
+                    // 用户 11-23 转群友：想点一下 Shift 就一直大写。默认关，关着照旧（点一下大写一个字母，连点两下锁定）。
+                    SettingsToggleItem(Icons.TwoTone.KeyboardCapslock, "点一下 Shift 锁定大写",
+                        if (settings.shiftTapLocks) "点一下一直大写，再点一下回小写" else "现在点一下只大写一个字母，连点两下才锁定",
+                        checked = settings.shiftTapLocks, onCheckedChange = {
+                            settings = settings.copy(shiftTapLocks = it); settings.save(context)
+                        })
                 })
                 }
                 LayoutInputCategory.Nine -> Column(verticalArrangement = Arrangement.spacedBy(16.dp)) {
