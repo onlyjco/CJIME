@@ -463,7 +463,10 @@ object RimeConfigHelper {
                 // build 已就位但配置有变化：增量维护，只编译变更的 schema/dict，
                 // 避免 custom.yaml 补丁等小幅改动触发 60MB 词库全量重编译（持锁 30s+）。
                 FileLogger.w(TAG, "Build exists, running incremental maintenance")
+                val compileStartedAt = android.os.SystemClock.elapsedRealtime()
                 if (engine.deployIncremental()) {
+                    // 进共享日志：打开一个方案后要等多久（用户 11-23「等十几秒才切过去」），编译占了几秒。
+                    FileLogger.w(TAG, "Incremental maintenance done in ${android.os.SystemClock.elapsedRealtime() - compileStartedAt} ms")
                     deployed = true
                 } else {
                     FileLogger.w(TAG, "Incremental maintenance failed, falling back to full deploy")

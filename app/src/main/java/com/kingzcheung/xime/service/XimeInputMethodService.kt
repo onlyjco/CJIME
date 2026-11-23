@@ -1279,6 +1279,10 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                     schemaController.switchSchema(id, stayInHandwriting = false, quiet = true)
             }
         }
+        // 部署做完：失败就告诉等着的方案为什么换不上；没叫键盘重新准备时直接换上（用户 11-23）。
+        serviceScope.launch {
+            com.kingzcheung.xime.rime.SchemaChangeApplier.finished.collect { schemaController.deploymentFinished(it) }
+        }
         initRimeEngine()
         
         serviceScope.launch(Dispatchers.IO) {
@@ -1447,6 +1451,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                     updateUI()
                     inputReadiness.completeStartup()
                     uiState.value = uiState.value.copy(isDeploying = false, deploymentMessage = "")
+                    // 部署期间点了还没编译好的方案：现在换上（用户 11-23）。
+                    schemaController.resumePendingSwitch()
                     // Focus may have changed while native initialization was suspended.
                     // Queue the current field's preparation before accepting its first key.
                     currentInputEditorInfo?.let {
@@ -2905,6 +2911,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                     voiceRightActive = state.voiceButtonState.rightActive,
                                     voicePluginName = state.voicePluginName,
                                     voiceNotice = state.voiceNotice,
+                                    schemePreparing = state.schemePreparing,
                                     voiceRecognitionState = state.voiceRecognitionState,
                                     voiceRecognizedText = state.voiceRecognizedText,
                                     isSttEnabled = state.isSttEnabled,

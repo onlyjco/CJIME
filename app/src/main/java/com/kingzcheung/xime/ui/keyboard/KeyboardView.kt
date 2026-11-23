@@ -2699,6 +2699,19 @@ fun KeyboardView(
             }
         }
 
+        // 点了还在部署的方案：只在键盘上方一行转圈说在准备，不盖住键盘；好了自动换上（用户 11-23）。
+        state.schemePreparing?.let { name ->
+            Box(Modifier.matchParentSize().then(Modifier.zIndex(21f)), contentAlignment = Alignment.TopCenter) {
+                Row(verticalAlignment = Alignment.CenterVertically,
+                    modifier = Modifier.padding(8.dp).background(keyboardBgColor.copy(alpha = 0.95f), RoundedCornerShape(8.dp))
+                        .padding(horizontal = 12.dp, vertical = 6.dp).testTag("scheme-preparing")) {
+                    androidx.compose.material3.CircularProgressIndicator(Modifier.size(14.dp), color = keyTextColor, strokeWidth = 2.dp)
+                    Spacer(Modifier.width(8.dp))
+                    Text("正在准备「$name」，好了自动换上", color = keyTextColor, fontSize = 13.sp, maxLines = 1)
+                }
+            }
+        }
+
         state.rejectedCommitText?.let { rejected ->
             Box(Modifier.matchParentSize().then(Modifier.zIndex(20f))) {
                 RejectedCommitOverlay(rejected, keyboardBgColor, keyTextColor,
