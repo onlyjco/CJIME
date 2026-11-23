@@ -94,7 +94,7 @@ fun SpaceKeyButton(
     var spaceBounds by remember { mutableStateOf(androidx.compose.ui.geometry.Rect.Zero) }
     val currentClick by rememberUpdatedState(onClick)
     val currentPress by rememberUpdatedState(onPress)
-    val currentRelease by rememberUpdatedState(onRelease)
+    val currentRelease by rememberUpdatedState(keyReleaseOrShared(onRelease, onPress != null))
     val scope = rememberCoroutineScope()
     val view = LocalView.current
     val density = LocalDensity.current

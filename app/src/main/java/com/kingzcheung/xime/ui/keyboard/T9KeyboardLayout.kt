@@ -1074,6 +1074,8 @@ internal fun T9CandidateItem(
     var isPressed by remember { mutableStateOf(false) }
     val currentOnClick by rememberUpdatedState(onClick)
     val currentOnPress by rememberUpdatedState(onPress)
+    // 和字母键一样松手也给「按键抬起震动」（用户 11-23：九键抬起震动无效）。
+    val currentOnRelease by rememberUpdatedState(keyReleaseOrShared(null, onPress != null))
     BoxWithConstraints(
         modifier = modifier
             .fillMaxWidth()
@@ -1087,6 +1089,7 @@ internal fun T9CandidateItem(
                     currentOnPress?.invoke()
                     tryAwaitRelease()
                     isPressed = false
+                    currentOnRelease?.invoke()
                 }, onTap = { currentOnClick() })
             },
         contentAlignment = Alignment.Center
@@ -1268,6 +1271,8 @@ internal fun ResetKey(
     var isPressed by remember { mutableStateOf(false) }
     val currentOnClick by rememberUpdatedState(onClick)
     val currentOnPress by rememberUpdatedState(onPress)
+    // 和字母键一样松手也给「按键抬起震动」（用户 11-23：九键抬起震动无效）。
+    val currentOnRelease by rememberUpdatedState(keyReleaseOrShared(null, onPress != null))
     val density = LocalDensity.current
     val shape = RoundedCornerShape(KeyShapes.current.radius(shadowShapeRadius))
     val frostedGlass = LocalKeyboardInputPreferences.current.frostedGlass
@@ -1296,6 +1301,7 @@ internal fun ResetKey(
                     currentOnPress?.invoke()
                     tryAwaitRelease()
                     isPressed = false
+                    currentOnRelease?.invoke()
                 }, onTap = { currentOnClick() })
             }
             .padding(scaledKeyVisualPadding())

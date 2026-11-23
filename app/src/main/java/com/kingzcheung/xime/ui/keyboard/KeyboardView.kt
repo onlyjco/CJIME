@@ -2567,7 +2567,8 @@ fun KeyboardView(
                 val numberSpacing = kbKey.spacingFor(numberKeyboardSpacingSection(state.inputProfile, state.isAsciiMode))
                 val panelSuppressCursorMove = remember { mutableStateOf(false) }
                 val panelCursorMod = keyboardSwipeCursor(callbacks.onCursorMove, inputPreferences, panelSuppressCursorMove)
-                CompositionLocalProvider(LocalSuppressCursorMove provides panelSuppressCursorMove) {
+                CompositionLocalProvider(LocalSuppressCursorMove provides panelSuppressCursorMove,
+                    LocalKeyReleaseFeedback provides callbacks.onKeyRelease) {
                 when (panelType) {
                     PanelType.NUMBER -> NumberKeyboardLayout(
                         onKeyPress = { key ->

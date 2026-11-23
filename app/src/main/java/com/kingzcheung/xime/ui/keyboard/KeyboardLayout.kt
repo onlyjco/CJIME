@@ -1904,6 +1904,8 @@ internal fun ShiftCapsKeyButton(
     val currentSplitRedundant by rememberUpdatedState(splitRedundant)
     val suppressCursorMove = LocalSuppressCursorMove.current
     val currentPress by rememberUpdatedState(onKeyPressDown)
+    // 松手给「按键抬起震动」，和字母键一样（用户 11-23）。
+    val currentRelease by rememberUpdatedState(keyReleaseOrShared(null, onKeyPressDown != null))
     val currentKey by rememberUpdatedState(onKeyPress)
     val currentGapLight by rememberUpdatedState(LocalKeyGapLight.current)
     var bounds by remember { mutableStateOf(Rect.Zero) }
@@ -1999,6 +2001,7 @@ internal fun ShiftCapsKeyButton(
                         targets?.finish()
                         isPressed = false
                         suppressCursorMove.value = false
+                        currentRelease?.invoke()
                         if (splitTap) {
                             // 只有短按插入分词；长按、拖走无效果；末尾已经是分词符就不再连着加。
                             if (released && !dragged && upTime - down.uptimeMillis < 350L &&

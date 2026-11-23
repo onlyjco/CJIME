@@ -716,6 +716,8 @@ private fun StrokeSymbolItem(
     var isPressed by remember { mutableStateOf(false) }
     val currentOnClick by rememberUpdatedState(onClick)
     val currentOnPress by rememberUpdatedState(onPress)
+    // 和字母键一样松手也给「按键抬起震动」（用户 11-23：九键抬起震动无效）。
+    val currentOnRelease by rememberUpdatedState(keyReleaseOrShared(null, onPress != null))
     // 面板样式与九键左栏（CandidateItem）一致：条目自身透明、按压时垫底层加深，
     // 圆角/阴影由外层面板统一负责
     BoxWithConstraints(
@@ -731,6 +733,7 @@ private fun StrokeSymbolItem(
                     currentOnPress?.invoke()
                     tryAwaitRelease()
                     isPressed = false
+                    currentOnRelease?.invoke()
                 }, onTap = { currentOnClick() })
             },
         contentAlignment = Alignment.Center

@@ -340,6 +340,8 @@ private fun NumberSymbolKey(
     var isPressed by remember { mutableStateOf(false) }
     val currentOnClick by rememberUpdatedState(onClick)
     val currentOnPress by rememberUpdatedState(onPress)
+    // 和字母键一样松手也给「按键抬起震动」（用户 11-23：九键抬起震动无效）。
+    val currentOnRelease by rememberUpdatedState(keyReleaseOrShared(null, onPress != null))
     val density = LocalDensity.current
     val frostedGlass = LocalKeyboardInputPreferences.current.frostedGlass
     BoxWithConstraints(
@@ -352,6 +354,7 @@ private fun NumberSymbolKey(
                     currentOnPress?.invoke()
                     tryAwaitRelease()
                     isPressed = false
+                    currentOnRelease?.invoke()
                 }, onTap = { currentOnClick() })
             }, contentAlignment = Alignment.Center
     ) {

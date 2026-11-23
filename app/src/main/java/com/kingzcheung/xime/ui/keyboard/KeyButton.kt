@@ -162,6 +162,7 @@ fun KeyButton(
 ) {
     var ownPressed by remember { mutableStateOf(false) }
     val isPressed = ownPressed || externalPressed
+    val release = keyReleaseOrShared(onRelease, onPress != null)
     var flickPreview by remember { mutableStateOf<KeyFlickPreview?>(null) }
     val density = LocalDensity.current
     val view = LocalView.current
@@ -172,7 +173,7 @@ fun KeyButton(
         text = text,
         onTap = onClick,
         onPress = { ownPressed = true; onPress?.invoke() },
-        onRelease = { ownPressed = false; onRelease?.invoke() },
+        onRelease = { ownPressed = false; release?.invoke() },
         onPreview = { flickPreview = it.keyFlick; onSwipeStateChange?.invoke(it) },
         inlineVerticalPreview = true,
         upText = swipeText,
@@ -384,6 +385,7 @@ fun SwipeableKeyButton(
     val letters = fourteenKeyLetters(letterGroup, letterSwipeLayout &&
         inputPreferences.fourteenLetterSwipe && onLetterSelection != null)
     var isPressed by remember { mutableStateOf(false) }
+    val release = keyReleaseOrShared(onRelease, onPress != null)
     var flickPreview by remember { mutableStateOf<KeyFlickPreview?>(null) }
     var longPressShown by remember { mutableStateOf(false) }
     // 方向圆盘只在手指拂出去或按住一会儿后出现；快速点按不弹（用户 11-03：只点不拂时轮盘让打字发卡）。
@@ -476,7 +478,7 @@ fun SwipeableKeyButton(
         text = text,
         onTap = tapOrCtrl,
         onPress = { isPressed = true; discRevealed = false; onPress?.invoke() },
-        onRelease = { isPressed = false; onRelease?.invoke() },
+        onRelease = { isPressed = false; release?.invoke() },
         onPreview = { flickPreview = keyPreview(it); longPressShown = it.isLongPress; forwardPreview(it) },
         inlineVerticalPreview = true,
         inlineHorizontalPreview = true,
@@ -501,7 +503,7 @@ fun SwipeableKeyButton(
         text = text,
         onTap = tapOrCtrl,
         onPress = { isPressed = true; discRevealed = false; onPress?.invoke() },
-        onRelease = { isPressed = false; onRelease?.invoke() },
+        onRelease = { isPressed = false; release?.invoke() },
         // 长按到点后（角标已输入或弹出菜单）方向盘收起，和拂动键一样只留长按气泡。
         onPreview = { flickPreview = keyPreview(it); longPressShown = it.isLongPress; forwardPreview(it) },
         // 键上画着角标时在键内渐变预览；角标符号都没画出来时弹气泡（和长按一样）。
@@ -1008,7 +1010,7 @@ fun IconKeyButton(
     var isPressed by remember { mutableStateOf(false) }
     val currentOnClick by rememberUpdatedState(onClick)
     val currentOnPress by rememberUpdatedState(onPress)
-    val currentOnRelease by rememberUpdatedState(onRelease)
+    val currentOnRelease by rememberUpdatedState(keyReleaseOrShared(onRelease, onPress != null))
     // 键缝动效：这个键点了一下并且生效时告诉光层（回车整排往上扫）。
     val gapLightTrigger = remember { KeyGapLightTrigger() }
     val density = LocalDensity.current
@@ -1133,7 +1135,7 @@ fun SwipeableIconKeyButton(
 ) {
     // Gesture coroutines survive recomposition; route to the current editor/input callbacks.
     val currentOnClick by rememberUpdatedState(onClick)
-    val currentOnRelease by rememberUpdatedState(onRelease)
+    val currentOnRelease by rememberUpdatedState(keyReleaseOrShared(onRelease, onPress != null))
     val currentOnPress by rememberUpdatedState(onPress)
     val currentOnLongClick by rememberUpdatedState(onLongClick)
     val currentOnSwipe by rememberUpdatedState(onSwipe)
