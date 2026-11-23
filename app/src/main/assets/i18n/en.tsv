@@ -3980,3 +3980,5 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 未获得短信权限。请在系统设置 → 应用 → CJIME → 权限里允许接收短信，再回到这里。	SMS permission not granted. Allow receiving SMS in System settings → Apps → CJIME → Permissions, then come back.
 需要通讯录权限，请在系统设置里允许	Contacts permission is needed; allow it in system settings
 高度、宽度、悬浮、透明度	Height, width, floating, transparency
+打开键盘时退出英文	Leave English when the keyboard opens
+换输入框或回到应用时，从英文切回中文等原来的语言	Switch back from English to Chinese or your other language when you change fields or return to an app
