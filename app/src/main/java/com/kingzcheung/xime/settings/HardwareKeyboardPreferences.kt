@@ -21,6 +21,8 @@ data class HardwareKeyboardOptions(
     val toolShortcuts: Boolean = true,
     /** 锁定浮窗位置：工具条不能拖动，停在现在的位置（按钮照常能点）。默认关。 */
     val lockPosition: Boolean = false,
+    /** 单独选了直通的应用包名（#265）：接着实体键盘时不显示工具条，按键直接给应用。默认空。 */
+    val passthroughApps: Set<String> = emptySet(),
 )
 
 object HardwareKeyboardPreferences {
@@ -41,7 +43,23 @@ object HardwareKeyboardPreferences {
             gamePassthrough = p.getBoolean(PREFIX + "game_passthrough", false),
             toolShortcuts = p.getBoolean(PREFIX + "tool_shortcuts", true),
             lockPosition = p.getBoolean(PREFIX + "lock_position", false),
+            passthroughApps = p.getStringSet(PREFIX + PASSTHROUGH_APPS, null)?.toSet().orEmpty(),
         )
+    }
+    private const val PASSTHROUGH_APPS = "passthrough_apps"
+    private const val LAST_APP = "last_app"
+    /** 打开或关掉某个应用的直通；存一份新的集合，不改 getStringSet 返回的那份。 */
+    fun setPassthroughApp(context: Context, packageName: String, enabled: Boolean) {
+        val prefs = SettingsPreferences.getPrefsPublic(context)
+        val apps = prefs.getStringSet(PREFIX + PASSTHROUGH_APPS, null)?.toMutableSet() ?: mutableSetOf()
+        if (enabled) apps += packageName else apps -= packageName
+        prefs.edit().putStringSet(PREFIX + PASSTHROUGH_APPS, apps).apply()
+    }
+    /** 最近一次用实体键盘打字的应用，设置页拿来给用户勾直通；没记过时为 null。 */
+    fun lastApp(context: Context): String? = SettingsPreferences.getPrefsPublic(context).getString(PREFIX + LAST_APP, null)
+    fun noteLastApp(context: Context, packageName: String) {
+        val prefs = SettingsPreferences.getPrefsPublic(context)
+        if (prefs.getString(PREFIX + LAST_APP, null) != packageName) prefs.edit().putString(PREFIX + LAST_APP, packageName).apply()
     }
     fun set(context: Context, key: String, enabled: Boolean) {
         require(key in setOf("ctrl_space", "shift_tap", "follow_cursor", "avoid_editor", "dock_edge",
