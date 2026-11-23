@@ -2318,7 +2318,9 @@ fun KeyboardView(
             Column(Modifier.clipboardUnderlaySize(clipboardPanel, state.keyboardHeightDp).fillMaxSize()
                 .then(if (state.themeId == com.kingzcheung.xime.ui.theme.TransparentGlassTheme.ID) Modifier
                     else Modifier.cySwapFadeIn(underlaySwapKey, instantKey = listOf(state.isAsciiMode, state.inputProfile.language)))
-                .excludeRevealedKeyboardPanels(panelsSeeKeyboardBackground, candidateReveal, overlayReveal).then(
+                // 展开候选页铺满整个键盘本体时（剪贴板拉高、全屏手写除外），按键整层不画，不靠上一帧量的位置去挖。
+                .excludeRevealedKeyboardPanels(panelsSeeKeyboardBackground, candidateReveal, overlayReveal,
+                    covering = candidateReveal.takeIf { clipboardPanel == null && !state.handwritingExpanded }).then(
                 if (candidatePageExpanded || overlayVisible) Modifier.clearAndSetSemantics {} else Modifier
             // 全屏手写开着工具面板时书写区仍露在面板上方，照旧不动它。
             ).blockCoveredKeyboardTouches((candidatePageExpanded || overlayVisible) && !state.handwritingExpanded)) {

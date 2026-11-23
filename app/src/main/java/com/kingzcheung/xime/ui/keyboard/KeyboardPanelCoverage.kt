@@ -31,15 +31,24 @@ internal fun Modifier.inheritKeyboardBackground(inherit: Boolean = true): Modifi
 
 internal fun Modifier.inheritsKeyboardBackground(): Boolean = any { it === InheritedKeyboardBackground }
 
-/** Keep hidden pages measured and composed, but never paint their keys through a replacement panel. */
+/**
+ * Keep hidden pages measured and composed, but never paint their keys through a replacement panel.
+ *
+ * [covering] is a panel laid over this whole page. While it is fully drawn the page is not painted at all:
+ * that needs only the panel's progress, not window bounds. Bounds and origin come from layout callbacks
+ * and are suspected of lagging one frame: the whole keyboard showed through the fully drawn expanded
+ * candidate page while ▴ was held (his video 11-23, image theme). The curtain still clips by bounds.
+ */
 @Composable
 internal fun Modifier.excludeRevealedKeyboardPanels(
     enabled: Boolean,
     vararg panels: KeyboardPanelRevealState,
+    covering: KeyboardPanelRevealState? = null,
 ): Modifier {
     if (!enabled) return this
     var origin by remember { mutableStateOf(Offset.Zero) }
     return onGloballyPositioned { origin = it.positionInWindow() }.drawWithContent {
+        if (covering != null && covering.progress.value >= 1f) return@drawWithContent
         fun drawOutside(index: Int) {
             if (index == panels.size) {
                 drawContent()
