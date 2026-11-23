@@ -97,7 +97,7 @@ object InputProfileSelection {
     }
 
     /**
-     * 自建的合并键布局只有 CyIME 给它生成过的方案（中文26键的副本、内置和自建双拼的布局版本），
+     * 自建的合并键布局只有 CyIME 给它生成过的方案（中文26键的副本、内置和自建双拼、写明双拼的导入方案的布局版本），
      * 说一句原因（#160：用户以为自己方案写错了）。
      */
     fun switchHint(layout: InputLayout, current: SchemaInfo, target: SchemaInfo,
@@ -106,7 +106,7 @@ object InputProfileSelection {
             if (mergedCustom) "\n$MERGED_LAYOUT_NOTE" else ""
 
     /** 合并键布局能用哪些方案。 */
-    const val MERGED_LAYOUT_NOTE = "合并键布局只能用中文26键和内置、自建双拼"
+    const val MERGED_LAYOUT_NOTE = "合并键布局只能用中文26键和双拼方案"
 
     /** Changing shape cannot silently change language or encoding. Missing combinations stay unavailable. */
     fun changeLayout(entries: List<SchemaInfo>, current: SchemaInfo, layoutId: String): SchemaInfo? = entries
