@@ -72,13 +72,19 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
                         const string& initials_first, double near_penalty, Poet* poet,
                         const WordGraph* sentence_graph, int max_sentences, double cutoff,
                         const an<Sentence>& exact_sentence, const an<Sentence>& rime_best,
-                        deque<an<Sentence>>* sentences, bool slip_only) {
+                        deque<an<Sentence>>* sentences, bool slip_only,
+                        vector<std::pair<double, an<Sentence>>>* runners_up) {
   // translator/max_sentences gave the n-best to choose from; the menu keeps one sentence, as with
   // max_sentences: 1 (followed by Rime's best when that one is a correction).
   auto corrected = [&](const an<Sentence>& sentence) {
     return q.enable_correction && q.IsCorrection(sentence->code(), sentence->end() - q.start);
   };
   an<Sentence> chosen = sentences->front();
+  if (runners_up) {
+    runners_up->clear();
+    for (const auto& sentence : *sentences)
+      if (!corrected(sentence)) runners_up->emplace_back(sentences->front()->weight() - sentence->weight(), sentence);
+  }
   const string& in = q.input;
   size_t groups = 0;
   bool vowel = false, consonants_only = !in.empty();
@@ -311,13 +317,20 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
     // no correction did and its score, penalty paid, is still the higher one.
     an<Sentence> near_choice;
     double near_score = -std::numeric_limits<double>::infinity();
+    vector<std::pair<double, an<Sentence>>> ranked;
     for (const auto& sentence : pool) {
       const double value = total(*sentence);
+      if (runners_up) ranked.emplace_back(value, sentence);
       if (near_words(*sentence)) {
         if (value > near_score) { near_score = value; near_choice = sentence; }
         continue;
       }
       if (value > chosen_score) { chosen_score = value; chosen = sentence; }
+    }
+    if (runners_up) {
+      std::stable_sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
+      runners_up->clear();
+      for (const auto& item : ranked) runners_up->emplace_back(ranked.front().first - item.first, item.second);
     }
     // With stray initials (Syllabifier::MarkStrayInitials) the typed reading stands only through initials weighed as
     // slips, so the corrected n-best is chosen by the word model too and leads (清晨 over 清真 in 是清晨的一杯).

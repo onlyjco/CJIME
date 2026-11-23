@@ -99,6 +99,15 @@ struct T9ScriptOptions {
   // t9/near_homophone_penalty (ln units): what a sentence pays for each word that is only the second dictionary
   // word of its letters (translator/sentence_near_homophone_margin lets those in). See T9RescoreSentences.
   double t9_near_homophone_penalty_ = 0.0;
+  // t9/menu_sentences (26 keys, t9/sentence_rescore): how many whole sentences lead the menu, in the order of the
+  // computed score. 1: the chosen one alone, as before.
+  int t9_menu_sentences_ = 1;
+  // t9/menu_sentence_margin (ln units): a sentence that lost is listed only when its score is within this of the
+  // best one (0: no limit). Keeps out the readings nobody means (尼上课了嘛 under 你上课了嘛).
+  double t9_menu_sentence_margin_ = 0.0;
+  // t9/menu_prefixes: after the whole sentences, the first sentence cut at its word boundaries, longest first, at
+  // most this many (0: none, as before). Picking one keeps the words that were right; the rest is made again.
+  int t9_menu_prefixes_ = 0;
   // t9/final_g_word_margin (ln units): a dictionary word that reads the whole input with the final g added
   // (translator/cyime_final_g_correction; yianzhuan: 已安装) leads the sentence of the typed letters (一按转) when the
   // word model finds its text more likely by more than this; 0 keeps the typed sentence first. Uses
