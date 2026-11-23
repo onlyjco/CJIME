@@ -12,9 +12,7 @@ Android 开源中英文输入法，基于 [CyIME](https://github.com/Cyletix/CyI
 
 ## 下载与安装
 
-在 [Releases](https://github.com/onlyjco/CJIME/releases) 下载对应版本的轻量优化安装包：
-
-- **`CJIME-<版本>-arm64-v8a.apk`**（推荐绝大多数手机安装；已开启 R8 代码与资源精简，体积小巧，需要使用的语音/手写等离线模型可在应用内按需下载）
+在 [Releases](https://github.com/onlyjco/CJIME/releases) 下载对应架构的安装包（如 **`CJIME-<版本>-arm64-v8a.apk`**，推荐绝大多数手机安装；已开启 R8 代码与资源精简，需要使用的语音/手写等离线模型可在应用内按需下载）。
 
 > **说明**：CJIME 使用独立包名 `com.onlyjco.cjime`，可与原版 CyIME 或 Xime 并存安装；系统要求 Android 9.0（API 28）及以上。
 
@@ -43,7 +41,7 @@ Android 开源中英文输入法，基于 [CyIME](https://github.com/Cyletix/CyI
 - **手写识别**：内置中文、英文与数学公式（LaTeX 渲染）手写输入面板
 - **实时字幕**：支持中英文语音实时转写浮窗显示
 - **剪贴板与收藏夹**：支持剪贴板历史记录、置顶、搜索、导出为 TXT / Markdown / JSON，独立管理文本与图片收藏夹，以及在候选栏显示刚复制内容开关
-- **物理键盘支持**：外接物理键盘时支持候选栏工具条、常用快捷键以及游戏按键直通等适配
+- **媲美电脑输入法的物理键盘体验**：外接物理键盘时提供接近桌面端的输入体验，支持候选跟随光标、智能联想显示在候选窗、自动避开输入区域、靠边停靠、贴底边整宽带编号的「底部候选」通栏及位置锁定；支持 `Ctrl + 空格` / 单独轻按 `Shift` 切语言、`− / =` / `[ / ]` / `, / .` 翻页、`Ctrl + .` 切中英文标点、`Ctrl + 回车` 发送、`Alt + V` 呼出剪贴板并用方向键选词粘贴、`Alt + H` 启停语音，以及游戏按键直通防弹软件盘
 - **界面与扩展**：支持深浅色主题、毛玻璃与多种视觉样式调节、自定义键盘布局以及扩展插件机制
 
 ---
@@ -62,7 +60,7 @@ cd CJIME
 
 ## 仓库自动化发布
 
-- **正式发布（Release）**：推送以 `V` 开头的标签（如 `git tag V1.0 && git push origin V1.0`）时触发 [.github/workflows/release.yml](.github/workflows/release.yml) 构建并发布轻量版 APK 到 GitHub Releases
+- **正式发布（Release）**：推送以 `V` 开头的标签（如 `git tag V1.0 && git push origin V1.0`）时触发 [.github/workflows/release.yml](.github/workflows/release.yml) 构建并发布 APK 到 GitHub Releases
 - **测试构建（Nightly）**：仅在你主动需要时于 GitHub Actions 手动触发 `CJIME Nightly Build`（已关闭每日定时自动构建）
 
 ---

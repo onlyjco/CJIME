@@ -12,9 +12,7 @@ An open-source Chinese & English input method for Android based on [CyIME](https
 
 ## Download & Install
 
-Download the unified lightweight release APK from [Releases](https://github.com/onlyjco/CJIME/releases):
-
-- **`CJIME-<version>-arm64-v8a.apk`** (recommended for most devices; built with R8 code & resource shrinking for a small footprint—optional offline voice/handwriting models can be downloaded on demand inside the app)
+Download the APK for your device architecture from [Releases](https://github.com/onlyjco/CJIME/releases) (e.g. **`CJIME-<version>-arm64-v8a.apk`**, recommended for most devices; built with R8 code & resource shrinking, with optional offline voice/handwriting models downloadable on demand inside the app).
 
 > **Note**: CJIME uses its own package ID (`com.onlyjco.cjime`), so it installs alongside upstream CyIME or Xime without conflicts. Requires Android 9.0 (API 28) or higher.
 
@@ -43,7 +41,7 @@ Download the unified lightweight release APK from [Releases](https://github.com/
 - **Handwriting Panel**: Chinese, English, and math formula recognition with local LaTeX rendering.
 - **Live Captions**: Floating real-time speech transcription overlay for Chinese and English.
 - **Clipboard & Favorites**: Searchable clipboard history with pinning, TXT/Markdown/JSON export, separate text & image favorites, and a toggle to show recently copied items directly on the candidate bar.
-- **Hardware Keyboard Support**: Toolbar, productivity shortcuts, and game key-passthrough tuning for physical keyboards.
+- **Desktop-Grade Physical Keyboard Experience**: Brings a PC-like typing experience to external keyboards—supporting cursor-following candidate windows, smart prediction display, auto-avoiding the input area, edge docking, a full-width numbered bottom candidate bar, and position locking. Includes `Ctrl + Space` / `Shift` tap language switching, `− / =`, `[ / ]`, and `, / .` candidate paging, `Ctrl + .` punctuation toggle, `Ctrl + Enter` send, `Alt + V` clipboard popup with arrow-key selection, `Alt + H` voice toggle, and game key-passthrough mode.
 - **Visual Customization & Plugins**: Light/dark themes, frosted glass effects, customizable keyboard layouts, and plugin support.
 
 ---
@@ -62,7 +60,7 @@ Requires JDK 17 and Android SDK / NDK (`29.0.14206865`) with CMake to build nati
 
 ## GitHub Actions Workflows
 
-- **Releases**: Pushing a `V*.*` tag (e.g., `git tag V1.0 && git push origin V1.0`) triggers [.github/workflows/release.yml](.github/workflows/release.yml) to build and publish the lightweight APK to GitHub Releases.
+- **Releases**: Pushing a `V*.*` tag (e.g., `git tag V1.0 && git push origin V1.0`) triggers [.github/workflows/release.yml](.github/workflows/release.yml) to build and publish the APKs to GitHub Releases.
 - **Nightly / Ad-hoc Builds**: Triggered manually on demand via `workflow_dispatch` in `CJIME Nightly Build` (scheduled daily runs are disabled).
 
 ---
