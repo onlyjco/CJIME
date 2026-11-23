@@ -336,9 +336,15 @@ class SpeechRecognitionManager(
         spectrumCallback = onSpectrum
     }
 
+    /** 「用蓝牙耳机的麦克风」（#309），默认关；见 [BluetoothMicRoute]。 */
+    private val bluetoothMic by lazy { BluetoothMicRoute(context) }
+    private fun bluetoothMicWanted() = com.kingzcheung.xime.settings.SettingsPreferences.isSttBluetoothMic(context)
+
     fun startPreStart() {
         releasePreStart()
         if (released || recordingThread != null) return
+        // 要用蓝牙耳机麦克风时不先开手机麦克风：先开的那支会被这次录音接着用。
+        if (bluetoothMicWanted() && bluetoothMic.input() != null) return
         val record = createAudioRecord(PRE_START_BUFFER_SECS) ?: return
         try {
             record.startRecording()
@@ -489,7 +495,23 @@ class SpeechRecognitionManager(
             onNotice = { message -> mainHandler.post { noticeCallback?.invoke(message) } })
     }
 
-    private fun createAudioRecord(bufferSecs: Float = 2.0f): AudioRecord? {
+    /** 录音实际走的麦和格式（不含声音）：来源、采样率、声道、路由到的输入设备、正在用的麦克风位置。 */
+    private fun describeRoute(record: AudioRecord): String = buildString {
+        append("source=").append(record.audioSource).append(" rate=").append(record.sampleRate)
+            .append(" channels=").append(record.channelCount).append(" session=").append(record.audioSessionId)
+        runCatching { record.routedDevice }.getOrNull()?.let { d ->
+            append(" device=").append(d.type).append('/').append(d.productName)
+            append('@').append(d.address)
+        }
+        runCatching { record.activeMicrophones }.getOrNull()?.let { mics ->
+            append(" mics=").append(mics.joinToString(",") { m -> "${m.type}:${m.location}:${m.description}" })
+        }
+        append(" ns=").append(android.media.audiofx.NoiseSuppressor.isAvailable())
+            .append(" agc=").append(android.media.audiofx.AutomaticGainControl.isAvailable())
+            .append(" aec=").append(android.media.audiofx.AcousticEchoCanceler.isAvailable())
+    }
+
+    private fun createAudioRecord(bufferSecs: Float = 2.0f, preferred: android.media.AudioDeviceInfo? = null): AudioRecord? {
         audioRecordFactory?.let { return it() }
         val bufferSize = (SAMPLE_RATE * bufferSecs).toInt()
         return try {
@@ -504,6 +526,7 @@ class SpeechRecognitionManager(
                 record.release()
                 null
             } else {
+                preferred?.let { runCatching { record.setPreferredDevice(it) } }
                 record
             }
         } catch (e: Exception) {
@@ -707,8 +730,13 @@ class SpeechRecognitionManager(
 
         override fun run() {
             var deliveryStarted = false
+            var bluetoothRouted = false
             try {
-                val audioRecord = microphone.acquire { createAudioRecord() }
+                val audioRecord = microphone.acquire {
+                    val headset = if (bluetoothMicWanted()) bluetoothMic.begin() else null
+                    bluetoothRouted = headset != null
+                    createAudioRecord(preferred = headset)
+                }
                     ?: if (stopRequested) return else error("麦克风打不开：请检查 CyIME 的录音权限，或关掉正在用麦克风的应用")
                 if (stopRequested) return
                 // 麦克风启动失败不能悄无声息地结束：报给用户（键盘上会显示）。
@@ -790,6 +818,7 @@ class SpeechRecognitionManager(
             } finally {
                 stopRequested = true
                 microphone.close()
+                if (bluetoothRouted) bluetoothMic.end()
                 audioFocus.release(otherAudioOwner)
                 captureEnded = true
                 watchShutdown()
