@@ -222,6 +222,7 @@ object PersonalGlideCalibration {
         code: String,
     ) {
         if (code.isEmpty() || xs.size < 2 || xs.size != ys.size) return
+        lastCommittedGlide = null
         pendingGlide = PendingGlide(
             sessionId = sessionId,
             schemaKey = schemaKey,
@@ -298,7 +299,8 @@ object PersonalGlideCalibration {
         if (abs(correctedCode.length - baseCode.length) <= maxOf(5, (correctedCode.length + 1) / 2)) {
             calibrateOffsetsFromTraceLocked(dir, candidate.bucket, candidate.keyboard, candidate.xs, candidate.ys, correctedCode)
             recordSampleLocked(dir, schemaKey, candidate.bucket, candidate.keyboard, correctedCode, sentenceAfter,
-                candidate.xs, candidate.ys, candidate.ts, badCode = baseCode, source = "sentence_edit")
+                candidate.xs, candidate.ys, candidate.ts,
+                badCode = if (baseCode != correctedCode) baseCode else "", source = "sentence_edit")
         }
         recordPhraseLocked(dir, schemaKey, correctedCode, sentenceAfter)
         candidate.code = correctedCode
@@ -344,11 +346,13 @@ object PersonalGlideCalibration {
 
         val pendingClean = pending.code.replace("'", "").lowercase()
         if (pending.deletedAtMs > 0L) {
-            if (now - pending.deletedAtMs <= REJECT_WINDOW_MS && pendingClean.isNotEmpty() && pendingClean != cleanCode) {
+            val lenDiff = abs(cleanCode.length - pendingClean.length)
+            val compatibleLen = lenDiff <= maxOf(4, min(cleanCode.length, pendingClean.length) / 2)
+            if (now - pending.deletedAtMs <= REJECT_WINDOW_MS && pendingClean.isNotEmpty() && pendingClean != cleanCode && compatibleLen) {
                 recordConfusionLocked(dir, schemaKey, pendingClean, cleanCode)
                 // 就算识别偏离很多（比如 12 键错认成 6 键），只要在删除后手动补打出了真实拼音，仍可把原始偏离轨迹对齐回去校准指腹落点。
                 val lenTolerance = maxOf(5, (cleanCode.length + 1) / 2)
-                if (pending.hadManualEditAfterDelete && abs(cleanCode.length - pendingClean.length) <= lenTolerance) {
+                if (pending.hadManualEditAfterDelete && lenDiff <= lenTolerance) {
                     calibrateOffsetsFromTraceLocked(dir, pending.bucket, pending.keyboard, pending.xs, pending.ys, cleanCode)
                     recordSampleLocked(dir, schemaKey, pending.bucket, pending.keyboard, cleanCode, committedText,
                         pending.xs, pending.ys, pending.ts, badCode = pendingClean, source = "delete_retype")
@@ -359,11 +363,32 @@ object PersonalGlideCalibration {
         }
 
         if (pendingClean == cleanCode || cleanCode.endsWith(pendingClean)) {
-            val traceTarget = if (pendingClean == cleanCode) cleanCode else pendingClean
-            calibrateOffsetsFromTraceLocked(dir, pending.bucket, pending.keyboard, pending.xs, pending.ys, traceTarget)
-            recordSampleLocked(dir, schemaKey, pending.bucket, pending.keyboard, traceTarget, committedText,
+            val isWholeTrace = pendingClean == cleanCode
+            val sampleText = if (isWholeTrace) {
+                committedText
+            } else {
+                // 多笔连输入同一组词后再一次上屏时，[pending] 只包含最后一笔轨迹，截出末尾对应字数避免把整句误标给末笔编码。
+                val rawSyls = rawCode.trim('\'', ' ').split('\'').filter { it.isNotEmpty() }
+                var sumLen = 0
+                var sylCount = 0
+                for (s in rawSyls.asReversed()) {
+                    val cleanS = s.lowercase().filter { it in 'a'..'z' }
+                    if (cleanS.isEmpty()) continue
+                    sumLen += cleanS.length
+                    sylCount++
+                    if (sumLen >= pendingClean.length) break
+                }
+                val tailCount = if (schemaKey != "pinyin") max(1, (pendingClean.length + 1) / 2)
+                else max(1, sylCount)
+                if (committedText.length > tailCount) committedText.takeLast(tailCount) else committedText
+            }
+            calibrateOffsetsFromTraceLocked(dir, pending.bucket, pending.keyboard, pending.xs, pending.ys, pendingClean)
+            if (!isWholeTrace && sampleText.isNotEmpty()) {
+                recordPhraseLocked(dir, schemaKey, pendingClean, sampleText)
+            }
+            recordSampleLocked(dir, schemaKey, pending.bucket, pending.keyboard, pendingClean, sampleText,
                 pending.xs, pending.ys, pending.ts, badCode = "", source = "confirm")
-            lastCommittedGlide = pending.copy(code = traceTarget, createdAtMs = now, committedText = committedText)
+            lastCommittedGlide = pending.copy(code = pendingClean, createdAtMs = now, committedText = sampleText)
         }
     }
 
@@ -598,10 +623,16 @@ object PersonalGlideCalibration {
         val normXs = FloatArray(rx.size) { ((rx[it] - minCenterX) / unit * 100f).roundToInt() / 100f }
         val normYs = FloatArray(ry.size) { ((ry[it] - minCenterY) / unit * 100f).roundToInt() / 100f }
         val baseT = ts.firstOrNull() ?: 0L
-        val normTs = if (ts.size == xs.size && rx.size == xs.size) {
-            LongArray(ts.size) { (ts[it] - baseT).coerceAtLeast(0L) }
+        val normTs = LongArray(rx.size)
+        if (ts.size == xs.size && rx.size == xs.size) {
+            var prevT = 0L
+            for (idx in ts.indices) {
+                val cur = max(prevT, ts[idx] - baseT)
+                normTs[idx] = cur
+                prevT = cur
+            }
         } else if (ts.size == xs.size && xs.size >= 2) {
-            // 按原始弧长百分比插值真实时间戳，完整保留长句手指减速与停顿特征。
+            // 按原始弧长百分比插值真实时间戳，同时强制单调非减以屏蔽底层偶发负跳变。
             val cumDist = FloatArray(xs.size)
             for (k in 1 until xs.size) {
                 val dx = xs[k] - xs[k - 1]
@@ -610,8 +641,9 @@ object PersonalGlideCalibration {
             }
             val totalLen = cumDist.last()
             var rawIdx = 0
-            LongArray(rx.size) { idx ->
-                if (totalLen <= 0f) {
+            var prevT = 0L
+            for (idx in rx.indices) {
+                val rawT = if (totalLen <= 0f) {
                     val lastDt = (ts.last() - baseT).coerceAtLeast(1L)
                     lastDt * idx / max(1, rx.size - 1)
                 } else {
@@ -619,12 +651,14 @@ object PersonalGlideCalibration {
                     while (rawIdx < cumDist.size - 2 && cumDist[rawIdx + 1] < targetD) rawIdx++
                     val segLen = cumDist[rawIdx + 1] - cumDist[rawIdx]
                     val frac = if (segLen > 1e-4f) ((targetD - cumDist[rawIdx]) / segLen).coerceIn(0f, 1f) else 0f
-                    val interpT = ts[rawIdx] + (ts[rawIdx + 1] - ts[rawIdx]) * frac
-                    (interpT - baseT).toLong().coerceAtLeast(0L)
+                    (ts[rawIdx] + (ts[rawIdx + 1] - ts[rawIdx]) * frac - baseT).toLong()
                 }
+                val monotonicT = max(prevT, rawT)
+                normTs[idx] = monotonicT
+                prevT = monotonicT
             }
         } else {
-            LongArray(rx.size) { idx -> idx * 12L }
+            for (idx in normTs.indices) normTs[idx] = idx * 12L
         }
         val cleanBad = badCode.replace("'", "").lowercase().filter { it in 'a'..'z' }
         val cleanSource = source.ifBlank { "confirm" }.replace('\t', '_').replace('\n', '_')

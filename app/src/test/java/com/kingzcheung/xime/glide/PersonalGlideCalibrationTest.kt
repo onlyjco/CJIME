@@ -245,4 +245,21 @@ class PersonalGlideCalibrationTest {
         assertTrue("personal_glide_confusions.tsv" in entryNames)
         assertTrue("personal_assoc_boosts.tsv" in entryNames)
     }
+
+    @Test
+    fun tailStrokeMismatchAndHugeLengthGapConfusionAreHandledCleanly() {
+        // 1. 连滑多段后一次性上屏：末笔 xigt 不该把整句“输入习惯”当成自己对应文字。
+        val (xsTail, ysTail, tsTail) = trace("xigt")
+        PersonalGlideCalibration.noteDispatched(200L, flypy.id, "p", keyboard, xsTail, ysTail, tsTail, "xigt")
+        PersonalGlideCalibration.onCommitted(tempDir, 200L, flypy.id, "uuru'xigt", "输入习惯")
+        assertEquals("习惯", PersonalGlideCalibration.phraseTextOf(tempDir, flypy.id, "xigt"))
+        assertEquals("输入习惯", PersonalGlideCalibration.phraseTextOf(tempDir, flypy.id, "uuruxigt"))
+
+        // 2. 删除 2 键短码后新滑 12 键整句：绝不生成“2键 → 12键”虚假混淆对。
+        val (xs2, ys2, ts2) = trace("yl")
+        PersonalGlideCalibration.noteDispatched(201L, flypy.id, "p", keyboard, xs2, ys2, ts2, "yl")
+        PersonalGlideCalibration.noteGlideDeleted(201L)
+        PersonalGlideCalibration.onCommitted(tempDir, 201L, flypy.id, "wmjbtxwqkdmy", "我们今天下午去看电影")
+        assertEquals(0, PersonalGlideCalibration.stats(tempDir).confusionCount)
+    }
 }
