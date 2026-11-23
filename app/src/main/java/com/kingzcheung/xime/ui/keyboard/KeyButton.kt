@@ -522,6 +522,8 @@ fun SwipeableKeyButton(
         onRight = letters?.let { { onLetterSelection?.invoke(it.second); Unit } } ?: onSwipeRight,
         rightText = letters?.second?.let { if (inputPreferences.uppercaseKeyLabels) it.uppercase() else it } ?: swipeRightText,
         horizontalThresholdDp = if (letters != null) normalizeLetterSwipeDistance(inputPreferences.fourteenLetterSwipeDp) else 50f,
+        // 上下滑输入符号要滑多远（#426，默认 50dp 和原来一样）；拂动键（上面那支）照旧用拂动距离。
+        verticalThresholdDp = normalizeSymbolSwipeDistance(inputPreferences.symbolSwipeDp),
         reserveHorizontalSwipe = letters != null,
         // With the four-way disc shown, 14-key pairs re-aim freely like kana and nine-key flicks;
         // the in-key mode keeps the 26-key axis lock.
