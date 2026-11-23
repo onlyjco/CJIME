@@ -73,7 +73,8 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
                         const WordGraph* sentence_graph, int max_sentences, double cutoff,
                         const an<Sentence>& exact_sentence, const an<Sentence>& rime_best,
                         deque<an<Sentence>>* sentences, bool slip_only,
-                        vector<std::pair<double, an<Sentence>>>* runners_up) {
+                        vector<std::pair<double, an<Sentence>>>* runners_up,
+                        const deque<an<Sentence>>* built, double built_rime_weight) {
   // translator/max_sentences gave the n-best to choose from; the menu keeps one sentence, as with
   // max_sentences: 1 (followed by Rime's best when that one is a correction).
   auto corrected = [&](const an<Sentence>& sentence) {
@@ -327,6 +328,26 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
       }
       if (value > chosen_score) { chosen_score = value; chosen = sentence; }
     }
+    // `built` (t9/model_sentences): whole sentences the caller built with the word model. They are not made from
+    // this graph, so they stand beside the pool as the sentences through a second dictionary word do: each word the
+    // caller marked pays `near_penalty`, and the best one leads only at the end, the typed choice after it.
+    // `built_rime_weight` weighs Rime's own sentence weights into this comparison alone (the typed choice above is
+    // made without it).
+    // A sentence through a second dictionary word that led while keys arrived (it beats the typed choice) and loses
+    // the first place to a built one follows it, before the typed choice: what was first before the pause stays in
+    // the menu, second. Not when the built one (or the typed choice) is the same text in other words.
+    an<Sentence> near_led;
+    if (built) {
+      if (near_choice && near_score > chosen_score) near_led = near_choice;
+      for (const auto& sentence : *built) {
+        const double value = total(*sentence) + built_rime_weight * (sentence->weight() - chosen->weight());
+        if (runners_up) ranked.emplace_back(value, sentence);
+        if (value > near_score) { near_score = value; near_choice = sentence; }
+      }
+      if (near_led && (near_led == near_choice || near_led->text() == near_choice->text() ||
+                       near_led->text() == chosen->text()))
+        near_led.reset();
+    }
     if (runners_up) {
       std::stable_sort(ranked.begin(), ranked.end(), [](const auto& a, const auto& b) { return a.first > b.first; });
       runners_up->clear();
@@ -403,6 +424,7 @@ void T9RescoreSentences(const T9ScriptQuery& q, const T9NgramModel* ngram, bool 
     if (near_choice && near_score > chosen_score) {
       sentences->clear();
       sentences->push_back(near_choice);
+      if (near_led) sentences->push_back(near_led);
       sentences->push_back(chosen);
       return;
     }

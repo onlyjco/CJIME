@@ -108,6 +108,22 @@ struct T9ScriptOptions {
   // t9/menu_prefixes: after the whole sentences, the first sentence cut at its word boundaries, longest first, at
   // most this many (0: none, as before). Picking one keeps the words that were right; the rest is made again.
   int t9_menu_prefixes_ = 0;
+  // t9/model_sentences (letters with t9/sentence_rescore; 2026-11-23): Rime's n-best is made from the first
+  // dictionary word of every span, so the sentence the word model would choose is often not among it. With this many
+  // (> 0) the joint decoder also builds sentences with the word model, and those typed out in full are compared with
+  // the typed choice (T9RescoreSentences, `built`). 0: none, as before. The decoder reads its own t9/* settings
+  // (source_budget … ngram_dictionary_prior, reading_table); t9/joint_decoder stays false.
+  int t9_model_sentences_ = 0;
+  // t9/model_sentences_on_pause: the decoder's run costs as much as the whole key (14 keys: every tenth key took
+  // 16 ms instead of 7), so with this on it runs only in the refresh after a pause (RefineOmission sets
+  // T9SetRefiningSentences, as the nine-key refinement does) and no key waits for it.
+  bool t9_model_sentences_on_pause_ = false;
+  // t9/model_sentences_rime_weight: a sentence built with the word model is made of more and shorter words than
+  // the typed choice, and on the word model alone it leads too often where t9/rescore_rime_weight is 0 (14 keys): a
+  // word the dictionary holds and the model does not know loses to common words of the same keys. When a built
+  // sentence is compared with the typed choice, this share of Rime's own sentence weight is added on both sides. The
+  // choice among the typed sentences does not use it.
+  double t9_model_sentences_rime_weight_ = 0.0;
   // t9/final_g_word_margin (ln units): a dictionary word that reads the whole input with the final g added
   // (translator/cyime_final_g_correction; yianzhuan: 已安装) leads the sentence of the typed letters (一按转) when the
   // word model finds its text more likely by more than this; 0 keeps the typed sentence first. Uses
