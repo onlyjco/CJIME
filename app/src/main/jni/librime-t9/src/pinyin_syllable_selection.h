@@ -256,10 +256,12 @@ inline bool ConstrainGraph(rime::SyllableGraph* graph, size_t start, size_t end,
   auto to = from->second.find(end);
   if (to == from->second.end()) return false;
   auto target = to->second.find(syllable);
-  const bool only_abbreviations = std::all_of(to->second.begin(), to->second.end(),
+  const bool only_weak = std::all_of(to->second.begin(), to->second.end(),
       [](const auto& item) { return item.second.type >= rime::kAbbreviation; });
   if (target == to->second.end() || (target->second.type >= rime::kAbbreviation &&
-      !((allow_abbreviation || only_abbreviations) && target->second.type == rime::kAbbreviation))) return false;
+      !((allow_abbreviation && target->second.type == rime::kAbbreviation) ||
+        (only_weak && (target->second.type == rime::kAbbreviation ||
+                       target->second.type == rime::kCompletion))))) return false;
   auto chosen = target->second;
   chosen.ambiguous_source_positions.clear();
 
@@ -518,6 +520,31 @@ inline std::vector<Option> OptionsAt(rime::Context* context, rime::Schema* schem
   }
   if (result.empty() && !abbreviations.empty()) {
     result = std::move(abbreviations);
+  }
+  bool completion_enabled = false;
+  schema->config()->GetBool("translator/enable_completion", &completion_enabled);
+  if (result.empty() && completion_enabled && code_start < caret) {
+    // 双拼单字母或长输入末尾未打完的半个音节在 prism 里走 ExpandSearch 补全（kCompletion）。
+    std::vector<rime::Prism::Match> keys;
+    const size_t end = caret;
+    dictionary->prism()->ExpandSearch(
+        context->input().substr(code_start, caret - code_start), &keys, 512);
+    for (const auto& match : keys) {
+      for (auto spelling = dictionary->prism()->QuerySpelling(match.value);
+           !spelling.exhausted(); spelling.Next()) {
+        const auto properties = spelling.properties();
+        if (properties.is_correction || properties.type >= rime::kAbbreviation) continue;
+        const auto syllable = spelling.syllable_id();
+        if (!seen.emplace(end, syllable).second) continue;
+        const auto pinyin = dictionary->primary_table()->GetSyllableById(syllable);
+        if (pinyin.empty()) continue;
+        result.push_back({syllable, pinyin, start, end,
+            selected && std::any_of(selected->spans.begin(), selected->spans.end(),
+                [&](const Span& span) {
+                  return span.start == start && span.end == end && span.syllable == syllable;
+                })});
+      }
+    }
   }
   // Use the same schema and live keyboard geometry as the script translator.
   // Corrections are graph edges, not necessarily entries in the prism itself.
