@@ -183,8 +183,8 @@ object PersonalAssociationBooster {
     }
 
     /**
-     * 直接复用「局部改错」信号：把原错词在该上文下强力降权，把改对的新词强力提权，
-     * 并学习「新词 → 句中后续部分」的真实整词搭配。
+     * 直接复用「局部改错」信号：把原错词在该上文下强力降权，把改对的新词强力提权。
+     * 不顺带提权紧接其后的未修改后缀，避免多步句内改错时把尚未改完的错别字也写进正强化。
      */
     @Synchronized
     fun onSentenceEditCorrection(
@@ -195,7 +195,7 @@ object PersonalAssociationBooster {
         end: Int,
         badWord: String,
         goodWord: String,
-        sentenceAfter: String,
+        @Suppress("UNUSED_PARAMETER") sentenceAfter: String,
     ) {
         ensureLoaded(dir)
         val prefix = leftContext + sentenceBefore.take(start.coerceIn(0, sentenceBefore.length))
@@ -214,14 +214,6 @@ object PersonalAssociationBooster {
             if (cleanGood.isNotEmpty()) {
                 boostChanged = addBoostLocked(ctx, cleanGood, 2.8f, now) || boostChanged
                 penaltyChanged = decayPenaltyLocked(ctx, cleanGood, 0.25f) || penaltyChanged
-            }
-        }
-        // 顺带学习整句里「改对的词 → 紧接其后的词尾」，补强长词组衔接。
-        val afterOffset = (start + goodWord.length).coerceIn(0, sentenceAfter.length)
-        val tailAfterGood = cleanChineseWord(sentenceAfter.substring(afterOffset).take(4))
-        if (cleanGood.isNotEmpty() && tailAfterGood.isNotEmpty()) {
-            for (ctx in trailingContexts(cleanGood)) {
-                boostChanged = addBoostLocked(ctx, tailAfterGood, 1.8f, now) || boostChanged
             }
         }
         if (boostChanged) saveEntries(File(dir, BOOSTS_FILE), boosts)

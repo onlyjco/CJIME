@@ -136,7 +136,7 @@ fun SymbolKeyboardLayout(
     // 最先画 = 在所有键帽底下，只从键缝里露出来。
     KeyGapLightLayer(gapLight, Modifier.matchParentSize())
     BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
-        val gridHeightDp = (maxHeight.value * 0.75f - 4f).coerceAtLeast(1f)
+        val gridHeightDp = (maxHeight.value * 0.75f).coerceAtLeast(1f)
         val grid = symbolGridGeometry(maxWidth.value, gridHeightDp)
         val columns = grid.columns
         val cellWidth = maxWidth / columns
@@ -144,22 +144,13 @@ fun SymbolKeyboardLayout(
         val symbolFontSize = keyLabelSizeSp("中", KeyboardKeyMetrics.LabelSize.value, maxWidth.value / columns,
             grid.rowHeightDp, LocalDensity.current.fontScale,
             LocalKeyboardInputPreferences.current.keyTextScale).sp
-        // 符号网格与底栏共用同一套格宽与键缝度量，保证「中文」「123」、标签栏与「删除」与上方符号键逐列对齐。
-        val gridMetrics = keyVisualMetrics(
-            policy = KeyVisualPolicy.Qwerty.copy(maxKeyWidth = Float.MAX_VALUE, minGutter = 0f),
-            availableWidthDp = maxWidth.value,
-            availableHeightDp = grid.rowHeightDp * 3f,
-            columns = columns.toFloat(),
-            rows = 3f, verticalInsetDp = 0f,
-        )
-        CompositionLocalProvider(LocalKeyboardKeyVisualMetrics provides gridMetrics) {
+        // 直接复用外层 KeyboardKeySpacingScope 算出的按键间距度量，与普通键盘、数字键盘保持完全一致的键缝（含「加宽按键」与自定义间距）。
         Column(modifier = Modifier.fillMaxSize()) {
         // 内容区：符号网格 + HorizontalPager
         Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(3f)
-                .padding(bottom = 4.dp)
         ) {
             HorizontalPager(
                 state = pagerState,
@@ -298,7 +289,6 @@ fun SymbolKeyboardLayout(
             )
         }
 
-        }
         }
     }
     }
