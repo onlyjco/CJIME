@@ -917,11 +917,15 @@ class ClipboardManager private constructor(private val context: Context) {
      */
     fun markConsumed(text: String) {
         if (_verificationCode.value?.text == text) _verificationCode.value = null
+        val target = _clipboardItems.value
+            .filter { it.text == text && !it.consumed }
+            .maxByOrNull { it.timestamp } ?: return
+        // 先同步更新内存态，避免 DB 异步写入前立刻息屏/重弹键盘再次读到未消费条目。
+        _clipboardItems.value = _clipboardItems.value.map {
+            if (it.id == target.id) it.copy(consumed = true) else it
+        }
         scope.launch {
-            val item = _clipboardItems.value
-                .filter { it.text == text && !it.consumed }
-                .maxByOrNull { it.timestamp } ?: return@launch
-            dao.markConsumed(item.id)
+            dao.markConsumed(target.id)
         }
     }
 

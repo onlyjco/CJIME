@@ -572,15 +572,18 @@ fun CandidateBar(
             }
         }
 
+        // 把 toolbarRowWidth 保持在 ClipboardDisplay 提前返回之前，避免切回空闲工具栏第一帧 width=0dp 导致图标缩放闪跳。
+        val rowDensity = LocalDensity.current
+        var toolbarRowWidth by remember { mutableStateOf(0.dp) }
         if (state is CandidateBarState.ClipboardDisplay) {
-            ClipboardPreviewBar(state.candidates, protectedVisuals, callbacks, iconButtonContainer, state.image,
-                extractedCount = state.extractedCount)
+            Box(Modifier.fillMaxWidth().onSizeChanged { toolbarRowWidth = with(rowDensity) { it.width.toDp() } }) {
+                ClipboardPreviewBar(state.candidates, protectedVisuals, callbacks, iconButtonContainer, state.image,
+                    extractedCount = state.extractedCount)
+            }
             return@Column
         }
 
         // 空闲工具栏：菜单、收起与中间各图标同为等宽一格，胶囊同尺寸（分体时扣除中缝）。
-        val rowDensity = LocalDensity.current
-        var toolbarRowWidth by remember { mutableStateOf(0.dp) }
         // 联想态不放收起键盘按钮，最右只有展开按钮（用户 11-02）。
         val idleToolbarCell = if (inlineSuggestions.isEmpty() && toolbarRowWidth > 0.dp) {
             val gap = splitGapX?.let { (l, r) -> with(rowDensity) { (r - l).toDp() } } ?: 0.dp
@@ -619,10 +622,7 @@ fun CandidateBar(
             modifier = Modifier
                 .fillMaxWidth()
                 .then(if (topLineMode) Modifier.height(candidateRowHeight) else Modifier)
-                .onSizeChanged { toolbarRowWidth = with(rowDensity) { it.width.toDp() } }
-                // 工具栏和候选互换（开始打字、上屏回到空闲）时新内容快速淡入，和键盘换页同一套；
-                // 只淡这一行的图标和字，不淡栏底色，候选从第一帧起就能点。
-                .then(if (directEnglishInput) Modifier else Modifier.cySwapFadeIn(state is CandidateBarState.Idle)),
+                .onSizeChanged { toolbarRowWidth = with(rowDensity) { it.width.toDp() } },
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (showCompositionCancel && strokeFilterLabel.isNotEmpty()) {

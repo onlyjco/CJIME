@@ -212,6 +212,9 @@ internal fun rememberImeKeyboardCallbacks(
                     service.candidateState.value.candidates.forEach { text ->
                         service.clipboardManager.markConsumed(text)
                     }
+                    service.recentClipboardItemsState.value.forEach { item ->
+                        service.clipboardManager.markConsumed(item.text)
+                    }
                     service.candidateState.value = service.candidateState.value.copy(
                         candidates = emptyList(),
                         candidateComments = emptyList(),

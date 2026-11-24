@@ -2887,10 +2887,18 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
 
             // 3. 联想词或剪贴板：仅清空候选栏，不回删已上屏字符
             target == DeletionTarget.CANDIDATES -> {
+                if (candState.isShowingRecentClipboard) {
+                    candState.clipboardImage?.let { service.clipboardManager.images.dismissPreview(it.uri) }
+                    if (candState.smsVerificationCode != null) service.clipboardManager.dismissVerificationCode()
+                    candState.candidates.forEach { service.clipboardManager.markConsumed(it) }
+                    service.recentClipboardItemsState.value.forEach { service.clipboardManager.markConsumed(it.text) }
+                }
                 service.candidateState.value = service.candidateState.value.copy(
                     candidates = emptyList(),
                     candidateComments = emptyList(),
                     associationCandidates = emptyList(),
+                    clipboardImage = null,
+                    smsVerificationCode = null,
                     isShowingRecentClipboard = false
                 )
                 // 候选展开页：联想/剪贴板候选清空后无内容，收起
@@ -2899,6 +2907,12 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
 
             // 4. 无候选也无编码：直接回删已上屏文本
             else -> {
+                if (candState.isShowingRecentClipboard) {
+                    candState.clipboardImage?.let { service.clipboardManager.images.dismissPreview(it.uri) }
+                    if (candState.smsVerificationCode != null) service.clipboardManager.dismissVerificationCode()
+                    candState.candidates.forEach { service.clipboardManager.markConsumed(it) }
+                    service.recentClipboardItemsState.value.forEach { service.clipboardManager.markConsumed(it.text) }
+                }
                 com.kingzcheung.xime.glide.PersonalGlideCalibration.noteGlideDeleted(owner)
                 AssociationManager.noteAssociationDeleted(service, owner)
                 service.predictionManager.deleteLastChar()
