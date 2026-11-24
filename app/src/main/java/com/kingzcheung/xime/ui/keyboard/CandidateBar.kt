@@ -1647,7 +1647,7 @@ private fun PreeditPreview(text: String, visuals: CandidateBarVisuals, onEdit: (
         properties = PopupProperties(focusable = false, dismissOnBackPress = false,
             dismissOnClickOutside = false, clippingEnabled = true)) {
         if (floatingEditor != null && !hidden) {
-            floatingEditor(screenWidth - 16.dp, bubbleColor, visuals.textShadow)
+            floatingEditor(screenWidth - 16.dp, bubbleColor, null)
         } else {
             PreeditLabel(text, visuals, onEdit.takeUnless { hidden }, Modifier.widthIn(max = screenWidth - 16.dp)
                 .heightIn(min = 44.dp).padding(vertical = 6.dp).then(if (hidden) HiddenPreeditBubble else Modifier),
@@ -1787,7 +1787,7 @@ private fun RotatedPreeditPreview(text: String, visuals: CandidateBarVisuals, on
             }
         }) {
             if (floatingEditor != null) {
-                floatingEditor(screenWidth - 16.dp, bubbleColor, visuals.textShadow)
+                floatingEditor(screenWidth - 16.dp, bubbleColor, null)
             } else {
                 PreeditLabel(text, visuals, onEdit, Modifier.widthIn(max = screenWidth - 16.dp)
                     .heightIn(min = 44.dp).padding(vertical = 6.dp).then(labelModifier),
@@ -1821,12 +1821,11 @@ internal fun PreeditLabel(text: String, visuals: CandidateBarVisuals, onEdit: ((
     } ?: Modifier.preeditSurface(background)
     val textColor = solidBackground?.let { readableThemeText(visuals.textColor, it.copy(alpha = 1f)) }
         ?: visuals.textColor.copy(alpha = if (visuals.opaqueComments) 1f else 0.9f)
-    // 半透明的气泡：后面是白是黑都按最坏情况算，拼音不够 4.5:1 时垫和候选栏玻璃同一种柔光托底。
-    val halo = remember(textColor, solidBackground) { floatingPreeditHalo(textColor, solidBackground) }
+    // 独立编码栏（气泡/编辑条）文字保持锐利清晰，不加暗色托底光晕或文字阴影。
     val tap = remember { PreeditTapPoint() }
     val slop = with(LocalDensity.current) { PreeditTapSlop.toPx() }
     val textMeasurer = androidx.compose.ui.text.rememberTextMeasurer()
-    BoxWithConstraints(modifier.then(surface).glassTextHalo(halo)
+    BoxWithConstraints(modifier.then(surface)
         .testTag("candidate-preedit")
         .then(if (onEdit != null) tap.record().clickable(
             interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
@@ -1843,7 +1842,7 @@ internal fun PreeditLabel(text: String, visuals: CandidateBarVisuals, onEdit: ((
         var caretOn by remember { mutableStateOf(true) }
         LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(530); caretOn = !caretOn } }
         val caretAlpha = if (caretOn) 1f else 0f
-        val textStyle = LocalTextStyle.current.copy(shadow = visuals.textShadow)
+        val textStyle = LocalTextStyle.current.copy(shadow = if (solidBackground != null) null else visuals.textShadow)
         val fontSize = PreeditStyle.FontSize
         val lineHeight = fontSize * 1.35f
         // 预览态光标改用 drawBehind 竖线（0 宽），不再把实体 '|' 字符塞进文本里顶开后半段编码。

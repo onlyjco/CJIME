@@ -142,12 +142,11 @@ internal fun PreeditEditorContent(
     }
     val codeColor = floatingColor?.let { readableThemeText(textColor, it.copy(alpha = 1f)) } ?: textColor.copy(alpha = 0.9f)
     val iconColor = floatingColor?.let { codeColor } ?: textColor
-    val halo = remember(codeColor, floatingColor) { floatingPreeditHalo(codeColor, floatingColor) }
-    val textStyle = LocalTextStyle.current.copy(shadow = textShadow)
+    val textStyle = LocalTextStyle.current.copy(shadow = if (floatingColor != null) null else textShadow)
     val lineHeight = PreeditStyle.FontSize * 1.35f
     val rowSurface = if (floatingColor == null) Modifier
         else Modifier.heightIn(min = PreeditStyle.SurfaceHeight).clip(RoundedCornerShape(4.dp))
-            .background(floatingColor).glassTextHalo(halo)
+            .background(floatingColor)
     val outerModifier = if (floatingColor == null) {
         modifier.height(44.dp).testTag("preedit-editor")
             .padding(start = 8.dp, end = 4.dp, top = 6.dp, bottom = 6.dp)

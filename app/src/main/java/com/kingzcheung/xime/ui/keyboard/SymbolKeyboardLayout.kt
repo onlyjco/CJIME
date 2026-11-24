@@ -119,8 +119,10 @@ fun SymbolKeyboardLayout(
     // 键缝动效的光层（默认关，关着时是 null）：点符号键打开这一页时从符号键的位置扩开（用户 11-22），
     // 和数字页、常用符号页一样点按也有键缝光。
     val gapLight = rememberKeyGapLight()
+    // 与数字键盘（NumberKeyboardLayout）使用同一套间距与边距策略，保证两侧按键尺寸与键缝完全一致。
     KeyboardKeySpacingScope(modifier.padding(bottom = bottomPaddingDp.dp),
-        policy = KeyVisualPolicy.Qwerty, allowShrink = isFloatingMode, applyGutter = true,
+        columns = 5f * 3f / 3.4f,
+        policy = KeyVisualPolicy.T9, allowShrink = isFloatingMode, applyGutter = true,
         growthSpacing = keySpacing) { bodyModifier ->
     CompositionLocalProvider(LocalKeyVisualPadding provides PaddingValues(
         horizontal = keySpacing.first?.dp ?: 2.dp,
@@ -208,7 +210,8 @@ fun SymbolKeyboardLayout(
             }
         }
 
-        // 底栏与上方符号网格按列对齐：「中文」「123」「删除」各占 1 列，中间标签栏占余下列且每项标签同为 1 列宽。
+        // 底栏两侧按键与数字键盘（NineGridFrame）完全同宽：左「中文」「123」各 0.8，右「删除」0.8，中间标签栏占余下 2.6 且每项标签保持 1 列符号宽。
+        val bottomTotal = NineGridFrame.SIDE + NineGridFrame.MAIN + NineGridFrame.ACTION
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -224,14 +227,14 @@ fun SymbolKeyboardLayout(
                         if (onKeyPressDown != null) onKeyPressDown(action) else onHapticFeedback?.invoke()
                     },
                     backgroundColor = specialKeyBackgroundColor, textColor = specialKeyTextColor,
-                    modifier = Modifier.weight(1f),
+                    modifier = Modifier.weight(NineGridFrame.BOTTOM_MODE),
                     shadowEnabled = shadowEnabled, shadowElevation = shadowElevation,
                     shadowShapeRadius = shadowShapeRadius,
                 )
             }
             Box(
                 modifier = Modifier
-                    .weight((columns - 3).toFloat().coerceAtLeast(1f))
+                    .weight(bottomTotal - 2 * NineGridFrame.BOTTOM_MODE - NineGridFrame.ACTION)
                     .fillMaxHeight()
                     .testTag("symbol-category-strip"),
                 contentAlignment = Alignment.CenterStart,
@@ -281,7 +284,7 @@ fun SymbolKeyboardLayout(
                 onSwipeUp = { onSelect("clear_all") }, onSwipeDown = { onSelect("undo_clear") },
                 backgroundColor = specialKeyBackgroundColor,
                 iconColor = specialKeyTextColor,
-                modifier = Modifier.weight(1f).testTag("symbol-delete")
+                modifier = Modifier.weight(NineGridFrame.ACTION).testTag("symbol-delete")
                     .semantics { contentDescription = "删除" },
                 shadowEnabled = shadowEnabled,
                 shadowElevation = shadowElevation,
