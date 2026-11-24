@@ -654,7 +654,7 @@ private fun T9KeyboardContent(
                 )
                 T9DigitKey(
                     swipes = swipesFor("2"),
-                    digit = "2", letters = "ABC", longPressItems = listOf("A", "B", "C"), uppercaseLetters = upperLetters,
+                    digit = "2", letters = "ABC", longPressItems = listOf("A", "B", "C"), uppercaseLetters = upperLetters, onCommitDirect = commitDirect,
                     onClick = { if (callbacks.onPreeditKeyInput?.invoke("2") != true) controller.onDigitPressed("2") },
                     onLongPressSelect = { letter -> if (callbacks.onPreeditKeyInput?.invoke(letter) != true && !controller.onLetterFlicked(letter)) onKeyPress(letter) },
                     onSwipeStateChange = onSwipeStateChange,
@@ -666,7 +666,7 @@ private fun T9KeyboardContent(
                 )
                 T9DigitKey(
                     swipes = swipesFor("3"),
-                    digit = "3", letters = "DEF", longPressItems = listOf("D", "E", "F"), uppercaseLetters = upperLetters,
+                    digit = "3", letters = "DEF", longPressItems = listOf("D", "E", "F"), uppercaseLetters = upperLetters, onCommitDirect = commitDirect,
                     onClick = { if (callbacks.onPreeditKeyInput?.invoke("3") != true) controller.onDigitPressed("3") },
                     onLongPressSelect = { letter -> if (callbacks.onPreeditKeyInput?.invoke(letter) != true && !controller.onLetterFlicked(letter)) onKeyPress(letter) },
                     onSwipeStateChange = onSwipeStateChange,
@@ -682,7 +682,7 @@ private fun T9KeyboardContent(
             ) {
                 T9DigitKey(
                     swipes = swipesFor("4"),
-                    digit = "4", letters = "GHI", longPressItems = listOf("G", "H", "I"), uppercaseLetters = upperLetters,
+                    digit = "4", letters = "GHI", longPressItems = listOf("G", "H", "I"), uppercaseLetters = upperLetters, onCommitDirect = commitDirect,
                     onClick = { if (callbacks.onPreeditKeyInput?.invoke("4") != true) controller.onDigitPressed("4") },
                     onLongPressSelect = { letter -> if (callbacks.onPreeditKeyInput?.invoke(letter) != true && !controller.onLetterFlicked(letter)) onKeyPress(letter) },
                     onSwipeStateChange = onSwipeStateChange,
@@ -694,7 +694,7 @@ private fun T9KeyboardContent(
                 )
                 T9DigitKey(
                     swipes = swipesFor("5"),
-                    digit = "5", letters = "JKL", longPressItems = listOf("J", "K", "L"), uppercaseLetters = upperLetters,
+                    digit = "5", letters = "JKL", longPressItems = listOf("J", "K", "L"), uppercaseLetters = upperLetters, onCommitDirect = commitDirect,
                     onClick = { if (callbacks.onPreeditKeyInput?.invoke("5") != true) controller.onDigitPressed("5") },
                     onLongPressSelect = { letter -> if (callbacks.onPreeditKeyInput?.invoke(letter) != true && !controller.onLetterFlicked(letter)) onKeyPress(letter) },
                     onSwipeStateChange = onSwipeStateChange,
@@ -706,7 +706,7 @@ private fun T9KeyboardContent(
                 )
                 T9DigitKey(
                     swipes = swipesFor("6"),
-                    digit = "6", letters = "MNO", longPressItems = listOf("M", "N", "O"), uppercaseLetters = upperLetters,
+                    digit = "6", letters = "MNO", longPressItems = listOf("M", "N", "O"), uppercaseLetters = upperLetters, onCommitDirect = commitDirect,
                     onClick = { if (callbacks.onPreeditKeyInput?.invoke("6") != true) controller.onDigitPressed("6") },
                     onLongPressSelect = { letter -> if (callbacks.onPreeditKeyInput?.invoke(letter) != true && !controller.onLetterFlicked(letter)) onKeyPress(letter) },
                     onSwipeStateChange = onSwipeStateChange,
@@ -722,7 +722,7 @@ private fun T9KeyboardContent(
             ) {
                 T9DigitKey(
                     swipes = swipesFor("7"),
-                    digit = "7", letters = "PQRS", longPressItems = listOf("P", "Q", "R", "S"), uppercaseLetters = upperLetters,
+                    digit = "7", letters = "PQRS", longPressItems = listOf("P", "Q", "R", "S"), uppercaseLetters = upperLetters, onCommitDirect = commitDirect,
                     onClick = { if (callbacks.onPreeditKeyInput?.invoke("7") != true) controller.onDigitPressed("7") },
                     onLongPressSelect = { letter -> if (callbacks.onPreeditKeyInput?.invoke(letter) != true && !controller.onLetterFlicked(letter)) onKeyPress(letter) },
                     onSwipeStateChange = onSwipeStateChange,
@@ -734,7 +734,7 @@ private fun T9KeyboardContent(
                 )
                 T9DigitKey(
                     swipes = swipesFor("8"),
-                    digit = "8", letters = "TUV", longPressItems = listOf("T", "U", "V"), uppercaseLetters = upperLetters,
+                    digit = "8", letters = "TUV", longPressItems = listOf("T", "U", "V"), uppercaseLetters = upperLetters, onCommitDirect = commitDirect,
                     onClick = { if (callbacks.onPreeditKeyInput?.invoke("8") != true) controller.onDigitPressed("8") },
                     onLongPressSelect = { letter -> if (callbacks.onPreeditKeyInput?.invoke(letter) != true && !controller.onLetterFlicked(letter)) onKeyPress(letter) },
                     onSwipeStateChange = onSwipeStateChange,
@@ -746,7 +746,7 @@ private fun T9KeyboardContent(
                 )
                 T9DigitKey(
                     swipes = swipesFor("9"),
-                    digit = "9", letters = "WXYZ", longPressItems = listOf("W", "X", "Y", "Z"), uppercaseLetters = upperLetters,
+                    digit = "9", letters = "WXYZ", longPressItems = listOf("W", "X", "Y", "Z"), uppercaseLetters = upperLetters, onCommitDirect = commitDirect,
                     onClick = { if (callbacks.onPreeditKeyInput?.invoke("9") != true) controller.onDigitPressed("9") },
                     onLongPressSelect = { letter -> if (callbacks.onPreeditKeyInput?.invoke(letter) != true && !controller.onLetterFlicked(letter)) onKeyPress(letter) },
                     onSwipeStateChange = onSwipeStateChange,
@@ -1022,11 +1022,26 @@ private fun T9DigitKey(
     swipes: T9KeySwipes = T9KeySwipes(),
     /** 键帽字母大写还是小写（[letterLabelsUppercase]）；长按、拂动送出的仍是 [longPressItems] 原值。 */
     uppercaseLetters: Boolean = true,
+    /** 直接上屏（不进拼音）：长按弹出排里选数字、大写字母时用。 */
+    onCommitDirect: ((String) -> Unit)? = null,
 ) {
     val currentOnClick by rememberUpdatedState(onClick)
     val shownItems = remember(longPressItems, uppercaseLetters) { t9LetterLabels(longPressItems, uppercaseLetters) }
     val itemValue = remember(longPressItems, shownItems) { { shown: String -> longPressItems.getOrNull(shownItems.indexOf(shown)) ?: shown } }
     val currentOnLongPressSelect by rememberUpdatedState(onLongPressSelect)
+    // 长按弹出一排「J K L 5 j k l」（11-24 他给的参照图）：数字在中间、默认选中，松手上屏数字；
+    // 大写直接上屏大写字母（同 26 键长按气泡）；小写只把这个字母加进拼音（编码条里是小写 k，出 k 开头的词）。
+    val menuItems = remember(longPressItems, digit) { t9LongPressMenu(longPressItems, digit) }
+    val lowerLetters = remember(longPressItems) { t9LongPressMenuLetters(longPressItems) }
+    val currentOnCommitDirect by rememberUpdatedState(onCommitDirect)
+    val pickMenuItem: (String) -> Unit = { shown ->
+        val lowerIndex = lowerLetters.indexOf(shown)
+        when {
+            shown == digit -> currentOnCommitDirect?.invoke(digit)
+            lowerIndex >= 0 -> currentOnLongPressSelect?.invoke(longPressItems[lowerIndex])
+            else -> currentOnCommitDirect?.invoke(shown)
+        }
+    }
     val currentOnPress by rememberUpdatedState(onPress)
     val currentSwipes by rememberUpdatedState(swipes)
     val inputPreferences = LocalKeyboardInputPreferences.current
@@ -1045,9 +1060,10 @@ private fun T9DigitKey(
             glideKeys[digit.single()] = dragSpace.bounds(it)
         },
         onPress = { currentOnPress?.invoke() },
-        // 长按弹字母气泡和 26/14 键共用“长按弹出字母气泡”开关，默认关（用户 10-21）；拂动模式长按出数字，不受影响。
-        longPressItems = if (flick || inputPreferences.letterLongPressMenu) shownItems else emptyList(),
-        onLongPressSelect = { letter -> currentOnLongPressSelect?.invoke(itemValue(letter)) },
+        // 九键长按跟设置卡走：「滑动＋字母气泡」弹「大写 数字 小写」一排、数字默认对准按键；拂动模式长按出数字。
+        longPressItems = if (flick) shownItems else if (inputPreferences.letterLongPressMenu) menuItems else emptyList(),
+        longPressDefaultIndex = if (flick || !inputPreferences.letterLongPressMenu) -1 else menuItems.indexOf(digit),
+        onLongPressSelect = { item -> if (flick) currentOnLongPressSelect?.invoke(itemValue(item)) else pickMenuItem(item) },
         // Four-letter keys: P/S on the left/right, Q/R up/down (user layout, 2026-10-18); three letters go left/up/right.
         flickLetters = if (!flick) null else if (shownItems.size == 4)
             listOf(shownItems[0], shownItems[1], shownItems[3], shownItems[2]) else shownItems,
@@ -1079,6 +1095,12 @@ internal fun t9LetterLabel(letters: String, uppercase: Boolean): String =
 
 internal fun t9LetterLabels(items: List<String>, uppercase: Boolean): List<String> = items.map { t9LetterLabel(it, uppercase) }
 
+/** 九键长按气泡里的字母：一律小写，写的就是进拼音的那个字母；送出的仍是原值。 */
+internal fun t9LongPressMenuLetters(items: List<String>): List<String> = t9LetterLabels(items, uppercase = false)
+
+/** 九键长按弹出的一排：大写字母、数字、小写字母，如「J K L 5 j k l」（11-24 参照图）。 */
+internal fun t9LongPressMenu(items: List<String>, digit: String): List<String> =
+    t9LetterLabels(items, uppercase = true) + digit + t9LongPressMenuLetters(items)
 // ─── 子组件 ───────────────────────────────────────────────────────────
 
 @Composable
