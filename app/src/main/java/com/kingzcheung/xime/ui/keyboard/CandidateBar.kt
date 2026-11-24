@@ -1827,7 +1827,8 @@ internal fun PreeditLabel(text: String, visuals: CandidateBarVisuals, onEdit: ((
     val halo = remember(textColor, solidBackground) { floatingPreeditHalo(textColor, solidBackground) }
     val tap = remember { PreeditTapPoint() }
     val slop = with(LocalDensity.current) { PreeditTapSlop.toPx() }
-    Box(modifier.then(surface).glassTextHalo(halo)
+    val textMeasurer = androidx.compose.ui.text.rememberTextMeasurer()
+    BoxWithConstraints(modifier.then(surface).glassTextHalo(halo)
         .testTag("candidate-preedit")
         .then(if (onEdit != null) tap.record().clickable(
             interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
@@ -1844,17 +1845,32 @@ internal fun PreeditLabel(text: String, visuals: CandidateBarVisuals, onEdit: ((
         var caretOn by remember { mutableStateOf(true) }
         LaunchedEffect(Unit) { while (true) { kotlinx.coroutines.delay(530); caretOn = !caretOn } }
         val caretAlpha = if (caretOn) 1f else 0f
-        // 折行时在隔音符后面垫零宽空格，但短串不垫，避免破坏 ' 与后续字母的字偶距导致切到编辑条时轻微位移。
-        val displayText = if (maxLines > 1 && shownText.length > 18) shownText.replace("'", "'\u200B") else shownText
-        // 预览态光标改用 drawBehind 竖线（0 宽），不再把实体 '|' 字符塞进文本里顶开后半段编码，
-        // 这样点开编辑条或收起时编码间距完全不回缩，且外观与编辑条光标完全一致。
-        val rawCaret = displayText.indexOf(com.kingzcheung.xime.service.PREEDIT_CARET)
-        val cleanDisplayText = if (rawCaret >= 0) displayText.removeRange(rawCaret, rawCaret + 1) else displayText
-        val caretOffset = rawCaret.takeIf { it >= 0 }
+        val textStyle = LocalTextStyle.current.copy(shadow = visuals.textShadow)
+        val fontSize = PreeditStyle.FontSize
+        val lineHeight = fontSize * 1.35f
+        // 预览态光标改用 drawBehind 竖线（0 宽），不再把实体 '|' 字符塞进文本里顶开后半段编码。
+        val rawCaret = shownText.indexOf(com.kingzcheung.xime.service.PREEDIT_CARET)
+        val cleanShownText = if (rawCaret >= 0) shownText.removeRange(rawCaret, rawCaret + 1) else shownText
+        // 只有实际排版宽度超过单行上限时，才在隔音符后垫零宽空格以便按音节折行；
+        // 所有单行拼音都不插入 \u200B，保证与编辑条的字偶距逐像素一致、点击完全不回缩。
+        val needsWrap = if (maxLines > 1 && cleanShownText.contains('\'') && constraints.hasBoundedWidth) {
+            val singleLineWidth = remember(cleanShownText, fontSize, textStyle) {
+                textMeasurer.measure(
+                    text = cleanShownText,
+                    style = textStyle.copy(fontSize = fontSize, lineHeight = lineHeight),
+                    maxLines = 1,
+                    softWrap = false,
+                ).size.width
+            }
+            singleLineWidth > constraints.maxWidth
+        } else false
+        val cleanDisplayText = if (needsWrap) cleanShownText.replace("'", "'\u200B") else cleanShownText
+        val caretOffset = rawCaret.takeIf { it >= 0 }?.let { offset ->
+            if (!needsWrap) offset else offset + cleanShownText.take(offset).count { it == '\'' }
+        }
         val caretColor = (if (colorsClose(visuals.accentColor, textColor)) visuals.selectedTextColor else visuals.accentColor)
             .let { it.copy(alpha = it.alpha * caretAlpha) }
         val annotated = sentenceSelectionText(cleanDisplayText, LocalSentenceSelection.current.value, visuals.accentColor)
-        val textStyle = LocalTextStyle.current.copy(shadow = visuals.textShadow)
         var layout by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
         val drawCaret = if (caretOffset == null) Modifier else Modifier.drawBehind {
             layout?.takeIf { it.layoutInput.text.text == cleanDisplayText }
@@ -1871,7 +1887,6 @@ internal fun PreeditLabel(text: String, visuals: CandidateBarVisuals, onEdit: ((
         } else {
             // 长拼音折成几行，不再一行横穿整个应用、后半截被切掉（用户 10-31 截图）。
             val density = LocalDensity.current
-            val lineHeight = PreeditStyle.FontSize * 1.35f
             val viewportPx = with(density) { (lineHeight * maxLines).roundToPx() }
             val lines = rememberScrollState()
             LaunchedEffect(cleanDisplayText, caretOffset, layout, lines.maxValue) {
