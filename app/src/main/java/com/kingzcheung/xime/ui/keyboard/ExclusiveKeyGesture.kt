@@ -278,13 +278,13 @@ internal suspend fun PointerInputScope.detectExclusiveKeyGestures(
                         downSwipe -> actions.onDown?.invoke(actions.downText.orEmpty())
                         left -> actions.onLeft?.invoke()
                         right -> actions.onRight?.invoke()
-                        letterGlide && actions.onUp != null &&
-                            isUnclaimedFastFlickUp(down.position, change.position, down.uptimeMillis, change.uptimeMillis, size.height.toFloat(), viewConfiguration.touchSlop) ->
+                        letterGlide && nextDown == null && actions.onUp != null &&
+                            isUnclaimedFastFlickUp(down.position, change.position, down.uptimeMillis, change.uptimeMillis, size.height.toFloat(), viewConfiguration.touchSlop, maxThresholdPx = swipeThreshold) ->
                             actions.onUp.invoke(actions.upText.orEmpty())
-                        letterGlide && actions.onDown != null &&
-                            isUnclaimedFastFlickDown(down.position, change.position, down.uptimeMillis, change.uptimeMillis, size.height.toFloat(), viewConfiguration.touchSlop) ->
+                        letterGlide && nextDown == null && actions.onDown != null &&
+                            isUnclaimedFastFlickDown(down.position, change.position, down.uptimeMillis, change.uptimeMillis, size.height.toFloat(), viewConfiguration.touchSlop, maxThresholdPx = swipeThreshold) ->
                             actions.onDown.invoke(actions.downText.orEmpty())
-                        letterGlide && actions.glideTopUp != null &&
+                        letterGlide && nextDown == null && actions.glideTopUp != null &&
                             isUnclaimedTopRowFlick(down.position, change.position, size.height.toFloat(), viewConfiguration.touchSlop) ->
                             actions.glideTopUp.invoke()
                         reserveDragForGlide && moved ->
@@ -319,18 +319,21 @@ internal suspend fun PointerInputScope.detectExclusiveKeyGestures(
  * 滑词需要跨键移动接管；单键短时拂动未被滑行接管（!tracker.claimed）时在抬手时触发对应角标输入。
  */
 internal const val FAST_FLICK_TIMEOUT_MS = 260L
+/** 快速上下拂动允许的水平偏移比例（约 ±33°），过滤快打跨行切键时的斜向惯性带尾。 */
+internal const val FAST_FLICK_MAX_HORIZONTAL_RATIO = 0.65f
 
 internal fun isUnclaimedFastFlickUp(
     down: Offset, up: Offset,
     downTime: Long, upTime: Long,
     keyHeight: Float, slop: Float,
     timeoutMs: Long = FAST_FLICK_TIMEOUT_MS,
+    maxThresholdPx: Float = Float.MAX_VALUE,
 ): Boolean {
     if (upTime - downTime > timeoutMs) return false
     val dx = up.x - down.x
     val dy = up.y - down.y
-    val minDistance = maxOf(slop * 1.2f, keyHeight * 0.2f)
-    return dy < 0f && -dy >= minDistance && abs(dx) <= -dy
+    val minDistance = minOf(maxOf(slop * 2.2f, keyHeight * 0.48f), maxThresholdPx)
+    return dy < 0f && -dy >= minDistance && abs(dx) <= -dy * FAST_FLICK_MAX_HORIZONTAL_RATIO
 }
 
 internal fun isUnclaimedFastFlickDown(
@@ -338,12 +341,13 @@ internal fun isUnclaimedFastFlickDown(
     downTime: Long, upTime: Long,
     keyHeight: Float, slop: Float,
     timeoutMs: Long = FAST_FLICK_TIMEOUT_MS,
+    maxThresholdPx: Float = Float.MAX_VALUE,
 ): Boolean {
     if (upTime - downTime > timeoutMs) return false
     val dx = up.x - down.x
     val dy = up.y - down.y
-    val minDistance = maxOf(slop * 1.2f, keyHeight * 0.2f)
-    return dy > 0f && dy >= minDistance && abs(dx) <= dy
+    val minDistance = minOf(maxOf(slop * 2.2f, keyHeight * 0.48f), maxThresholdPx)
+    return dy > 0f && dy >= minDistance && abs(dx) <= dy * FAST_FLICK_MAX_HORIZONTAL_RATIO
 }
 
 /** Only a deliberate upward exit gets the digit; a claimed glide never reaches this handler. */

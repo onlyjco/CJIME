@@ -124,23 +124,26 @@ class SymbolInputModeTest {
 
     @Test fun `fast flick up and down detect quick vertical gestures and reject slow or horizontal drags`() {
         val down = androidx.compose.ui.geometry.Offset(25f, 25f)
-        val flickUp = androidx.compose.ui.geometry.Offset(25f, 5f)
-        val flickDown = androidx.compose.ui.geometry.Offset(25f, 45f)
+        val flickUp = androidx.compose.ui.geometry.Offset(25f, -3f)
+        val flickDown = androidx.compose.ui.geometry.Offset(25f, 53f)
         val horizontal = androidx.compose.ui.geometry.Offset(50f, 20f)
-        val shortDrag = androidx.compose.ui.geometry.Offset(25f, 22f)
+        val shortDrag = androidx.compose.ui.geometry.Offset(25f, 11f)
+        val diagonalFastTapDrift = androidx.compose.ui.geometry.Offset(47f, -1f)
 
-        // Fast flick up (< 250ms)
+        // Deliberate fast flick up (< 260ms, >= 0.48 * keyHeight)
         assertTrue(isUnclaimedFastFlickUp(down, flickUp, downTime = 1000L, upTime = 1150L, keyHeight = 50f, slop = 8f))
-        // Slow flick up (> 250ms) rejected
+        // Slow flick up (> 260ms) rejected
         assertFalse(isUnclaimedFastFlickUp(down, flickUp, downTime = 1000L, upTime = 1300L, keyHeight = 50f, slop = 8f))
         // Downward motion rejected for up flick
         assertFalse(isUnclaimedFastFlickUp(down, flickDown, downTime = 1000L, upTime = 1150L, keyHeight = 50f, slop = 8f))
         // Horizontal drag rejected
         assertFalse(isUnclaimedFastFlickUp(down, horizontal, downTime = 1000L, upTime = 1150L, keyHeight = 50f, slop = 8f))
-        // Short distance rejected
+        // Fast-tap lift-off drift (~14px) rejected
         assertFalse(isUnclaimedFastFlickUp(down, shortDrag, downTime = 1000L, upTime = 1150L, keyHeight = 50f, slop = 8f))
+        // Diagonal fast-tap drift (~40deg) rejected
+        assertFalse(isUnclaimedFastFlickUp(down, diagonalFastTapDrift, downTime = 1000L, upTime = 1150L, keyHeight = 50f, slop = 8f))
 
-        // Fast flick down (< 250ms)
+        // Deliberate fast flick down (< 260ms, >= 0.48 * keyHeight)
         assertTrue(isUnclaimedFastFlickDown(down, flickDown, downTime = 1000L, upTime = 1150L, keyHeight = 50f, slop = 8f))
         // Slow flick down rejected
         assertFalse(isUnclaimedFastFlickDown(down, flickDown, downTime = 1000L, upTime = 1300L, keyHeight = 50f, slop = 8f))
