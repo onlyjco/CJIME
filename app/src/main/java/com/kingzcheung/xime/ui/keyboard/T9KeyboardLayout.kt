@@ -592,11 +592,11 @@ private fun T9KeyboardContent(
                             textColor = keyTextColor,
                             backgroundColor = keyBackgroundColor,
                             accentColor = accentColor,
-                            // 读音整列共用同一个字号（按最宽读音缩放），避免同列长短音节大小不一致；符号列表照旧。
+                            // 读音整列共用同一个字号（按最宽标准音节缩放），超长异常项单独在本格缩宽，不拖垮整列。
                             fontSize = if (option != null) pinyinFontSize else candidateFontSize.sp,
                             isSelected = isSelected,
                             approximate = option?.near == true,
-                            fitWidth = false,
+                            fitWidth = option != null,
                             modifier = Modifier.fillMaxWidth().height(metrics.rowHeightDp.dp)
                                 .testTag("t9-pinyin-option:$index")
                         )
@@ -1118,8 +1118,8 @@ internal fun T9CandidateItem(
 internal fun approximateRailColor(textColor: Color): Color = textColor.copy(alpha = textColor.alpha * 0.62f)
 
 /**
- * 为整列音节/读音选择计算统一字号：以最宽条目按选中态字重测宽，整列同比例缩小到不溢出，
- * 保证短音节与长音节（如 i 与 zhuang）、选中与未选中条目字母大小完全一致。
+ * 为整列音节/读音选择计算统一字号：以最宽标准音节（上限封顶为最宽 6 字母拼音 "shuang"）按选中态字重测宽，
+ * 整列同比例缩小到不溢出；若列表里混入超长多音节/纠错串，不拖垮整列字号，由单格 [FittedRailText] 单独兜底缩宽。
  */
 @Composable
 internal fun rememberUniformRailFontSize(
@@ -1132,12 +1132,14 @@ internal fun rememberUniformRailFontSize(
     val density = LocalDensity.current
     val usable = with(density) { maxWidth.toPx() }.coerceAtLeast(1f)
     val style = TextStyle(fontSize = baseFontSize, fontFamily = AppFonts.candidateFontFamily, fontWeight = FontWeight.Medium)
-    val widest = remember(items, baseFontSize, density.fontScale, AppFonts.candidateFontFamily) {
-        items.maxOfOrNull { item ->
+    val effectiveWidest = remember(items, baseFontSize, density.fontScale, AppFonts.candidateFontFamily) {
+        val cap = measurer.measure("shuang", style = style, maxLines = 1, softWrap = false).size.width
+        val widest = items.maxOfOrNull { item ->
             measurer.measure(item, style = style, maxLines = 1, softWrap = false).size.width
         } ?: 0
+        minOf(widest, cap)
     }
-    return baseFontSize * minOf(1f, usable / widest.coerceAtLeast(1))
+    return baseFontSize * minOf(1f, usable / effectiveWidest.coerceAtLeast(1))
 }
 
 /**

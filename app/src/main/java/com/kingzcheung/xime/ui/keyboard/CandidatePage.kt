@@ -831,7 +831,7 @@ private fun CandidateRailSymbolKey(
             val meaning = if (approximate) Modifier.semantics { contentDescription = "相近读音 $text" } else Modifier
             val railWidth = maxWidth
             val targetSize = uniformFontSize ?: if (isPinyin) 13.sp else 16.sp
-            val fitCap = if (uniformFontSize == null && isPinyin) railWidth - (if (isSelected) 12.dp else 6.dp) else null
+            val fitCap = if (isPinyin) railWidth - (if (isSelected) 12.dp else 6.dp) else null
             if (isSelected) {
                 Box(
                     modifier = meaning
@@ -953,7 +953,7 @@ private fun SizedExpandedLeftRail(state: CandidatePageState, callbacks: Candidat
                         backgroundColor = keyBg, accentColor = state.railAccentColor,
                         fontSize = if (pinyin) pinyinFont else font,
                         isSelected = index == state.railSelectedPinyinIndex,
-                        approximate = state.railPinyinNear.getOrNull(index) == true, fitWidth = false,
+                        approximate = state.railPinyinNear.getOrNull(index) == true, fitWidth = pinyin,
                         modifier = Modifier.fillMaxWidth().height(rowHeight))
                 }
             }
