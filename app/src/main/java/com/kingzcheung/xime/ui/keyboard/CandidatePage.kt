@@ -300,7 +300,7 @@ private fun CandidatePageContent(
                 ) {
                     var railListHeightPx by remember { mutableIntStateOf(0) }
                     val uniformPinyinSize = if (isPinyinRail) rememberUniformRailFontSize(
-                        railItems, 13.sp, leftRailWidth - 12.dp
+                        railItems, 13.sp, leftRailWidth - 6.dp
                     ) else null
                     Column(
                         modifier = Modifier
@@ -939,10 +939,10 @@ private fun SizedExpandedLeftRail(state: CandidatePageState, callbacks: Candidat
             val textWidth = with(LocalDensity.current) { (maxWidth - 8.dp).toPx() }.coerceAtLeast(1f)
             val font = (metrics.fontSizeSp * minOf(1f, textWidth / sample.size.width.coerceAtLeast(1))).sp
             val rowHeight = if (state.choosingMergedLetter && items.isNotEmpty()) maxHeight / items.size else metrics.rowHeightDp.dp
-            // 读音整列共用统一字号（按最宽项缩放），保证同列音节字母大小一致。
+            // 读音整列共用统一字号（按常见 4 字母音节封顶，不因个别 6 字母音节拖小整列）。
             val pinyin = state.railPinyinOptions.isNotEmpty() && !state.choosingMergedLetter
             val pinyinFont = if (pinyin) rememberUniformRailFontSize(
-                items, metrics.pinyinFontSizeSp.sp, maxWidth - 12.dp
+                items, metrics.pinyinFontSizeSp.sp, maxWidth - 6.dp
             ) else font
             LazyColumn(Modifier.fillMaxSize().testTag("expanded-pinyin-options")) {
                 itemsIndexed(items) { index, item ->

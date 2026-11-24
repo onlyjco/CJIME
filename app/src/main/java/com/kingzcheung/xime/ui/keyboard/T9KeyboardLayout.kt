@@ -1118,8 +1118,9 @@ internal fun T9CandidateItem(
 internal fun approximateRailColor(textColor: Color): Color = textColor.copy(alpha = textColor.alpha * 0.62f)
 
 /**
- * 为整列音节/读音选择计算统一字号：以最宽标准音节（上限封顶为最宽 6 字母拼音 "shuang"）按选中态字重测宽，
- * 整列同比例缩小到不溢出；若列表里混入超长多音节/纠错串，不拖垮整列字号，由单格 [FittedRailText] 单独兜底缩宽。
+ * 为整列音节/读音选择计算统一字号：以最宽常见 4 字母音节（如 "shao"）为上限测宽，
+ * 避免 26 键窄左栏里因为列表混入 "shuang"/"zhuang" 等 5–6 字母音节把整列普通音节（如 shao/she/shi）
+ * 一起压成极小字号；超宽的 5–6 字母音节由单格 [FittedRailText] 单独缩宽完整显示。
  */
 @Composable
 internal fun rememberUniformRailFontSize(
@@ -1133,13 +1134,14 @@ internal fun rememberUniformRailFontSize(
     val usable = with(density) { maxWidth.toPx() }.coerceAtLeast(1f)
     val style = TextStyle(fontSize = baseFontSize, fontFamily = AppFonts.candidateFontFamily, fontWeight = FontWeight.Medium)
     val effectiveWidest = remember(items, baseFontSize, density.fontScale, AppFonts.candidateFontFamily) {
-        val cap = measurer.measure("shuang", style = style, maxLines = 1, softWrap = false).size.width
+        val cap = measurer.measure("shao", style = style, maxLines = 1, softWrap = false).size.width
         val widest = items.maxOfOrNull { item ->
             measurer.measure(item, style = style, maxLines = 1, softWrap = false).size.width
         } ?: 0
         minOf(widest, cap)
     }
-    return baseFontSize * minOf(1f, usable / effectiveWidest.coerceAtLeast(1))
+    val scale = minOf(1f, usable / effectiveWidest.coerceAtLeast(1)).coerceAtLeast(0.78f)
+    return baseFontSize * scale
 }
 
 /**

@@ -4936,7 +4936,31 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         KeyboardThemes.refreshDynamicSchemes(this)
         clipboardSyncBridge?.setKeyboardVisible(true)
         // 短信弹窗里点「复制」时键盘被盖住，回来时输入框没变、不走 onStartInput，键盘重新显示时补读那一条。
-        if (::clipboardManager.isInitialized) runCatching { clipboardManager.readMissedCopy() }
+        if (::clipboardManager.isInitialized) runCatching {
+            clipboardManager.readMissedCopy()
+            // 收起再展开同一个输入框时不走 onStartInput：把仍在 30 秒有效期内且未消费的剪贴板/同步条目重新回填到候选栏，
+            // 避免「收起再展开消失、熄屏亮屏又出现」的不一致。
+            if (canShowClipboardSuggestions(candidateState.value.isComposing,
+                    candidateState.value.pendingEnglishText, inputCommands.hasPendingCommands) &&
+                candidateState.value.candidates.isEmpty() && candidateState.value.associationCandidates.isEmpty()) {
+                val showCopied = com.kingzcheung.xime.clipboard.clipboardShowsInCandidateBar(this)
+                val items = clipboardManager.getRecentItems(30, includeCopied = showCopied)
+                val recentImage = clipboardManager.images.preview.value?.takeIf {
+                    showCopied && it.timestamp >= (items.maxOfOrNull { item -> item.timestamp } ?: 0)
+                }
+                if (items.isNotEmpty() || recentImage != null) {
+                    recentClipboardItemsState.value = items
+                    candidateState.value = candidateState.value.copy(
+                        candidates = clipboardBarTexts(items),
+                        clipboardExtractedCount = 0,
+                        clipboardImage = recentImage,
+                        smsVerificationCode = clipboardManager.verificationCode.value?.text,
+                        candidateComments = emptyList(),
+                        isShowingRecentClipboard = true,
+                    )
+                }
+            }
+        }
         if (::clipboardManager.isInitialized) clipboardManager.images.setKeyboardVisible(true)
     }
 

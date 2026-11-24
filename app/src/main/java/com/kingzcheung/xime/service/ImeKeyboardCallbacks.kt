@@ -207,8 +207,11 @@ internal fun rememberImeKeyboardCallbacks(
             onDismissClipboardPreview = {
                 service.candidateState.value.clipboardImage?.let { service.clipboardManager.images.dismissPreview(it.uri) }
                 if (service.candidateState.value.isShowingRecentClipboard) {
-                    // 关掉过的短信验证码不再在下次弹出键盘时出现；系统剪贴板里照旧留到 10 分钟。
+                    // 关掉过的短信验证码和剪贴板预览标记为已消费，不再在下次弹出键盘或亮屏时反复冒出。
                     if (service.candidateState.value.smsVerificationCode != null) service.clipboardManager.dismissVerificationCode()
+                    service.candidateState.value.candidates.forEach { text ->
+                        service.clipboardManager.markConsumed(text)
+                    }
                     service.candidateState.value = service.candidateState.value.copy(
                         candidates = emptyList(),
                         candidateComments = emptyList(),
