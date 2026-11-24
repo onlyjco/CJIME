@@ -83,8 +83,9 @@ fun NumberKeyboardLayout(
     /** 回车键动作名（换行、发送、搜索等），与主键盘同一来源，决定回车键图标。 */
     enterKeyText: String = "确定",
 ) {
-    KeyboardKeySpacingScope(modifier, columns = 5f * 3f / 3.4f,
-        policy = KeyVisualPolicy.T9, allowShrink = isFloatingMode, applyGutter = true,
+    // 与符号键盘、普通键盘使用同一套 Qwerty 间距与边距策略，保证两侧按键与键缝完全一致。
+    KeyboardKeySpacingScope(modifier,
+        policy = KeyVisualPolicy.Qwerty, allowShrink = isFloatingMode, applyGutter = true,
         growthSpacing = keySpacingX?.value to keySpacingY?.value) { bodyModifier ->
 
     val swipeBubble = rememberSwipeBubbleController()
@@ -188,17 +189,24 @@ private fun NumberRows(
     val ctrlFontSize = if (compactMode) 12.sp else androidx.compose.ui.unit.TextUnit.Unspecified
     // 左栏符号可在「按键符号 → 数字侧栏」改（用户 11-09）；没改过仍是 + - * /。四格一屏，多出的上下滑，末尾一格「编辑」。
     val symbols = SideSymbolTarget.NUMBER.resolve(LocalKeyboardInputPreferences.current.symbolsFor(SideSymbolTarget.NUMBER))
+    BoxWithConstraints(Modifier.fillMaxSize()) {
+        // 两侧按键（左栏、右栏及底栏「中文」「!@#」「确定」）与符号键盘按同一列宽（1 / symbolCols）对齐。
+        val symbolCols = symbolGridGeometry(maxWidth.value, (maxHeight.value * 0.75f).coerceAtLeast(1f)).columns.toFloat()
+        val mainWeight = (symbolCols - 2f).coerceAtLeast(2f)
+        val bottomCenterWeight = (symbolCols - 3f).coerceAtLeast(1.5f)
+        val dotWeight = minOf(1f, bottomCenterWeight * 0.4f)
+        val zeroWeight = bottomCenterWeight - dotWeight
     Column(Modifier.fillMaxSize()) {
         // Numeric navigation uses the operator-column width, independent of the text row.
         Row(Modifier.fillMaxWidth().weight(3f)) {
             NumberSymbolRail(symbols = symbols, onKeyPress = onKeyPress, onKeyPressDown = onKeyPressDown,
                 backgroundColor = keyBackgroundColor, textColor = keyTextColor, fontSize = symFontSize,
                 shadowEnabled = shadowEnabled, shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius,
-                modifier = Modifier.weight(NineGridFrame.SIDE).fillMaxHeight().testTag("number-operators")
+                modifier = Modifier.weight(1f).fillMaxHeight().testTag("number-operators")
                     .padding(scaledKeyVisualPadding())
                     // 键缝动效：左栏不是键，按它不画；登记位置是为了线能绕着它走。
                     .then(keyGapLightSource(GapLightKind.NONE)))
-            Column(Modifier.weight(NineGridFrame.MAIN).fillMaxHeight()) {
+            Column(Modifier.weight(mainWeight).fillMaxHeight()) {
                 listOf(listOf("1", "2", "3"), listOf("4", "5", "6"), listOf("7", "8", "9")).forEach { row ->
                     Row(Modifier.fillMaxWidth().weight(1f)) {
                         row.forEach { key ->
@@ -211,7 +219,7 @@ private fun NumberRows(
                     }
                 }
             }
-            Column(Modifier.weight(NineGridFrame.ACTION).fillMaxHeight().testTag("number-actions")) {
+            Column(Modifier.weight(1f).fillMaxHeight().testTag("number-actions")) {
                 SwipeableIconKeyButton(
                     icon = rememberVectorPainter(Icons.AutoMirrored.Filled.Backspace),
                     onClick = { onKeyPress("delete") }, backgroundColor = specialKeyBackgroundColor,
@@ -240,15 +248,15 @@ private fun NumberRows(
             }
         }
         Row(Modifier.fillMaxWidth().weight(1f)) {
-            // 数字键盘左下角依次放「中文/返回」和「!@#」符号键（调换 slot 2 与 slot 1 位置）。
+            // 数字键盘左下角依次放「中文/返回」和「!@#」符号键（调换 slot 2 与 slot 1 位置），宽度与符号键盘对齐。
             for (slot in listOf(2, 1)) KeyboardModeKey(slot = slot, page = KeyboardInputPage.NUMBERS,
                 onKeyPress = onKeyPress, backgroundColor = specialKeyBackgroundColor,
-                textColor = specialKeyTextColor, modifier = Modifier.weight(modeWeight),
+                textColor = specialKeyTextColor, modifier = Modifier.weight(1f),
                 onKeyPressDown = onKeyPressDown, shadowEnabled = shadowEnabled,
                 shadowElevation = shadowElevation, shadowShapeRadius = shadowShapeRadius)
             KeyButton(text = "0", onClick = { onKeyPress("0") },
                 backgroundColor = keyBackgroundColor, textColor = keyTextColor,
-                modifier = Modifier.weight(NineGridFrame.MAIN - 2 * modeWeight).testTag("number-zero"), onPress = { onKeyPressDown?.invoke("0") },
+                modifier = Modifier.weight(zeroWeight).testTag("number-zero"), onPress = { onKeyPressDown?.invoke("0") },
                 shadowEnabled = shadowEnabled, shadowElevation = shadowElevation,
                 shadowShapeRadius = shadowShapeRadius, fontSize = keyFontSize)
             // 点键上角标「:」（用户 11-09：IP 后面接端口 192.168.1.1:8080）。和空格两侧标点键同一个「底排标点固定上滑」：
@@ -256,7 +264,7 @@ private fun NumberRows(
             val bottomSwipeUp = LocalKeyboardInputPreferences.current.bottomPunctuationSwipeUp
             SwipeableKeyButton(text = ".", onClick = { onKeyPress(".") },
                 backgroundColor = keyBackgroundColor, textColor = keyTextColor,
-                modifier = Modifier.weight(NineGridFrame.ACTION).testTag("number-dot-key"), onPress = { onKeyPressDown?.invoke(".") },
+                modifier = Modifier.weight(dotWeight).testTag("number-dot-key"), onPress = { onKeyPressDown?.invoke(".") },
                 swipeText = NUMBER_DOT_ALTERNATE, symbolInputText = NUMBER_DOT_ALTERNATE,
                 onSwipe = { onKeyPress(NUMBER_DOT_ALTERNATE) }, onSwipeStateChange = onSwipeStateChange,
                 followSymbolSwipeDirection = !bottomSwipeUp, keepSymbolSwipeOnLongPress = bottomSwipeUp,
@@ -264,10 +272,11 @@ private fun NumberRows(
                 shadowShapeRadius = shadowShapeRadius, fontSize = keyFontSize)
             ActionKeyButton(text = enterKeyText, onClick = { onKeyPress("enter") },
                 backgroundColor = specialKeyBackgroundColor, textColor = specialKeyTextColor,
-                modifier = Modifier.weight(NineGridFrame.ACTION), onPress = { onKeyPressDown?.invoke("enter") },
+                modifier = Modifier.weight(1f), onPress = { onKeyPressDown?.invoke("enter") },
                 shadowEnabled = shadowEnabled, shadowElevation = shadowElevation,
                 shadowShapeRadius = shadowShapeRadius, fontSize = ctrlFontSize)
         }
+    }
     }
 }
 
