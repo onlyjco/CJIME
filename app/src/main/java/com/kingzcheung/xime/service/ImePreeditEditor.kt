@@ -111,7 +111,14 @@ internal class ImePreeditEditor(private val service: XimeInputMethodService) {
                 caret = when (movement) {
                     "start" -> 0
                     "end" -> text.length
-                    else -> if (movement.startsWith("inline:")) {
+                    // 点气泡、小签、整行打开编辑时点在第几个字母后面：
+                    // 按屏上显示的拼音对到编辑缓冲里，对不上（纠错读音、别的方案）就留在原处。
+                    else -> if (movement.startsWith("letters:")) {
+                        val code = service.candidateState.value.shownPreedit(service.uiState.value.inputProfile)
+                        movement.removePrefix("letters:").toIntOrNull()
+                            ?.let { session.editOffset(code, com.kingzcheung.xime.rime.offsetAfterPreeditLetters(code, it)) }
+                            ?.let { snapDoublePinyin(session, it.coerceIn(0, text.length), 0) } ?: caret
+                    } else if (movement.startsWith("inline:")) {
                         val code = service.inlinePinyinText()
                             ?: service.candidateState.value.shownPreedit(service.uiState.value.inputProfile)
                         movement.removePrefix("inline:").toIntOrNull()?.let { session.editOffset(code, it) }

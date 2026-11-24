@@ -1545,10 +1545,19 @@ fun KeyboardView(
                     onClose = { closePreeditEditor() },
                     onCaret = { editPreedit(caret = it) },
                     onReplace = { editPreedit(text = it) },
-                    preedit = candidateState.value.preeditText, inline = inputPreferences.preeditInsideKeyboard)
+                    preedit = candidateState.value.preeditText, inline = true)
             })
-            // 拼音在键盘内（候选上方一行或候选栏左侧）时，点开的编辑条也放在候选栏里，不浮到应用上。
-            if (!inputPreferences.preeditInsideKeyboard) drawPreeditEditor?.invoke()
+            val drawFloatingPreeditEditor: (@Composable (androidx.compose.ui.unit.Dp, Color, androidx.compose.ui.graphics.Shadow?) -> Unit)? =
+                if (editFrame == null) null else ({ editorWidth, floatingColor, textShadow ->
+                    PreeditEditorContent(editFrame, neutralInputBgColor, candidateTextColor, candidateAccentColor,
+                        onClose = { closePreeditEditor() },
+                        onCaret = { editPreedit(caret = it) },
+                        onReplace = { editPreedit(text = it) },
+                        preedit = candidateState.value.preeditText,
+                        floatingColor = floatingColor,
+                        textShadow = textShadow,
+                        modifier = Modifier.width(editorWidth))
+                })
 
             // 候选栏与展开页共用：展开页从同一版本中实际显示的候选之后接着排。
             var visibleBarAssociations by remember(singleCharFilter, strokeCode) { mutableStateOf(emptyList<String>()) }
@@ -1983,9 +1992,12 @@ fun KeyboardView(
                 inlineSuggestions = if (barPage is KeyboardPage.Overlay) emptyList<Any>() else inlineSuggestions,
                 showPreeditPreview = preeditEditSession == null,
                 inlinePreeditEditor = drawPreeditEditor,
+                floatingPreeditEditor = drawFloatingPreeditEditor,
                 onEditPreedit = if (liveGlide == null && englishGlide == null && glideCandidatePreview.value.isEmpty() && !state.isAsciiMode && !isHandwritingPage &&
                     com.kingzcheung.xime.rime.PinyinEditBuffer.supports(state.currentSchemaId) &&
-                    callbacks.onOpenPreeditEditor != null) ({
+                    callbacks.onOpenPreeditEditor != null) ({ letters: Int? ->
+                    // 点在拼音哪里，打开后光标就放在哪里（排在打开之后执行，和打开前按的方向键同一条队列）。
+                    if (letters != null) pendingPreeditMoves.add("preedit_cursor:letters:$letters")
                     openPreeditEditor()
                 }) else null,
             )

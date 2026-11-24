@@ -170,6 +170,25 @@ internal fun offsetAfterCodeKeys(text: String, keys: Int): Int {
     return text.length
 }
 
+/**
+ * 屏上拼音（气泡、小签、整行）里的一个「字母」：拼音字母、带声调的字母、九键数字、双拼的分号。
+ * 空格、隔音符、零宽空格、光标竖线、已经选好的汉字都不算。点拼音打开编辑时按「点在第几个字母后面」对位置。
+ */
+internal fun isPreeditLetter(c: Char): Boolean = c == ';' ||
+    (c.isLetterOrDigit() && Character.UnicodeScript.of(c.code) != Character.UnicodeScript.HAN)
+
+/** [text] 里 [offset] 前面有几个 [isPreeditLetter]。 */
+internal fun preeditLettersBefore(text: String, offset: Int): Int =
+    text.take(offset.coerceIn(0, text.length)).count(::isPreeditLetter)
+
+/** [text] 里第 [letters] 个 [isPreeditLetter] 之后的位置；0 个时是第一个字母前面（跳过前面选好的汉字），不够时是末尾。 */
+internal fun offsetAfterPreeditLetters(text: String, letters: Int): Int {
+    if (letters <= 0) return text.indexOfFirst(::isPreeditLetter).takeIf { it >= 0 } ?: text.length
+    var seen = 0
+    text.forEachIndexed { index, c -> if (isPreeditLetter(c) && ++seen == letters) return index + 1 }
+    return text.length
+}
+
 /** The reading after its first [keys] keys, keeping its own syllable boundaries. */
 internal fun dropReadingKeys(reading: String, keys: Int): String {
     val start = offsetAfterCodeKeys(reading.replace(' ', '\''), keys)
