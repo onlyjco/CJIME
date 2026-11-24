@@ -426,53 +426,13 @@ fun SmartPredictionSettingsContent(
                                     tuningGlide = true
                                     tuneScope.launch(kotlinx.coroutines.Dispatchers.IO) {
                                         val schemaId = SettingsPreferences.getCurrentSchema(context)
-                                        val external = com.kingzcheung.xime.glide.ExternalGlideEncodings.parse(
-                                            SettingsPreferences.getPrefsPublic(context)
-                                                .getString(com.kingzcheung.xime.glide.ExternalGlideEncodings.KEY, null)
-                                        )
-                                        val encoding = com.kingzcheung.xime.glide.chineseGlideEncoding(
-                                            com.kingzcheung.xime.settings.InputProfiles.describe(schemaId),
-                                            schemaId,
-                                            external,
-                                        )
-                                        val dp = encoding?.doublePinyin
-                                        val sKey = dp?.id ?: "pinyin"
                                         val result = com.kingzcheung.xime.glide.PersonalGlideCalibration.stats(context.filesDir)
                                         val msg = if (result.sampleCount < 12) {
                                             "当前本机样本 ${result.sampleCount} 条（满 12 条后可基于历史轨迹自动调优，多滑几句即可）"
                                         } else {
-                                            val defaultKeys = buildMap {
-                                                listOf("qwertyuiop" to 0f, "asdfghjkl" to 0.5f, "zxcvbnm" to 1.5f)
-                                                    .forEachIndexed { r, (row, inset) ->
-                                                        row.forEachIndexed { idx, c ->
-                                                            put(
-                                                                c,
-                                                                com.kingzcheung.xime.keyboard.LetterKeyRect(
-                                                                    (inset + idx) * 60f,
-                                                                    r * 80f,
-                                                                    60f,
-                                                                    80f,
-                                                                ),
-                                                            )
-                                                        }
-                                                    }
-                                            }
-                                            val kb = com.kingzcheung.xime.glide.PersonalGlideCalibration.applyOffsets(
-                                                context.filesDir,
-                                                "p",
-                                                com.kingzcheung.xime.glide.GlideLexicon.keyboard(defaultKeys),
-                                            )
-                                            val syllables = com.kingzcheung.xime.glide.glideSyllables(
-                                                com.kingzcheung.xime.glide.GlideLexicon.pinyin(context),
-                                                dp,
-                                            )
-                                            val tune = com.kingzcheung.xime.glide.PersonalGlideCalibration.tuneFromHistory(
-                                                context.filesDir,
-                                                sKey,
-                                                kb,
-                                                syllables,
-                                            )
-                                            if (tune.updated) "调优完成（${tune.sampleCount} 句）：首选命中 ${tune.beforeTop1} → ${tune.afterTop1}"
+                                            val tune = com.kingzcheung.xime.glide.PersonalGlideCalibration.tuneForSchema(context, schemaId)
+                                            if (tune == null) "当前方案暂不支持中文滑行调优"
+                                            else if (tune.updated) "调优完成（${tune.sampleCount} 句）：首选命中 ${tune.beforeTop1} → ${tune.afterTop1}"
                                             else "当前权重已是最优（${tune.sampleCount} 句回放首选命中 ${tune.beforeTop1}）"
                                         }
                                         kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {

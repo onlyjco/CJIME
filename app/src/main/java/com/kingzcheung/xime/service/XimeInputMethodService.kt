@@ -4908,37 +4908,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         if (com.kingzcheung.xime.glide.PersonalGlideCalibration.shouldAutoTune()) {
             com.kingzcheung.xime.glide.PersonalGlideCalibration.markAutoTuned()
             val app = applicationContext
-            val dir = filesDir
             val schemaId = uiState.value.currentSchemaId.ifBlank { SettingsPreferences.getCurrentSchema(app) }
             serviceScope.launch(Dispatchers.IO) {
-                runCatching {
-                    val external = com.kingzcheung.xime.glide.ExternalGlideEncodings.parse(
-                        SettingsPreferences.getPrefsPublic(app)
-                            .getString(com.kingzcheung.xime.glide.ExternalGlideEncodings.KEY, null)
-                    )
-                    val encoding = com.kingzcheung.xime.glide.chineseGlideEncoding(
-                        com.kingzcheung.xime.settings.InputProfiles.describe(schemaId),
-                        schemaId,
-                        external,
-                    ) ?: return@runCatching
-                    val dp = encoding.doublePinyin
-                    val sKey = dp?.id ?: "pinyin"
-                    val defaultKeys = buildMap {
-                        listOf("qwertyuiop" to 0f, "asdfghjkl" to 0.5f, "zxcvbnm" to 1.5f)
-                            .forEachIndexed { r, (row, inset) ->
-                                row.forEachIndexed { idx, c ->
-                                    put(c, com.kingzcheung.xime.keyboard.LetterKeyRect((inset + idx) * 60f, r * 80f, 60f, 80f))
-                                }
-                            }
-                    }
-                    val kb = com.kingzcheung.xime.glide.PersonalGlideCalibration.applyOffsets(
-                        dir, "p", com.kingzcheung.xime.glide.GlideLexicon.keyboard(defaultKeys)
-                    )
-                    val syllables = com.kingzcheung.xime.glide.glideSyllables(
-                        com.kingzcheung.xime.glide.GlideLexicon.pinyin(app), dp
-                    )
-                    com.kingzcheung.xime.glide.PersonalGlideCalibration.tuneFromHistory(dir, sKey, kb, syllables)
-                }
+                runCatching { com.kingzcheung.xime.glide.PersonalGlideCalibration.tuneForSchema(app, schemaId) }
             }
         }
     }

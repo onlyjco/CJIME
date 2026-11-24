@@ -543,6 +543,32 @@ object PersonalGlideCalibration {
         paramsRevisionCounter.incrementAndGet()
     }
 
+    /** 共用离线调参入口：按当前方案解析双拼编码、应用个人键位偏移后执行 80/20 留出验证调参。 */
+    fun tuneForSchema(context: android.content.Context, schemaId: String): TuneResult? {
+        val external = ExternalGlideEncodings.parse(
+            com.kingzcheung.xime.settings.SettingsPreferences.getPrefsPublic(context)
+                .getString(ExternalGlideEncodings.KEY, null)
+        )
+        val encoding = chineseGlideEncoding(
+            com.kingzcheung.xime.settings.InputProfiles.describe(schemaId),
+            schemaId,
+            external,
+        ) ?: return null
+        val dp = encoding.doublePinyin
+        val sKey = dp?.id ?: "pinyin"
+        val defaultKeys = buildMap {
+            listOf("qwertyuiop" to 0f, "asdfghjkl" to 0.5f, "zxcvbnm" to 1.5f)
+                .forEachIndexed { r, (row, inset) ->
+                    row.forEachIndexed { idx, c ->
+                        put(c, LetterKeyRect((inset + idx) * 60f, r * 80f, 60f, 80f))
+                    }
+                }
+        }
+        val kb = applyOffsets(context.filesDir, "p", GlideLexicon.keyboard(defaultKeys))
+        val syllables = glideSyllables(GlideLexicon.pinyin(context), dp)
+        return tuneFromHistory(context.filesDir, sKey, kb, syllables)
+    }
+
     /** 仅还原滑行打分权重为默认值，保留指腹偏移、高频短语、混淆表与轨迹样本。 */
     @Synchronized
     fun resetParams(dir: File): Boolean {

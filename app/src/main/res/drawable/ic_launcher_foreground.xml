@@ -1,23 +1,60 @@
 <vector xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:aapt="http://schemas.android.com/aapt"
     android:width="108dp"
     android:height="108dp"
-    android:viewportWidth="362.35"
-    android:viewportHeight="362.35">
-  <group android:scaleX="0.4251923"
-      android:scaleY="0.4251923"
-      android:translateX="104.140785"
-      android:translateY="104.140785">
-    <path
-        android:pathData="M251.73,99L195.16,155.56A20,20 98.04,0 1,166.88 155.56L110.31,98.99A20,20 0,0 1,110.31 70.71L166.88,14.14A20,20 63.37,0 1,195.16 14.14L251.73,70.71A20,20 0,0 1,251.73 99z"
-        android:fillColor="#2C2F35"/>
-    <path
-        android:pathData="M155.56,195.16L98.99,251.73A20,20 101.73,0 1,70.71 251.73L14.14,195.16A20,20 101.73,0 1,14.14 166.88L70.71,110.31A20,20 0,0 1,98.99 110.31L155.56,166.88A20,20 0,0 1,155.56 195.16z"
-        android:fillColor="#2C2F35"/>
-    <path
-        android:pathData="M251.73,291.33L195.16,347.9A20,20 48.62,0 1,166.88 347.9L110.31,291.33A20,20 127.81,0 1,110.31 263.04L166.88,206.48A20,20 129.45,0 1,195.16 206.48L251.73,263.04A20,20 48.62,0 1,251.73 291.33z"
-        android:fillColor="#2C2F35"/>
-    <path
-        android:pathData="M300.01,118.99C287.42,106.4 265.87,115.32 265.87,133.14L265.87,229.52C265.87,247.34 287.42,256.26 300.01,243.66L348.21,195.47C356.02,187.66 356.02,175 348.21,167.19L300.01,118.99Z"
-        android:fillColor="#8F73E2"/>
-  </group>
+    android:viewportWidth="108"
+    android:viewportHeight="108">
+    <group
+        android:scaleX="0.072"
+        android:scaleY="0.072"
+        android:translateX="17.136"
+        android:translateY="17.136">
+        <!-- Soft outer glow behind the continuous CJ glide ribbon -->
+        <path
+            android:pathData="M455,365 C365,295 245,360 245,512 C245,665 370,725 470,645 C545,585 585,430 685,345 C685,455 685,545 685,605 C685,705 585,735 520,680"
+            android:strokeWidth="94"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:strokeAlpha="0.22"
+            android:fillColor="#00000000">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:startX="245"
+                    android:startY="345"
+                    android:endX="685"
+                    android:endY="705"
+                    android:type="linear">
+                    <item android:color="#FF38BDF8" android:offset="0.0"/>
+                    <item android:color="#FF8B5CF6" android:offset="1.0"/>
+                </gradient>
+            </aapt:attr>
+        </path>
+        <!-- Crisp continuous CJ glide ribbon -->
+        <path
+            android:pathData="M455,365 C365,295 245,360 245,512 C245,665 370,725 470,645 C545,585 585,430 685,345 C685,455 685,545 685,605 C685,705 585,735 520,680"
+            android:strokeWidth="66"
+            android:strokeLineCap="round"
+            android:strokeLineJoin="round"
+            android:fillColor="#00000000">
+            <aapt:attr name="android:strokeColor">
+                <gradient
+                    android:startX="245"
+                    android:startY="345"
+                    android:endX="685"
+                    android:endY="705"
+                    android:type="linear">
+                    <item android:color="#FF38BDF8" android:offset="0.0"/>
+                    <item android:color="#FF6366F1" android:offset="0.58"/>
+                    <item android:color="#FF8B5CF6" android:offset="1.0"/>
+                </gradient>
+            </aapt:attr>
+        </path>
+        <!-- Touch-lift glowing halo + crisp node -->
+        <path
+            android:pathData="M755,288a50,50 0,1 0,0.01 0z"
+            android:fillColor="#407DD3FC"/>
+        <path
+            android:pathData="M755,306a32,32 0,1 0,0.01 0z"
+            android:fillColor="#FFE0F2FE"/>
+    </group>
 </vector>

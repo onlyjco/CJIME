@@ -20,6 +20,15 @@ val applyCyimeSourcePatches by tasks.registering {
             }
             check(git("apply", patch.absolutePath) == 0) { "Failed to apply $name" }
         }
+        // Keep librime submodule's plugin header in sync with main repo's librime-t9/src for reproducible CI builds.
+        val canonicalSyllableHeader = file("src/main/jni/librime-t9/src/pinyin_syllable_selection.h")
+        val pluginSyllableHeader = file("src/main/jni/librime/plugins/librime-t9/src/pinyin_syllable_selection.h")
+        if (canonicalSyllableHeader.isFile && pluginSyllableHeader.parentFile.isDirectory) {
+            val srcBytes = canonicalSyllableHeader.readBytes()
+            if (!pluginSyllableHeader.isFile || !pluginSyllableHeader.readBytes().contentEquals(srcBytes)) {
+                pluginSyllableHeader.writeBytes(srcBytes)
+            }
+        }
     }
 }
 tasks.configureEach {
