@@ -592,7 +592,18 @@ class RimeEngine {
         if (doublePinyinKeysPreedit && com.kingzcheung.xime.settings.DoublePinyinSchemes.isT9(schema)) return t9DoublePinyinPreedit(input, preedit, spelling, schema)
         val groups = if (profile.layout == com.kingzcheung.xime.settings.InputLayout.MERGED14) merged14Groups else
             com.kingzcheung.xime.settings.CustomKeyboardLayouts.forSchema(schema)?.mergedGroups.orEmpty()
-        if (groups.none { it.length > 1 } || nativeIsAsciiMode()) return preedit
+        if (nativeIsAsciiMode()) return preedit
+        if (groups.none { it.length > 1 }) {
+            val saved = mergedEditReading ?: return preedit
+            val snapshot = nativePinyinEditSnapshot()
+            val confirmed = snapshot.getOrNull(2)?.toIntOrNull()?.coerceIn(0, input.length) ?: 0
+            val caret = snapshot.getOrNull(1)?.toIntOrNull() ?: input.length
+            if (saved.first != input || caret !in confirmed until input.length) {
+                mergedEditReading = null
+                return preedit
+            }
+            return restorePreeditTailSeparators(preedit, input, caret, confirmed, saved.second)
+        }
         val snapshot = nativePinyinEditSnapshot()
         val confirmed = snapshot.getOrNull(2)?.toIntOrNull()?.coerceIn(0, input.length) ?: 0
         val prefix = snapshot.getOrNull(3).orEmpty()

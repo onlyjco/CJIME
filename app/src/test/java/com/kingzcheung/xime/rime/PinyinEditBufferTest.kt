@@ -125,4 +125,18 @@ class PinyinEditBufferTest {
         assertTrue(isPreeditLetter(';'))
         assertTrue(isPreeditLetter('7'))
     }
+
+    @Test fun restorePreeditTailSeparatorsPreservesSyllableBoundariesAfterCaret() {
+        assertEquals("wo'men'dou'shi",
+            restorePreeditTailSeparators("womendoushi", "womendoushi", 2, 0, "wo'men'dou'shi"))
+        assertEquals("ni hao'ma",
+            restorePreeditTailSeparators("ni haoma", "nihaoma", 5, 0, "ni'hao'ma"))
+        assertEquals("wo men'dou'shi",
+            restorePreeditTailSeparators("wo mendoushi", "womendoushi", 3, 0, "wo'men'dou'shi"))
+        assertEquals("你好wo'men'dou'shi",
+            restorePreeditTailSeparators("你好womendoushi", "nihaowomendoushi", 7, 5, "wo'men'dou'shi"))
+        assertEquals("shuang'pb'vi",
+            restorePreeditTailSeparators("shuangpbvi", "ulpbvi", 2, 0, "ul'pb'vi"))
+        assertEquals("wo'men|'dou'shi", pinyinPreviewText("wo men| dou'shi"))
+    }
 }

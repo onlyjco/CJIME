@@ -197,7 +197,49 @@ internal fun dropReadingKeys(reading: String, keys: Int): String {
 
 /** Preserve confirmed Chinese text and real codes; make Latin syllable spaces visible. */
 internal fun pinyinPreviewText(preedit: String): String = preedit.trim()
-    .replace(Regex("(?<=[a-zA-ZüÜ'])\\s+(?=[a-zA-ZüÜ'])"), "'")
+    .replace(Regex("(?<=[a-zA-ZüÜ'|])\\s+(?=[a-zA-ZüÜ'])"), "'")
+
+/**
+ * 光标停在编码中间时，Rime 只对光标前分词、光标后原样输出未分词字母；
+ * 用编辑会话保留的 [visibleReading] 恢复光标后那段的音节分隔符（全拼、双拼通用）。
+ */
+internal fun restorePreeditTailSeparators(
+    preedit: String,
+    input: String,
+    caret: Int,
+    confirmed: Int,
+    visibleReading: String,
+): String {
+    if (preedit.isEmpty() || visibleReading.isEmpty() || caret !in confirmed until input.length) return preedit
+    fun isSep(c: Char) = c == ' ' || c == '\''
+    val afterLetters = input.substring(caret).filterNot(::isSep)
+    if (afterLetters.isEmpty()) return preedit
+    var preeditIdx = preedit.length
+    var matched = 0
+    while (preeditIdx > 0 && matched < afterLetters.length) {
+        val c = preedit[preeditIdx - 1]
+        if (isSep(c)) { preeditIdx--; continue }
+        if (!c.equals(afterLetters[afterLetters.length - 1 - matched], ignoreCase = true)) return preedit
+        matched++
+        preeditIdx--
+    }
+    if (matched != afterLetters.length) return preedit
+    var readingIdx = visibleReading.length
+    var readingMatched = 0
+    while (readingIdx > 0 && readingMatched < afterLetters.length) {
+        val c = visibleReading[readingIdx - 1]
+        if (isSep(c)) { readingIdx--; continue }
+        if (!c.equals(afterLetters[afterLetters.length - 1 - readingMatched], ignoreCase = true)) return preedit
+        readingMatched++
+        readingIdx--
+    }
+    if (readingMatched != afterLetters.length) return preedit
+    val boundaryBefore = readingIdx > 0 && isSep(visibleReading[readingIdx - 1])
+    val prefixHasBoundary = preeditIdx > 0 && isSep(preedit[preeditIdx - 1])
+    val join = if (boundaryBefore && !prefixHasBoundary && preeditIdx > 0) "'" else ""
+    val segmentedTail = visibleReading.substring(readingIdx).trimStart(' ', '\'')
+    return preedit.substring(0, preeditIdx) + join + segmentedTail
+}
 
 internal fun editablePreeditText(text: String, schema: String, isAscii: Boolean): String =
     if (!isAscii && PinyinEditBuffer.supports(schema)) pinyinPreviewText(text) else text
