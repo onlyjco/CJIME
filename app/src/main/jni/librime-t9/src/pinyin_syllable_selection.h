@@ -521,7 +521,7 @@ inline std::vector<Option> OptionsAt(rime::Context* context, rime::Schema* schem
   if (result.empty() && !abbreviations.empty()) {
     result = std::move(abbreviations);
   }
-  bool completion_enabled = false;
+  bool completion_enabled = true;
   schema->config()->GetBool("translator/enable_completion", &completion_enabled);
   if (result.empty() && completion_enabled && code_start < caret) {
     // 双拼单字母或长输入末尾未打完的半个音节在 prism 里走 ExpandSearch 补全（kCompletion）。
@@ -557,7 +557,7 @@ inline std::vector<Option> OptionsAt(rime::Context* context, rime::Schema* schem
     std::unique_ptr<rime::Corrector> corrector(component
         ? component->Create(rime::Ticket(engine, "translator", "script_translator")) : nullptr);
     if (corrector) {
-      bool completion = false;
+      bool completion = true;
       schema->config()->GetBool("translator/enable_completion", &completion);
       rime::Syllabifier builder(delimiters, completion, strict);
       bool preserve_final_ne = false;
