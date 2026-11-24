@@ -4266,8 +4266,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             val app = applicationContext
             serviceScope.launch(Dispatchers.IO) { com.kingzcheung.xime.handwriting.HandwritingEngine.warmUp(app) }
         }
-        // 要弹出了：先恢复界面，这次输入框的状态变化马上重组，弹出的第一帧就是新的。
-        // 窗口没跟着显示（少见）就过一会儿再静下来。
+        // 要弹出了：先同步校验剪贴板预览再恢复界面，避免关屏/收起再开屏时先闪一帧工具栏图标。
+        syncRecentClipboardPreview()
         wakeHiddenKeyboard()
         if (!imeWindowShown) mainHandler.postDelayed(quietHiddenKeyboard, HIDDEN_QUIET_DELAY_MS)
         KeyboardPanelLaunch.previewVisible = settingsPreviewEditor
@@ -4811,9 +4811,12 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         if (::clipboardManager.isInitialized) clipboardManager.images.dismissPresentedPreview()
         runtimeObserver?.stop()
         inlineSuggestionManager?.clear()
+        val screenOff = !(getSystemService(POWER_SERVICE) as android.os.PowerManager).isInteractive
         setInputLifecycleResumed(false)
-        clearInputState()
-        recentClipboardItemsState.value = emptyList()
+        clearInputState(preserveRecentClipboard = screenOff)
+        if (!(screenOff && candidateState.value.isShowingRecentClipboard)) {
+            recentClipboardItemsState.value = emptyList()
+        }
     }
     
     override fun onTrimMemory(level: Int) {
@@ -4901,14 +4904,16 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         runtimeObserver?.stop()
         clipboardSyncBridge?.setKeyboardVisible(false)
         cancelKeyboardResize()
-        if (!keepVoice) clearInputState()
+        if (!keepVoice) clearInputState(preserveRecentClipboard = true)
         // 手动切到的数字面板只算这一次输入：收起键盘就回到主键盘，下次弹出（同一个框或别的框）不再停在数字面板（#334）。
         // 数字框（自动数字面板）、剪贴板表情这些覆盖页、留着的语音条都不动。
         if (!keepVoice && lastStartWantedNumberPanel != true && keyboardViewModel.page.value.let {
                 it is com.kingzcheung.xime.keyboard.KeyboardPage.Panel && it.type == com.kingzcheung.xime.keyboard.PanelType.NUMBER })
             keyboardViewModel.resetKeyboard(uiState.value.isAsciiMode,
                 uiState.value.currentSchemaId.ifBlank { SettingsPreferences.getCurrentSchema(this) })
-        recentClipboardItemsState.value = emptyList()
+        if (!candidateState.value.isShowingRecentClipboard) {
+            recentClipboardItemsState.value = emptyList()
+        }
         // 键盘隐藏时重置快捷发送表单临时态：表单开启状态下直接隐藏键盘（未走 onClose）
         // 会把 showQuickSendForm 残留到下次弹窗，候选栏上方渲染出残留表单背景造成遮挡；
         // 回车键文案也需一并还原（打开表单时被改为"换行"）。
@@ -4936,32 +4941,47 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         KeyboardThemes.refreshDynamicSchemes(this)
         clipboardSyncBridge?.setKeyboardVisible(true)
         // 短信弹窗里点「复制」时键盘被盖住，回来时输入框没变、不走 onStartInput，键盘重新显示时补读那一条。
-        if (::clipboardManager.isInitialized) runCatching {
-            clipboardManager.readMissedCopy()
-            // 收起再展开同一个输入框时不走 onStartInput：把仍在 30 秒有效期内且未消费的剪贴板/同步条目重新回填到候选栏，
-            // 避免「收起再展开消失、熄屏亮屏又出现」的不一致。
-            if (canShowClipboardSuggestions(candidateState.value.isComposing,
-                    candidateState.value.pendingEnglishText, inputCommands.hasPendingCommands) &&
-                candidateState.value.candidates.isEmpty() && candidateState.value.associationCandidates.isEmpty()) {
-                val showCopied = com.kingzcheung.xime.clipboard.clipboardShowsInCandidateBar(this)
-                val items = clipboardManager.getRecentItems(30, includeCopied = showCopied)
-                val recentImage = clipboardManager.images.preview.value?.takeIf {
-                    showCopied && it.timestamp >= (items.maxOfOrNull { item -> item.timestamp } ?: 0)
-                }
-                if (items.isNotEmpty() || recentImage != null) {
-                    recentClipboardItemsState.value = items
-                    candidateState.value = candidateState.value.copy(
-                        candidates = clipboardBarTexts(items),
-                        clipboardExtractedCount = 0,
-                        clipboardImage = recentImage,
-                        smsVerificationCode = clipboardManager.verificationCode.value?.text,
-                        candidateComments = emptyList(),
-                        isShowingRecentClipboard = true,
-                    )
-                }
+        syncRecentClipboardPreview(readMissed = true)
+        if (::clipboardManager.isInitialized) clipboardManager.images.setKeyboardVisible(true)
+    }
+
+    /** 同步校验候选栏最近剪贴板预览：有效则保持/回填，过期或已消费则清除。 */
+    private fun syncRecentClipboardPreview(readMissed: Boolean = false) {
+        if (!::clipboardManager.isInitialized) return
+        runCatching {
+            if (readMissed) clipboardManager.readMissedCopy()
+            val cur = candidateState.value
+            if (!canShowClipboardSuggestions(cur.isComposing, cur.pendingEnglishText, inputCommands.hasPendingCommands)) return
+            val hasNonClipboardCandidates = !cur.isShowingRecentClipboard &&
+                (cur.candidates.isNotEmpty() || cur.associationCandidates.isNotEmpty())
+            if (hasNonClipboardCandidates) return
+            val showCopied = com.kingzcheung.xime.clipboard.clipboardShowsInCandidateBar(this)
+            val items = clipboardManager.getRecentItems(30, includeCopied = showCopied)
+            val recentImage = clipboardManager.images.preview.value?.takeIf {
+                showCopied && it.timestamp >= (items.maxOfOrNull { item -> item.timestamp } ?: 0)
+            }
+            if (items.isNotEmpty() || recentImage != null) {
+                recentClipboardItemsState.value = items
+                candidateState.value = cur.copy(
+                    candidates = clipboardBarTexts(items),
+                    clipboardExtractedCount = 0,
+                    clipboardImage = recentImage,
+                    smsVerificationCode = clipboardManager.verificationCode.value?.text,
+                    candidateComments = emptyList(),
+                    isShowingRecentClipboard = true,
+                )
+            } else if (cur.isShowingRecentClipboard) {
+                recentClipboardItemsState.value = emptyList()
+                candidateState.value = cur.copy(
+                    candidates = emptyList(),
+                    clipboardImage = null,
+                    smsVerificationCode = null,
+                    candidateComments = emptyList(),
+                    isShowingRecentClipboard = false,
+                    candidateActions = emptyList(),
+                )
             }
         }
-        if (::clipboardManager.isInitialized) clipboardManager.images.setKeyboardVisible(true)
     }
 
     /**
@@ -5031,7 +5051,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 com.kingzcheung.xime.ui.keyboard.KeyboardInputPreferences.ADDRESS_FIELDS_ENGLISH_KEY, true))
     }
 
-    private fun clearInputState() {
+    private fun clearInputState(preserveRecentClipboard: Boolean = false) {
         deleteDragGeneration++
         deleteDragActive.value = false
         newInputGeneration()
@@ -5073,21 +5093,24 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             t9SelectedCandidatePinyin = ""
         )
         synchronizeKeyboardInputSession()
-        if (!lockCompositionSuspended) candidateState.value = candidateState.value.copy(
-            candidates = emptyList(),
-            candidateComments = emptyList(),
-            inputText = "",
-            // 编码也清掉：留着的话九键下一串借它当编码显示（11-10 录屏：英文 stamping 挂在九键气泡上不走）。
-            preeditText = "",
-            isComposing = false,
-            isShowingRecentClipboard = false,
-            associationCandidates = emptyList(),
-            pendingEnglishText = "",
-            hasNextPage = false,
-            hasPrevPage = false,
-            englishReplaceSupported = true,
-            candidateActions = emptyList()
-        )
+        if (!lockCompositionSuspended) {
+            val keepClipboard = preserveRecentClipboard && candidateState.value.isShowingRecentClipboard
+            candidateState.value = candidateState.value.copy(
+                candidates = if (keepClipboard) candidateState.value.candidates else emptyList(),
+                candidateComments = emptyList(),
+                inputText = "",
+                // 编码也清掉：留着的话九键下一串借它当编码显示（11-10 录屏：英文 stamping 挂在九键气泡上不走）。
+                preeditText = "",
+                isComposing = false,
+                isShowingRecentClipboard = keepClipboard,
+                associationCandidates = emptyList(),
+                pendingEnglishText = "",
+                hasNextPage = false,
+                hasPrevPage = false,
+                englishReplaceSupported = true,
+                candidateActions = emptyList()
+            )
+        }
         if (!lockCompositionSuspended) endComposingInputBox()
     }
 
