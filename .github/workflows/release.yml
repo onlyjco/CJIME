@@ -102,7 +102,14 @@ jobs:
 
       - name: Get version from tag
         id: get_version
-        run: echo "VERSION=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+        run: |
+          VERSION="${GITHUB_REF#refs/tags/}"
+          echo "VERSION=$VERSION" >> $GITHUB_OUTPUT
+          if [ -f "docs/releases/${VERSION}.md" ]; then
+            echo "NOTES_PATH=docs/releases/${VERSION}.md" >> $GITHUB_OUTPUT
+          else
+            echo "NOTES_PATH=" >> $GITHUB_OUTPUT
+          fi
 
       - name: Find APKs and plugin XIPKs
         id: find_apks
@@ -124,7 +131,8 @@ jobs:
         uses: softprops/action-gh-release@v3
         with:
           name: CJIME ${{ steps.get_version.outputs.VERSION }}
-          generate_release_notes: false
+          body_path: ${{ steps.get_version.outputs.NOTES_PATH }}
+          generate_release_notes: ${{ steps.get_version.outputs.NOTES_PATH == '' }}
           files: |
             ${{ steps.find_apks.outputs.main_apks }}
             ${{ steps.find_apks.outputs.plugin_xipks }}
