@@ -125,25 +125,40 @@ class DocumentClearTest {
         field.connection.readDocumentForClear(100)?.let { field.connection.clearDocument(it, 100, beforeOnly = true) }
     }
 
-    /** 10-31「只清空光标前的内容」：光标后的留着；撤回原样放回，光标回原处。 */
+    /** 「只清空光标前的内容」：光标前有字时只清前面、光标后留着；光标前已空时再次清空则清掉剩余全部，均支持撤回。 */
     @Test fun beforeCursorOnlyKeepsTextAfterTheCaret() {
-        for (caret in 0..6) {
+        for (caret in 1..6) {
             val field = Field("abcdef", caret)
             val cleared = clearBefore(field)
             assertEquals("caret $caret", "abcdef".substring(caret), field.text)
             assertEquals(0, field.start)
-            if (caret == 0) { assertNull(cleared); continue }
             assertEquals("abcdef".substring(0, caret), cleared!!.text)
             assertTrue(field.connection.restoreDocument(cleared, 100))
             assertEquals("abcdef", field.text)
             assertEquals(caret, field.start); assertEquals(caret, field.end)
         }
-        // 用户举的例子。
+        // 光标前为空时触发清空，回退为清空输入框全部剩余内容并可撤回。
+        val atStart = Field("abcdef", 0)
+        val clearedAll = clearBefore(atStart)!!
+        assertEquals("", atStart.text)
+        assertEquals("abcdef", clearedAll.text)
+        assertTrue(atStart.connection.restoreDocument(clearedAll, 100))
+        assertEquals("abcdef", atStart.text)
+        assertEquals(0, atStart.start); assertEquals(0, atStart.end)
+
+        // 先清前面，再触发一次清掉剩下的。
         val field = Field("这是光标前面要清空的这是光标后面", 10)
-        val cleared = clearBefore(field)!!
+        val clearedFirst = clearBefore(field)!!
         assertEquals("这是光标后面", field.text)
-        assertTrue(field.connection.restoreDocument(cleared, 100))
+        assertTrue(field.connection.restoreDocument(clearedFirst, 100))
         assertEquals("这是光标前面要清空的这是光标后面", field.text); assertEquals(10, field.start)
+
+        clearBefore(field)!!
+        val clearedSecond = clearBefore(field)!!
+        assertEquals("", field.text)
+        assertEquals("这是光标后面", clearedSecond.text)
+        assertTrue(field.connection.restoreDocument(clearedSecond, 100))
+        assertEquals("这是光标后面", field.text)
     }
 
     @Test fun beforeCursorOnlyClearsTheSelectionAndLongTextBefore() {
