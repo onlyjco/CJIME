@@ -240,7 +240,8 @@ private fun NumberRows(
             }
         }
         Row(Modifier.fillMaxWidth().weight(1f)) {
-            for (slot in 1..2) KeyboardModeKey(slot = slot, page = KeyboardInputPage.NUMBERS,
+            // 数字键盘左下角依次放「中文/返回」和「!@#」符号键（调换 slot 2 与 slot 1 位置）。
+            for (slot in listOf(2, 1)) KeyboardModeKey(slot = slot, page = KeyboardInputPage.NUMBERS,
                 onKeyPress = onKeyPress, backgroundColor = specialKeyBackgroundColor,
                 textColor = specialKeyTextColor, modifier = Modifier.weight(modeWeight),
                 onKeyPressDown = onKeyPressDown, shadowEnabled = shadowEnabled,
