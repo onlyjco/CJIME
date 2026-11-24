@@ -1122,8 +1122,8 @@ private fun ClipboardPreviewBar(
                 }
                 return width
             }
-            // Reserve space for the paste icon and horizontal padding; short previews wrap their text tightly.
-            val chromeWidth = 58.dp
+            // Reserve space for capsule horizontal padding; short previews wrap their text tightly.
+            val chromeWidth = 24.dp
             val availablePx = with(density) { maxWidth.roundToPx() }
             val chromePx = with(density) { chromeWidth.roundToPx() }
             val originalWantPx = chromePx + if (image != null) with(density) { 64.dp.roundToPx() }
@@ -1134,13 +1134,11 @@ private fun ClipboardPreviewBar(
                     .padding(horizontal = 12.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Icon(Icons.Default.ContentPaste, contentDescription = null,
-                    tint = visuals.textColor, modifier = Modifier.size(18.dp * LocalCandidateSizeFactor.current))
                 if (image != null) {
                     ClipboardImagePreview(image,
-                        modifier = Modifier.weight(1f).padding(start = 8.dp),
+                        modifier = Modifier.weight(1f),
                         onPaste = { callbacks.onClipboardImageSelect?.invoke(image) })
-                } else LazyRow(Modifier.weight(1f).padding(start = 8.dp).testTag("clipboard-preview-scroll"),
+                } else LazyRow(Modifier.weight(1f).testTag("clipboard-preview-scroll"),
                     overscrollEffect = null) {
                     itemsIndexed(previews) { index, preview ->
                         // 预览可横向滚动全部内容；换行仅在显示时折成空格，粘贴仍使用原文。

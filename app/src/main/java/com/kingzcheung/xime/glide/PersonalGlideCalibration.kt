@@ -631,6 +631,10 @@ object PersonalGlideCalibration {
 
     private fun recordPhraseLocked(dir: File, schemaKey: String, code: String, text: String) {
         if ('\t' in text || '\n' in text || '\t' in code || '\n' in code) return
+        // 部分前缀已先选字时，上屏文本可能包含前面已选汉字而编码只剩尾段（例如 jkru → 下个版本加入）；
+        // 任何拼音方案里每个汉字至少对应 1 个编码字母，编码长度短于汉字数时跳过记录。
+        val hanziCount = text.count { it in '\u4E00'..'\u9FFF' }
+        if (hanziCount > 0 && code.length < hanziCount) return
         val key = phraseKey(schemaKey, code)
         val now = System.currentTimeMillis()
         val existing = phrases[key]

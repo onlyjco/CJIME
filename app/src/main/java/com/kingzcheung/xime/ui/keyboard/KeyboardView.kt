@@ -233,15 +233,11 @@ fun KeyboardView(
     val candidatePageExpanded by viewModel.candidatePageExpanded.collectAsStateWithLifecycle()
     var candidatePageOpening by remember { mutableIntStateOf(0) }
     val candidateStripExtended by viewModel.candidateStripExtended.collectAsStateWithLifecycle()
-    // 符号页与数字页同属键盘页：直接换页，不走工具覆盖层的揭幕动画，也不在动画期间吞掉点击。
-    // 从剪贴板直接进搜索时（clipboardSearchVisible）：立即撤掉剪贴板覆盖层，避免旧剪贴板在撑高后的容器里闪出拉高画面。
+    // 所有功能栏覆盖层（菜单、剪贴板、表情、编辑、方案、符号等）与候选展开页均直接切换，去掉向下揭幕展开动画。
     val symbolPageSwap = ((page as? KeyboardPage.Overlay) ?: retainedOverlay)?.route is OverlayRoute.Symbol
-    val schemaListSwap = ((page as? KeyboardPage.Overlay) ?: retainedOverlay)?.route is OverlayRoute.SchemaList
-    val instantOverlaySwap = symbolPageSwap || schemaListSwap ||
-        (state.clipboardSearchVisible && page !is KeyboardPage.Overlay && retainedOverlay?.route is OverlayRoute.Clipboard)
     val overlayReveal = rememberKeyboardPanelRevealState(page is KeyboardPage.Overlay, overlayVisibility,
-        instant = instantOverlaySwap)
-    val candidateReveal = rememberKeyboardPanelRevealState(candidatePageExpanded)
+        instant = true)
+    val candidateReveal = rememberKeyboardPanelRevealState(candidatePageExpanded, instant = true)
     val singleCharFilter by viewModel.singleCharFilter.collectAsStateWithLifecycle()
 
     // 候选展开页自动收起：编码删空（无候选也无联想）时不留空页。
@@ -3440,10 +3436,6 @@ private fun ClipboardSearchResults(
     val field by clipboard.boardQuery.collectAsStateWithLifecycle()
     val composing = candidateState.value.let { if (it.isComposing) it.shownPreedit(profile) else "" }
     val query = remember(field, composing, t9) { com.kingzcheung.xime.clipboard.ClipboardLiveQuery(field, composing, t9) }
-    // The space is there from the first frame; the results rise into it with the panel motion.
-    // Only the layer moves, so nothing is measured or recomposed while it runs.
-    val reveal = remember { androidx.compose.animation.core.Animatable(0f) }
-    LaunchedEffect(Unit) { reveal.animateTo(1f, keyboardPanelMotion(true)) }
     Box(modifier.clipToBounds()) {
     com.kingzcheung.xime.ui.menubar.ConnectedClipboardBoard(
         items, initialImages = false, expanded = false,
@@ -3453,10 +3445,7 @@ private fun ClipboardSearchResults(
         onImageSelect = { image -> callbacks.onClipboardSearchImageSelect?.invoke(image) },
         onImageShare = { _, _ -> }, onSystemPaste = {}, onPullRemote = null,
         keepQueryOnDispose = true, liveQuery = query, showControls = showControls,
-        modifier = Modifier.fillMaxSize().graphicsLayer {
-            translationY = (1f - reveal.value) * size.height
-            alpha = reveal.value
-        },
+        modifier = Modifier.fillMaxSize(),
     )
     }
 }

@@ -306,7 +306,6 @@ internal fun HardwareKeyboardToolbar(
             }
                 .width(toolbarWidth).heightIn(max = viewportHeight)
                 .onSizeChanged { measuredSize = it }
-                .animateContentSize(tween(220))
                 .onGloballyPositioned { coordinates ->
                     val bounds = coordinates.boundsInWindow()
                     currentBoundsCallback(Rect(floor(bounds.left).toInt(), floor(bounds.top).toInt(), ceil(bounds.right).toInt(), ceil(bounds.bottom).toInt()))
