@@ -2104,9 +2104,10 @@ fun KeyboardView(
                 CandidatePage(
                     state = CandidatePageState(
                         candidates = sentenceEdit?.let {
-                            sentenceWords.mapIndexedNotNull { index, word ->
+                            val entries = sentenceWords.mapIndexedNotNull { index, word ->
                                 if (!strokeActive || strokeTable!!.matches(word.text, strokeCode)) CandidateEntry(word.text, globalIndex = index) else null
                             }
+                            remainingCandidates(entries, visibleBarCandidates.drop(1))
                         } ?: expandedEntries,
                         engineRevision = displayedExpandedRevision,
                         associationCandidates = if (sentenceEdit != null) emptyList() else visibleAssociations.drop(barAssociationCount),

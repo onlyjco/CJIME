@@ -55,8 +55,8 @@ object PersonalAssociationBooster {
         penalties.clear()
         boostsByCtx.clear()
         penaltiesByCtx.clear()
-        loadEntries(File(dir, BOOSTS_FILE), boosts, boostsByCtx)
-        loadEntries(File(dir, PENALTIES_FILE), penalties, penaltiesByCtx)
+        loadEntries(File(dir, BOOSTS_FILE), boosts, boostsByCtx, filterSingleCharLongWord = true)
+        loadEntries(File(dir, PENALTIES_FILE), penalties, penaltiesByCtx, filterSingleCharLongWord = false)
     }
 
     @Synchronized
@@ -234,6 +234,7 @@ object PersonalAssociationBooster {
         for (ctx in contexts) {
             val weight = contextWeight(ctx.length)
             boostsByCtx[ctx]?.forEach { entry ->
+                if (!allowsAssociationWord(ctx.length, entry.word.length)) return@forEach
                 val bonus = weight * ln(1.0 + entry.score).toFloat()
                 val existing = baseCandidates[entry.word]
                 if (existing != null) {
@@ -283,7 +284,12 @@ object PersonalAssociationBooster {
 
     private fun isCjk(c: Char): Boolean = c in '\u4e00'..'\u9fff'
 
+    /** 单字上文只允许 ≤4 字的常见词组，2 字以上长上文才允许记录/提权长短语，避免一次性长句污染高频单字。 */
+    internal fun allowsAssociationWord(ctxLen: Int, wordLen: Int): Boolean =
+        ctxLen >= 2 || wordLen <= 4
+
     private fun addBoostLocked(ctx: String, word: String, delta: Float, now: Long): Boolean {
+        if (!allowsAssociationWord(ctx.length, word.length)) return false
         val k = "$ctx\t$word"
         val cur = boosts[k]
         if (cur != null) {
@@ -344,8 +350,10 @@ object PersonalAssociationBooster {
         file: File,
         map: LinkedHashMap<String, Entry>,
         byCtx: HashMap<String, ArrayList<Entry>>,
+        filterSingleCharLongWord: Boolean = false,
     ) {
         if (!file.isFile) return
+        var dropped = false
         runCatching {
             file.forEachLine(Charsets.UTF_8) { line ->
                 val parts = line.split('\t')
@@ -356,11 +364,16 @@ object PersonalAssociationBooster {
                 val count = parts[3].toIntOrNull() ?: 1
                 val ts = parts[4].toLongOrNull() ?: 0L
                 if (ctx.isEmpty() || word.isEmpty()) return@forEachLine
+                if (filterSingleCharLongWord && !allowsAssociationWord(ctx.length, word.length)) {
+                    dropped = true
+                    return@forEachLine
+                }
                 val e = Entry(ctx, word, score, count, ts)
                 map["$ctx\t$word"] = e
                 byCtx.getOrPut(ctx) { ArrayList(4) }.add(e)
             }
         }
+        if (dropped) saveEntries(file, map)
     }
 
     private fun saveEntries(file: File, map: Map<String, Entry>) {

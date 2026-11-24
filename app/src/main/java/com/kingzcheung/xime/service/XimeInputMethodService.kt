@@ -803,11 +803,18 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         ExpandedCandidateLoader(serviceScope, keyProcessingDispatcher, rimeEngine::readCandidateBatch)
     }
 
+    private var rawExpandedCandidates: List<com.kingzcheung.xime.rime.RimeCandidate> = emptyList()
+
     /** Expanded candidates belong to an engine revision and editor session, never display text. */
     internal fun refreshExpandedCandidates() {
         expandedCandidateLoader.cancel()
+        rawExpandedCandidates = emptyList()
         keyboardViewModel.setCandidateStripExtended(false)
-        candidateState.value = candidateState.value.copy(expandedCandidates = emptyList(), expandedCandidatesLoaded = false)
+        candidateState.value = candidateState.value.copy(
+            expandedCandidates = emptyList(),
+            expandedCandidateActions = emptyList(),
+            expandedCandidatesLoaded = false,
+        )
         if (!keyboardViewModel.candidatePageExpanded.value) return
         loadExpandedCandidates()
     }
@@ -823,8 +830,43 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     internal fun loadSingleCharacterCandidates() {
         val snapshot = candidateState.value
         if (!keyboardViewModel.singleCharFilter.value || !snapshot.expandedCandidatesLoaded) return
-        if (snapshot.expandedCandidates.size >= ExpandedCandidateLoader.readLimit(snapshot.expandedCandidates, true)) return
-        loadExpandedCandidates(initial = snapshot.expandedCandidates)
+        val base = rawExpandedCandidates.ifEmpty { snapshot.expandedCandidates }
+        if (base.size >= ExpandedCandidateLoader.readLimit(base, true)) return
+        loadExpandedCandidates(initial = base)
+    }
+
+    private fun mergeExpandedWithFirstPageTransform(
+        snapshot: CandidateState,
+        rawCandidates: List<com.kingzcheung.xime.rime.RimeCandidate>,
+    ): Pair<List<com.kingzcheung.xime.rime.RimeCandidate>, List<CandidateAction>> {
+        if (snapshot.candidateActions.isEmpty() || snapshot.candidateActions.size != snapshot.candidates.size) {
+            return rawCandidates to emptyList()
+        }
+        val mergedCandidates = ArrayList<com.kingzcheung.xime.rime.RimeCandidate>(rawCandidates.size + snapshot.candidates.size)
+        val mergedActions = ArrayList<CandidateAction>(rawCandidates.size + snapshot.candidates.size)
+        val usedEngineIndices = HashSet<Int>()
+        for (i in snapshot.candidates.indices) {
+            val action = snapshot.candidateActions[i]
+            val comment = snapshot.candidateComments.getOrNull(i).orEmpty()
+            if (!action.isPluginCandidate && action.engineIndex in rawCandidates.indices) {
+                usedEngineIndices.add(action.engineIndex)
+                val raw = rawCandidates[action.engineIndex]
+                mergedCandidates.add(
+                    if (raw.text == snapshot.candidates[i]) raw
+                    else com.kingzcheung.xime.rime.RimeCandidate(snapshot.candidates[i], comment)
+                )
+            } else {
+                mergedCandidates.add(com.kingzcheung.xime.rime.RimeCandidate(snapshot.candidates[i], comment))
+            }
+            mergedActions.add(action)
+        }
+        for (i in rawCandidates.indices) {
+            if (usedEngineIndices.add(i)) {
+                mergedCandidates.add(rawCandidates[i])
+                mergedActions.add(CandidateAction.engine(i))
+            }
+        }
+        return mergedCandidates to mergedActions
     }
 
     private fun loadExpandedCandidates(initial: List<com.kingzcheung.xime.rime.RimeCandidate> = emptyList()) {
@@ -836,7 +878,14 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 (keyboardViewModel.candidatePageExpanded.value || keyboardViewModel.candidateStripExtended.value) &&
                 candidateState.value.engineRevision == snapshot.engineRevision
         }, singleCharacters = { keyboardViewModel.singleCharFilter.value }, initial = initial) { candidates ->
-            candidateState.value = candidateState.value.copy(expandedCandidates = candidates, expandedCandidatesLoaded = true)
+            rawExpandedCandidates = candidates
+            val current = candidateState.value
+            val (mergedCandidates, mergedActions) = mergeExpandedWithFirstPageTransform(current, candidates)
+            candidateState.value = current.copy(
+                expandedCandidates = mergedCandidates,
+                expandedCandidateActions = mergedActions,
+                expandedCandidatesLoaded = true,
+            )
         }
     }
 
@@ -4855,6 +4904,43 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         mainHandler.postDelayed(releaseHandwritingWhileHidden, HANDWRITING_RELEASE_DELAY_MS)
         // 词库在线更新：键盘收起后才查、才部署，打字时不联网也不重编词库；每天最多一次。
         com.kingzcheung.xime.settings.CellWordAutoUpdate.onKeyboardHidden(this)
+        // 滑行轨迹累计满 50 条后在键盘收起空闲时段自动后台验证调参，仅在留出验证集提升时生效。
+        if (com.kingzcheung.xime.glide.PersonalGlideCalibration.shouldAutoTune()) {
+            com.kingzcheung.xime.glide.PersonalGlideCalibration.markAutoTuned()
+            val app = applicationContext
+            val dir = filesDir
+            val schemaId = uiState.value.currentSchemaId.ifBlank { SettingsPreferences.getCurrentSchema(app) }
+            serviceScope.launch(Dispatchers.IO) {
+                runCatching {
+                    val external = com.kingzcheung.xime.glide.ExternalGlideEncodings.parse(
+                        SettingsPreferences.getPrefsPublic(app)
+                            .getString(com.kingzcheung.xime.glide.ExternalGlideEncodings.KEY, null)
+                    )
+                    val encoding = com.kingzcheung.xime.glide.chineseGlideEncoding(
+                        com.kingzcheung.xime.settings.InputProfiles.describe(schemaId),
+                        schemaId,
+                        external,
+                    ) ?: return@runCatching
+                    val dp = encoding.doublePinyin
+                    val sKey = dp?.id ?: "pinyin"
+                    val defaultKeys = buildMap {
+                        listOf("qwertyuiop" to 0f, "asdfghjkl" to 0.5f, "zxcvbnm" to 1.5f)
+                            .forEachIndexed { r, (row, inset) ->
+                                row.forEachIndexed { idx, c ->
+                                    put(c, com.kingzcheung.xime.keyboard.LetterKeyRect((inset + idx) * 60f, r * 80f, 60f, 80f))
+                                }
+                            }
+                    }
+                    val kb = com.kingzcheung.xime.glide.PersonalGlideCalibration.applyOffsets(
+                        dir, "p", com.kingzcheung.xime.glide.GlideLexicon.keyboard(defaultKeys)
+                    )
+                    val syllables = com.kingzcheung.xime.glide.glideSyllables(
+                        com.kingzcheung.xime.glide.GlideLexicon.pinyin(app), dp
+                    )
+                    com.kingzcheung.xime.glide.PersonalGlideCalibration.tuneFromHistory(dir, sKey, kb, syllables)
+                }
+            }
+        }
     }
 
     /** 键盘收起一段时间仍没弹出：卸载手写模型；见 [onFinishInputView]。 */

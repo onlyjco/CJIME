@@ -3186,7 +3186,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                         inputText = "", preeditText = "", pendingEnglishText = "",
                         candidates = emptyList(), candidateComments = emptyList(),
                         candidateActions = emptyList(), expandedCandidates = emptyList(),
-                        expandedCandidatesLoaded = false, isComposing = false,
+                        expandedCandidateActions = emptyList(), expandedCandidatesLoaded = false, isComposing = false,
                         hasNextPage = false, hasPrevPage = false, isShowingRecentClipboard = false,
                     )
                     service.uiState.value = service.uiState.value.copy(
@@ -3264,6 +3264,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
             isShowingRecentClipboard = false,
             candidateActions = emptyList(),
             expandedCandidates = emptyList(),
+            expandedCandidateActions = emptyList(),
             expandedCandidatesLoaded = false,
             hasNextPage = false,
             hasPrevPage = false,
@@ -3532,16 +3533,34 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
             val expandedCandidate = snapshot.expandedCandidates.getOrNull(globalIndex) ?: return
             if (!snapshot.stillOffers(service.candidateState.value, globalIndex, expandedCandidate)) return
             if (!service.rimeEngine.isCandidateRevisionCurrent(snapshot.engineRevision)) return
+            val pendingAction = snapshot.expandedCandidateActions.getOrNull(globalIndex)
+            pendingAction?.glideInput?.let { input ->
+                discardPreviousAssociations()
+                if (isT9Schema(service.uiState.value.currentSchemaId)) commitT9GlideAlternative(input, pendingAction.commitText)
+                else applyGlideAlternative(input, snapshot)
+                return
+            }
+            if (pendingAction != null && pendingAction.isPluginCandidate) {
+                val engineHasComposition = service.rimeEngine.getInput().isNotEmpty() ||
+                    service.rimeEngine.getCandidates().isNotEmpty()
+                if (engineHasComposition) {
+                    discardPreviousAssociations()
+                    if (pendingAction.isPrivate) commitPrivateText(pendingAction.commitText, isT9Schema(service.uiState.value.currentSchemaId))
+                    else commitSelectedText(pendingAction.commitText)
+                    return
+                }
+            }
+            val engineIndex = pendingAction?.engineIndex?.takeIf { it >= 0 } ?: globalIndex
             // T9 方案的选词消费由 t9_processor 独立完成，直接调引擎 select 会
             // 遗留 [confirmed, phony] 残留组合态（见 selectCandidateAsync 注释），
             // 降级走候选栏同款路径；取词/注释必须用展开页同一份全量候选——
             // 全局索引与引擎当前页列表错位时会取错词/丢字
             if (isT9Schema(service.uiState.value.currentSchemaId)) {
-                selectCandidateAsync(globalIndex, expandedCandidate, snapshot)
+                selectCandidateAsync(engineIndex, expandedCandidate, snapshot)
                 return
             }
-            val selection = service.rimeEngine.selectCandidateAtRevision(globalIndex, snapshot.engineRevision, global = true) ?: return
-            com.kingzcheung.xime.stats.TypingStats.onCandidatePicked(globalIndex,
+            val selection = service.rimeEngine.selectCandidateAtRevision(engineIndex, snapshot.engineRevision, global = true) ?: return
+            com.kingzcheung.xime.stats.TypingStats.onCandidatePicked(engineIndex,
                 snapshot.correctedCandidates[expandedCandidate.text].orEmpty())
             val committedText = selection.committedText
             if (committedText.isNotEmpty()) {
@@ -3561,10 +3580,13 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         val snapshot = service.candidateState.value
         postRimeJob {
             if (!snapshot.hasSameSelectionSource(service.candidateState.value)) return@postRimeJob
+            val pendingAction = snapshot.expandedCandidateActions.getOrNull(globalIndex)
+            if (pendingAction != null && (pendingAction.isPluginCandidate || pendingAction.glideInput != null)) return@postRimeJob
+            val engineIndex = pendingAction?.engineIndex?.takeIf { it >= 0 } ?: globalIndex
             val text = snapshot.expandedCandidates.getOrNull(globalIndex)?.text
             if (text.isNullOrEmpty()) return@postRimeJob
             if (forgetEnglishWord(text)) return@postRimeJob
-            val result = service.rimeEngine.forgetCandidateAtRevision(globalIndex, snapshot.engineRevision, global = true)
+            val result = service.rimeEngine.forgetCandidateAtRevision(engineIndex, snapshot.engineRevision, global = true)
             FileLogger.i(
                 "ImeKeyRouter",
                 "forgetCandidateGlobal: text='$text' index=$globalIndex result=$result"

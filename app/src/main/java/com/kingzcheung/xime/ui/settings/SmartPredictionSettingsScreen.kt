@@ -487,6 +487,17 @@ fun SmartPredictionSettingsContent(
                     }
                     HorizontalDivider(Modifier.padding(start = 16.dp))
                     SettingsItem(
+                        Icons.AutoMirrored.TwoTone.Undo,
+                        "还原默认滑行参数",
+                        "仅恢复滑行权重为默认值，保留指腹偏移、高频短语与轨迹样本",
+                        onClick = {
+                            val hadCustom = com.kingzcheung.xime.glide.PersonalGlideCalibration.resetParams(context.filesDir)
+                            val msg = if (hadCustom) "已还原默认滑行参数（已保留学习样本与偏移）" else "当前已是默认滑行参数"
+                            android.widget.Toast.makeText(context, msg, android.widget.Toast.LENGTH_SHORT).show()
+                        },
+                    )
+                    HorizontalDivider(Modifier.padding(start = 16.dp))
+                    SettingsItem(
                         Icons.TwoTone.ContentCut,
                         "重置个人自学习校准数据",
                         "清除本机记住的滑行按键偏移、短语样本与联想自递进搭配",

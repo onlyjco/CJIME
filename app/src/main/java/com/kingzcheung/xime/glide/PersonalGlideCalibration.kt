@@ -103,6 +103,7 @@ object PersonalGlideCalibration {
     private val offsets = HashMap<String, HashMap<Char, KeyOffset>>()
     private val phrases = LinkedHashMap<String, PhraseEntry>()
     private val confusions = LinkedHashMap<String, Int>()
+    private val localConfusions = HashMap<String, Int>()
     private val samples = ArrayList<SampleEntry>()
     @Volatile private var currentParams: SyllableGlideParams = SyllableGlideParams()
     @Volatile private var pendingGlide: PendingGlide? = null
@@ -133,6 +134,7 @@ object PersonalGlideCalibration {
         offsets.clear()
         phrases.clear()
         confusions.clear()
+        localConfusions.clear()
         samples.clear()
         currentParams = loadParams(File(dir, PARAMS_FILE))
         loadOffsets(File(dir, OFFSETS_FILE))
@@ -197,7 +199,7 @@ object PersonalGlideCalibration {
         return phrases[phraseKey(schemaKey, code)]?.text
     }
 
-    /** 对候选编码施加个人高频加分与历史误认路径惩戒。 */
+    /** 对候选编码施加个人高频加分与历史误认路径惩戒（含局部音节/子串泛化）。 */
     @Synchronized
     fun candidateCostDelta(dir: File, schemaKey: String, candidateCode: String, allCandidateCodes: Collection<String>): Float {
         ensureLoaded(dir)
@@ -205,15 +207,86 @@ object PersonalGlideCalibration {
         phrases[phraseKey(schemaKey, candidateCode)]?.let { entry ->
             delta -= min(0.55f, 0.14f * ln(1.0 + entry.freq).toFloat())
         }
+        var localBonus = 0f
+        var localPenalty = 0f
         for (other in allCandidateCodes) {
             if (other == candidateCode) continue
             val preferThis = confusions[confusionKey(schemaKey, other, candidateCode)] ?: 0
             if (preferThis > 0) delta -= min(0.60f, 0.20f * ln(1.0 + preferThis).toFloat())
             val preferOther = confusions[confusionKey(schemaKey, candidateCode, other)] ?: 0
             if (preferOther > 0) delta += min(0.45f, 0.15f * ln(1.0 + preferOther).toFloat())
+
+            // 局部音节/子串泛化：即使整句编码从未出现过，只要差异片段命中历史混淆对也能生效。
+            if (preferThis == 0 && preferOther == 0) {
+                val local = extractLocalConfusion(schemaKey, other, candidateCode)
+                if (local != null) {
+                    val (localOther, localCand) = local
+                    val localPreferThis = (confusions[confusionKey(schemaKey, localOther, localCand)] ?: 0) +
+                        (localConfusions[confusionKey(schemaKey, localOther, localCand)] ?: 0)
+                    if (localPreferThis > 0) {
+                        localBonus = max(localBonus, min(0.42f, 0.16f * ln(1.0 + localPreferThis).toFloat()))
+                    }
+                    val localPreferOther = (confusions[confusionKey(schemaKey, localCand, localOther)] ?: 0) +
+                        (localConfusions[confusionKey(schemaKey, localCand, localOther)] ?: 0)
+                    if (localPreferOther > 0) {
+                        localPenalty = max(localPenalty, min(0.32f, 0.12f * ln(1.0 + localPreferOther).toFloat()))
+                    }
+                }
+            }
         }
+        delta -= localBonus
+        delta += localPenalty
         return delta
     }
+
+    /**
+     * 从整句混淆对 (badCode -> goodCode) 中抽取差异的局部音节/子串对，
+     * 双拼按 2 字母音节边界对齐，使整句纠错泛化到任意新句子。
+     */
+    internal fun extractLocalConfusion(schemaKey: String, badCode: String, goodCode: String): Pair<String, String>? {
+        if (badCode == goodCode || badCode.length < 2 || goodCode.length < 2) return null
+        val isDoublePinyin = schemaKey != "pinyin"
+        val minLen = min(badCode.length, goodCode.length)
+        var prefix = 0
+        while (prefix < minLen && badCode[prefix] == goodCode[prefix]) prefix++
+        var suffix = 0
+        while (suffix < minLen - prefix &&
+            badCode[badCode.length - 1 - suffix] == goodCode[goodCode.length - 1 - suffix]
+        ) {
+            suffix++
+        }
+        if (isDoublePinyin) {
+            prefix = (prefix / 2) * 2
+            while (suffix > 0 && ((badCode.length - suffix) % 2 != 0 || (goodCode.length - suffix) % 2 != 0)) {
+                suffix--
+            }
+        }
+        var bStart = prefix
+        var bEnd = badCode.length - suffix
+        var gStart = prefix
+        var gEnd = goodCode.length - suffix
+        if (bEnd <= bStart || gEnd <= gStart) {
+            val step = 2
+            if (bStart >= step && gStart >= step) {
+                bStart -= step
+                gStart -= step
+            } else if (bEnd + step <= badCode.length && gEnd + step <= goodCode.length) {
+                bEnd += step
+                gEnd += step
+            } else {
+                return null
+            }
+        }
+        val b = badCode.substring(bStart, bEnd)
+        val g = goodCode.substring(gStart, gEnd)
+        if (b == g || b.length !in 2..6 || g.length !in 2..6) return null
+        if (b == badCode && g == goodCode) return null
+        return b to g
+    }
+
+    /** 冷启动自适应步长：前 10~15 次快速收敛到真实偏移，20 次后平滑落回稳定 EMA_ALPHA。 */
+    internal fun adaptiveEmaAlpha(previousCount: Int): Float =
+        max(EMA_ALPHA, 1f / (previousCount.coerceAtLeast(0) + 4f))
 
     @Synchronized
     fun noteDispatched(
@@ -455,6 +528,7 @@ object PersonalGlideCalibration {
         offsets.clear()
         phrases.clear()
         confusions.clear()
+        localConfusions.clear()
         samples.clear()
         currentParams = SyllableGlideParams()
         pendingGlide = null
@@ -469,7 +543,22 @@ object PersonalGlideCalibration {
         paramsRevisionCounter.incrementAndGet()
     }
 
-    /** 使用本机累计确认/纠错的真实轨迹做离线坐标回放调参，仅在 Top-1 确实提升时写回参数。 */
+    /** 仅还原滑行打分权重为默认值，保留指腹偏移、高频短语、混淆表与轨迹样本。 */
+    @Synchronized
+    fun resetParams(dir: File): Boolean {
+        ensureLoaded(dir)
+        val file = File(dir, PARAMS_FILE)
+        val hadCustom = file.isFile || currentParams != SyllableGlideParams()
+        currentParams = SyllableGlideParams()
+        file.delete()
+        paramsRevisionCounter.incrementAndGet()
+        return hadCustom
+    }
+
+    /**
+     * 使用本机累计确认/纠错的真实轨迹做离线坐标回放调参：
+     * 采用 80/20 留出验证 + 局部坐标搜索，仅在验证集确实提升且总命中不退化时才写回参数，避免小样本过拟合。
+     */
     @Synchronized
     fun tuneFromHistory(
         dir: File,
@@ -483,12 +572,26 @@ object PersonalGlideCalibration {
             val r = evaluateSamples(targetSamples, keyboard, syllables, currentParams)
             return TuneResult(targetSamples.size, r.first, r.first, r.second, r.second, updated = false)
         }
+        // 分层抽取 20% 留出验证集，兼顾早期与近期样本。
+        val trainSet = ArrayList<SampleEntry>(targetSamples.size)
+        val valSet = ArrayList<SampleEntry>(targetSamples.size / 4 + 1)
+        targetSamples.forEachIndexed { idx, sample ->
+            if (idx % 5 == 4) valSet.add(sample) else trainSet.add(sample)
+        }
         val baseline = currentParams
-        val baseScore = evaluateSamples(targetSamples, keyboard, syllables, baseline)
-        var best = baseline
-        var bestScore = baseScore
+        val baseTrain = evaluateSamples(trainSet, keyboard, syllables, baseline)
+        val baseVal = evaluateSamples(valSet, keyboard, syllables, baseline)
+        val baseTotalTop1 = baseTrain.first + baseVal.first
+        val baseTotalTop3 = baseTrain.second + baseVal.second
 
-        val candidates = listOf(
+        fun isBetter(a: Pair<Int, Int>, b: Pair<Int, Int>): Boolean =
+            a.first > b.first || (a.first == b.first && a.second > b.second)
+
+        var bestTrainParams = baseline
+        var bestTrainScore = baseTrain
+
+        val presets = listOf(
+            SyllableGlideParams(),
             baseline.copy(hitWeight = 1.25f, segmentWeight = 1.65f, pauseBonus = 0.28f),
             baseline.copy(hitWeight = 1.75f, detourWeight = 2.6f, pauseBonus = 0.28f),
             baseline.copy(keyCost = 0.38f, repeatCost = 0.52f, pauseBonus = 0.25f),
@@ -496,21 +599,56 @@ object PersonalGlideCalibration {
             baseline.copy(syllablePrior = 0.45f, pauseBonus = 0.30f),
             baseline.copy(syllablePrior = 0.78f, hitWeight = 1.4f, pauseBonus = 0.20f),
         )
-        for (cand in candidates) {
-            val score = evaluateSamples(targetSamples, keyboard, syllables, cand)
-            if (score.first > bestScore.first || (score.first == bestScore.first && score.second > bestScore.second)) {
-                best = cand
-                bestScore = score
+        for (cand in presets) {
+            if (cand == baseline) continue
+            val score = evaluateSamples(trainSet, keyboard, syllables, cand)
+            if (isBetter(score, bestTrainScore)) {
+                bestTrainParams = cand
+                bestTrainScore = score
             }
         }
-        val improved = best !== baseline && (bestScore.first > baseScore.first ||
-            (bestScore.first == baseScore.first && bestScore.second > baseScore.second))
-        if (improved) {
-            currentParams = best
-            saveParams(File(dir, PARAMS_FILE), best)
-            paramsRevisionCounter.incrementAndGet()
+
+        // 在训练集最优解附近做一轮局部坐标搜索（步长受安全范围约束）。
+        val neighbors: List<(SyllableGlideParams) -> SyllableGlideParams> = listOf(
+            { p -> p.copy(hitWeight = (p.hitWeight - 0.18f).coerceIn(0.95f, 2.20f)) },
+            { p -> p.copy(hitWeight = (p.hitWeight + 0.18f).coerceIn(0.95f, 2.20f)) },
+            { p -> p.copy(segmentWeight = (p.segmentWeight - 0.20f).coerceIn(1.10f, 2.60f)) },
+            { p -> p.copy(segmentWeight = (p.segmentWeight + 0.20f).coerceIn(1.10f, 2.60f)) },
+            { p -> p.copy(detourWeight = (p.detourWeight - 0.35f).coerceIn(1.80f, 4.20f)) },
+            { p -> p.copy(detourWeight = (p.detourWeight + 0.35f).coerceIn(1.80f, 4.20f)) },
+            { p -> p.copy(syllablePrior = (p.syllablePrior - 0.12f).coerceIn(0.25f, 1.00f)) },
+            { p -> p.copy(syllablePrior = (p.syllablePrior + 0.12f).coerceIn(0.25f, 1.00f)) },
+            { p -> p.copy(pauseBonus = (p.pauseBonus - 0.06f).coerceIn(0.08f, 0.42f)) },
+            { p -> p.copy(pauseBonus = (p.pauseBonus + 0.06f).coerceIn(0.08f, 0.42f)) },
+        )
+        for (mutate in neighbors) {
+            val cand = mutate(bestTrainParams)
+            if (cand == bestTrainParams) continue
+            val score = evaluateSamples(trainSet, keyboard, syllables, cand)
+            if (isBetter(score, bestTrainScore)) {
+                bestTrainParams = cand
+                bestTrainScore = score
+            }
         }
-        return TuneResult(targetSamples.size, baseScore.first, bestScore.first, baseScore.second, bestScore.second, improved)
+
+        if (bestTrainParams == baseline) {
+            return TuneResult(targetSamples.size, baseTotalTop1, baseTotalTop1, baseTotalTop3, baseTotalTop3, updated = false)
+        }
+        val candVal = evaluateSamples(valSet, keyboard, syllables, bestTrainParams)
+        val candTotalTop1 = bestTrainScore.first + candVal.first
+        val candTotalTop3 = bestTrainScore.second + candVal.second
+        val valNotWorse = candVal.first > baseVal.first ||
+            (candVal.first == baseVal.first && candVal.second >= baseVal.second)
+        val improved = valNotWorse &&
+            (candTotalTop1 > baseTotalTop1 || (candTotalTop1 == baseTotalTop1 && candTotalTop3 > baseTotalTop3)) &&
+            (candVal.first > baseVal.first || candVal.second > baseVal.second || bestTrainScore.first >= baseTrain.first + 2)
+        if (improved) {
+            currentParams = bestTrainParams
+            saveParams(File(dir, PARAMS_FILE), bestTrainParams)
+            paramsRevisionCounter.incrementAndGet()
+            return TuneResult(targetSamples.size, baseTotalTop1, candTotalTop1, baseTotalTop3, candTotalTop3, updated = true)
+        }
+        return TuneResult(targetSamples.size, baseTotalTop1, baseTotalTop1, baseTotalTop3, baseTotalTop3, updated = false)
     }
 
     private fun evaluateSamples(
@@ -556,11 +694,13 @@ object PersonalGlideCalibration {
             val resX = ((px - center.first) / keyboard.keyUnit).coerceIn(-0.65f, 0.65f)
             val resY = ((py - center.second) / keyboard.keyUnit).coerceIn(-0.65f, 0.65f)
             val old = bucketMap[ch]
-            val nextDx = if (old == null) (resX * EMA_ALPHA).coerceIn(-MAX_OFFSET_UNITS, MAX_OFFSET_UNITS)
-            else (old.dx * (1f - EMA_ALPHA) + resX * EMA_ALPHA).coerceIn(-MAX_OFFSET_UNITS, MAX_OFFSET_UNITS)
-            val nextDy = if (old == null) (resY * EMA_ALPHA).coerceIn(-MAX_OFFSET_UNITS, MAX_OFFSET_UNITS)
-            else (old.dy * (1f - EMA_ALPHA) + resY * EMA_ALPHA).coerceIn(-MAX_OFFSET_UNITS, MAX_OFFSET_UNITS)
-            bucketMap[ch] = KeyOffset(nextDx, nextDy, (old?.count ?: 0) + 1)
+            val prevCount = old?.count ?: 0
+            val alpha = adaptiveEmaAlpha(prevCount)
+            val nextDx = if (old == null) (resX * alpha).coerceIn(-MAX_OFFSET_UNITS, MAX_OFFSET_UNITS)
+            else (old.dx * (1f - alpha) + resX * alpha).coerceIn(-MAX_OFFSET_UNITS, MAX_OFFSET_UNITS)
+            val nextDy = if (old == null) (resY * alpha).coerceIn(-MAX_OFFSET_UNITS, MAX_OFFSET_UNITS)
+            else (old.dy * (1f - alpha) + resY * alpha).coerceIn(-MAX_OFFSET_UNITS, MAX_OFFSET_UNITS)
+            bucketMap[ch] = KeyOffset(nextDx, nextDy, prevCount + 1)
             changed = true
         }
         if (changed) {
@@ -656,6 +796,11 @@ object PersonalGlideCalibration {
     private fun recordConfusionLocked(dir: File, schemaKey: String, badCode: String, goodCode: String) {
         val k = confusionKey(schemaKey, badCode, goodCode)
         confusions[k] = (confusions[k] ?: 0) + 1
+        // 同步在内存索引记录差异的局部音节/子串对，让整句纠错泛化到后续任意新句子。
+        extractLocalConfusion(schemaKey, badCode, goodCode)?.let { (localBad, localGood) ->
+            val lk = confusionKey(schemaKey, localBad, localGood)
+            localConfusions[lk] = (localConfusions[lk] ?: 0) + 1
+        }
         while (confusions.size > MAX_CONFUSIONS) {
             val first = confusions.keys.firstOrNull() ?: break
             confusions.remove(first)
@@ -730,7 +875,7 @@ object PersonalGlideCalibration {
         saveSamples(File(dir, SAMPLES_FILE))
     }
 
-    fun shouldAutoTune(): Boolean = samplesSinceAutoTune >= 25
+    fun shouldAutoTune(): Boolean = samplesSinceAutoTune >= 50
     fun markAutoTuned() { samplesSinceAutoTune = 0 }
 
     private fun phraseKey(schema: String, code: String) = "$schema\t$code"
@@ -768,15 +913,22 @@ object PersonalGlideCalibration {
 
     private fun loadPhrases(file: File) {
         if (!file.isFile) return
+        var droppedDirty = false
         runCatching {
             file.forEachLine { line ->
                 val p = line.split('\t')
                 if (p.size < 5) return@forEachLine
                 val freq = p[3].toIntOrNull() ?: return@forEachLine
                 val ts = p[4].toLongOrNull() ?: 0L
+                val hanziCount = p[2].count { it in '\u4E00'..'\u9FFF' }
+                if (hanziCount > 0 && p[1].length < hanziCount) {
+                    droppedDirty = true
+                    return@forEachLine
+                }
                 phrases[phraseKey(p[0], p[1])] = PhraseEntry(p[0], p[1], p[2], freq, ts)
             }
         }
+        if (droppedDirty) savePhrases(file)
     }
 
     private fun savePhrases(file: File) {
@@ -798,6 +950,10 @@ object PersonalGlideCalibration {
                 if (p.size < 4) return@forEachLine
                 val count = p[3].toIntOrNull() ?: return@forEachLine
                 confusions[confusionKey(p[0], p[1], p[2])] = count
+                extractLocalConfusion(p[0], p[1], p[2])?.let { (lb, lg) ->
+                    val lk = confusionKey(p[0], lb, lg)
+                    localConfusions[lk] = (localConfusions[lk] ?: 0) + count
+                }
             }
         }
     }

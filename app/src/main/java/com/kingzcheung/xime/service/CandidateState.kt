@@ -33,6 +33,7 @@ data class CandidateState(
     /** 跨页全量候选（仅候选展开态时由服务层填充，供本地分页与单字筛选）。
      *  空列表 = 未填充或引擎无候选。全局索引用于 selectCandidateByGlobalIndex。 */
     val expandedCandidates: List<RimeCandidate> = emptyList(),
+    val expandedCandidateActions: List<CandidateAction> = emptyList(),
     val expandedCandidatesLoaded: Boolean = false,
     /** Identity of the native candidate list, independent of displayed preedit text. */
     val engineRevision: Long = 0L,
