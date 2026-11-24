@@ -19,7 +19,7 @@ internal class ImePreeditEditor(private val service: XimeInputMethodService) {
         if (t9Queue != null) t9Queue(block) else service.keyRouter.postRimeJob { block() }
     }
 
-    fun open(reply: (PinyinEditSession?) -> Unit) {
+    fun open(initialLetters: Int? = null, reply: (PinyinEditSession?) -> Unit) {
         val state = service.uiState.value
         if (state.isAsciiMode || !PinyinEditBuffer.supports(state.currentSchemaId)) { reply(null); return }
         enqueue(state.currentSchemaId) {
@@ -37,14 +37,65 @@ internal class ImePreeditEditor(private val service: XimeInputMethodService) {
             val unsupportedCode = rawText.any { it !in 'a'..'z' && it !in 'A'..'Z' && it != '\'' && !it.isWhitespace() && it != 'ü' }
             val prefix = if (t9) service.t9PartialSegments.joinToString("") { it.text }
                 else snapshot.getOrNull(3).orEmpty()
-            val display = PinyinEditDisplay(normalized, snapshot.getOrNull(4).orEmpty().removePrefix(prefix).trim(), t9, isMerged14 = com.kingzcheung.xime.settings.InputProfiles.describe(state.currentSchemaId).layout == com.kingzcheung.xime.settings.InputLayout.MERGED14, groups = com.kingzcheung.xime.settings.CustomKeyboardLayouts.forSchema(state.currentSchemaId)?.rows?.flatten() ?: if (com.kingzcheung.xime.settings.InputProfiles.describe(state.currentSchemaId).layout == com.kingzcheung.xime.settings.InputLayout.MERGED14) com.kingzcheung.xime.rime.merged14Groups else emptyList())
+            val isMerged14 = com.kingzcheung.xime.settings.InputProfiles.describe(state.currentSchemaId).layout ==
+                com.kingzcheung.xime.settings.InputLayout.MERGED14
+            val groups = com.kingzcheung.xime.settings.CustomKeyboardLayouts.forSchema(state.currentSchemaId)?.rows?.flatten()
+                ?: if (isMerged14) com.kingzcheung.xime.rime.merged14Groups else emptyList()
+            val display = PinyinEditDisplay(normalized, snapshot.getOrNull(4).orEmpty().removePrefix(prefix).trim(), t9,
+                isMerged14 = isMerged14, groups = groups)
             val text = display.text
             // Keep the visible separators in the editor buffer. Merely opening/moving
             // does not rewrite Rime or lock a nine-key translation; a real edit does.
-            val session = if (input.isEmpty() || text.isEmpty() || unsupportedCode) null
+            val baseSession = if (input.isEmpty() || text.isEmpty() || unsupportedCode) null
             else PinyinEditSession(state.inputSessionId, state.currentSchemaId, input,
                 if (t9) "" else input.take(confirmed), prefix, text,
                 if (t9) com.kingzcheung.xime.rime.offsetAfterCodeKeys(text, com.kingzcheung.xime.rime.codeKeysBefore(input, snapshot.getOrNull(1)?.toIntOrNull() ?: input.length)) else display.displayOffset(((snapshot.getOrNull(1)?.toIntOrNull() ?: input.length) - confirmed).coerceIn(0, normalized.length)), t9, if (t9) engine.t9GetRemainingDigits() else "", service.uiState.value.t9RightCandidateSelectedCount)
+            // 点拼音打开编辑时，在同一次 Rime 队列任务里直接落到目标光标，避免先用旧光标画一帧再跳到新位置。
+            var session = baseSession
+            var movedResult: com.kingzcheung.xime.rime.RimeProcessResult? = null
+            if (baseSession != null && initialLetters != null) {
+                val shownCode = service.candidateState.value.shownPreedit(service.uiState.value.inputProfile)
+                val targetCaret = baseSession.editOffset(
+                    shownCode,
+                    com.kingzcheung.xime.rime.offsetAfterPreeditLetters(shownCode, initialLetters),
+                )?.let { snapDoublePinyin(baseSession, it.coerceIn(0, baseSession.text.length), 0) }
+                if (targetCaret != null && targetCaret != baseSession.caret) {
+                    val result = engine.editPinyinAndReadState {
+                        if (baseSession.isT9) {
+                            engine.placeT9CodeCaret(
+                                com.kingzcheung.xime.rime.codeKeysBefore(baseSession.text, targetCaret),
+                                baseSession.expectedInput,
+                                baseSession.schemaId,
+                            ) { service.uiState.value.inputSessionId == state.inputSessionId }
+                        } else {
+                            val engineCaret = PinyinEditDisplay(
+                                baseSession.expectedInput.drop(baseSession.protectedInput.length),
+                                baseSession.text,
+                                isMerged14 = isMerged14,
+                                groups = groups,
+                            ).rawOffset(targetCaret)
+                            val placedCaret = if (engineCaret == 0) baseSession.expectedInput.length - baseSession.protectedInput.length else engineCaret
+                            engine.applyPinyinEdit(
+                                baseSession.expectedInput,
+                                baseSession.expectedInput,
+                                baseSession.protectedInput.length + placedCaret,
+                                baseSession.protectedInput.length,
+                                baseSession.protectedText,
+                                baseSession.schemaId,
+                                visibleReading = baseSession.text,
+                            ) { service.uiState.value.inputSessionId == state.inputSessionId }
+                        }
+                    }
+                    if (result != null) {
+                        movedResult = result
+                        session = baseSession.copy(
+                            expectedInput = result.inputText,
+                            caret = targetCaret,
+                            t9RemainingDigits = if (baseSession.isT9) engine.t9GetRemainingDigits() else "",
+                        )
+                    }
+                }
+            }
             withContext(Dispatchers.Main) {
                 if (service.uiState.value.inputSessionId == state.inputSessionId &&
                     service.uiState.value.currentSchemaId == state.currentSchemaId) {
@@ -52,6 +103,11 @@ internal class ImePreeditEditor(private val service: XimeInputMethodService) {
                     multiTap.reset()
                     liveOwner = session
                     liveSession = session
+                    if (movedResult != null && session != null) {
+                        if (session.isT9) service.keyboardCallbacks?.onT9RefreshAfterPreeditEdit?.invoke()
+                        service.sessionController.updateUIWithResult(movedResult, updateInputBoxComposition = false)
+                        service.showInlineEditCaret(session)
+                    }
                     reply(session)
                 }
             }

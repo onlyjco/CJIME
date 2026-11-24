@@ -74,7 +74,7 @@ class PreeditLocationTest {
         val vm = spy(KeyboardViewModel(app))
         val callbacks = KeyboardCallbacks(onKeyPress = { _, _ -> },
             onCandidateSelect = { connection.commitText(snapshot.candidates[it], 1) },
-            onOpenPreeditEditor = { reply -> edits++; reply(edit) })
+            onOpenPreeditEditor = { _, reply -> edits++; reply(edit) })
         val t9 = mock<T9InputController> {
             on { leftPanelState } doReturn T9InputController.LeftPanelState.INPUT
             on { firstOptions } doReturn listOf("gou", "hou", "g", "h").map { T9InputController.SyllableOption(it, it.length) }

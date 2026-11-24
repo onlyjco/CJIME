@@ -49,7 +49,7 @@ data class KeyboardCallbacks(
     val onCancelRejectedCommit: () -> Unit = {},
     /** Validate the rendered list again when a tap or delayed deletion is delivered. */
     val isCandidateSnapshotCurrent: (com.kingzcheung.xime.service.CandidateState) -> Boolean = { true },
-    val onOpenPreeditEditor: (((com.kingzcheung.xime.rime.PinyinEditSession?) -> Unit) -> Unit)? = null,
+    val onOpenPreeditEditor: ((Int?, (com.kingzcheung.xime.rime.PinyinEditSession?) -> Unit) -> Unit)? = null,
     val onOpenSentenceEdit: ((Int, Int, Long, (com.kingzcheung.xime.service.SentenceEditSession?) -> Unit) -> Unit)? = null,
     val onSentenceCandidates: ((com.kingzcheung.xime.service.SentenceEditSession, String, List<com.kingzcheung.xime.rime.PinyinSyllableOption>, String, (com.kingzcheung.xime.rime.RimeEngine.SentenceEditCandidates) -> Unit) -> Unit)? = null,
     val onApplySentenceEdit: ((com.kingzcheung.xime.service.SentenceEditSession, List<com.kingzcheung.xime.rime.RimeEngine.SentenceEditCandidate>, Boolean, (Boolean) -> Unit) -> Unit)? = null,

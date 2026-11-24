@@ -1846,26 +1846,39 @@ internal fun PreeditLabel(text: String, visuals: CandidateBarVisuals, onEdit: ((
         val caretAlpha = if (caretOn) 1f else 0f
         // 折行时在隔音符后面垫零宽空格，但短串不垫，避免破坏 ' 与后续字母的字偶距导致切到编辑条时轻微位移。
         val displayText = if (maxLines > 1 && shownText.length > 18) shownText.replace("'", "'\u200B") else shownText
-        val annotated = sentenceSelectionText(displayText, LocalSentenceSelection.current.value, visuals.accentColor,
-            preeditWithCaret(displayText, visuals.accentColor, textColor, visuals.selectedTextColor, caretAlpha))
+        // 预览态光标改用 drawBehind 竖线（0 宽），不再把实体 '|' 字符塞进文本里顶开后半段编码，
+        // 这样点开编辑条或收起时编码间距完全不回缩，且外观与编辑条光标完全一致。
+        val rawCaret = displayText.indexOf(com.kingzcheung.xime.service.PREEDIT_CARET)
+        val cleanDisplayText = if (rawCaret >= 0) displayText.removeRange(rawCaret, rawCaret + 1) else displayText
+        val caretOffset = rawCaret.takeIf { it >= 0 }
+        val caretColor = (if (colorsClose(visuals.accentColor, textColor)) visuals.selectedTextColor else visuals.accentColor)
+            .let { it.copy(alpha = it.alpha * caretAlpha) }
+        val annotated = sentenceSelectionText(cleanDisplayText, LocalSentenceSelection.current.value, visuals.accentColor)
         val textStyle = LocalTextStyle.current.copy(shadow = visuals.textShadow)
+        var layout by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
+        val drawCaret = if (caretOffset == null) Modifier else Modifier.drawBehind {
+            layout?.takeIf { it.layoutInput.text.text == cleanDisplayText }
+                ?.getCursorRect(caretOffset.coerceIn(0, cleanDisplayText.length))
+                ?.let {
+                    drawLine(caretColor, androidx.compose.ui.geometry.Offset(it.left, it.top),
+                        androidx.compose.ui.geometry.Offset(it.left, it.bottom), 2.dp.toPx())
+                }
+        }
         if (maxLines <= 1) {
             Text(annotated, color = textColor, fontSize = PreeditStyle.FontSize, maxLines = 1,
-                softWrap = false, style = textStyle, onTextLayout = tap::layout,
-                modifier = Modifier.horizontalScroll(scrollState).then(tap.textModifier()).testTag("candidate-preedit-text"))
+                softWrap = false, style = textStyle, onTextLayout = { layout = it; tap.layout(it) },
+                modifier = Modifier.horizontalScroll(scrollState).then(drawCaret).then(tap.textModifier()).testTag("candidate-preedit-text"))
         } else {
             // 长拼音折成几行，不再一行横穿整个应用、后半截被切掉（用户 10-31 截图）。
             val density = LocalDensity.current
             val lineHeight = PreeditStyle.FontSize * 1.35f
             val viewportPx = with(density) { (lineHeight * maxLines).roundToPx() }
             val lines = rememberScrollState()
-            var layout by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
-            LaunchedEffect(displayText, layout, lines.maxValue) {
+            LaunchedEffect(cleanDisplayText, caretOffset, layout, lines.maxValue) {
                 val result = layout ?: return@LaunchedEffect
                 if (lines.maxValue == 0 || lines.maxValue == Int.MAX_VALUE) return@LaunchedEffect
-                val caret = displayText.indexOf(com.kingzcheung.xime.service.PREEDIT_CARET)
-                val target = if (caret < 0 || caret >= result.layoutInput.text.length) lines.maxValue else {
-                    val line = result.getLineForOffset(caret)
+                val target = if (caretOffset == null || caretOffset > result.layoutInput.text.length) lines.maxValue else {
+                    val line = result.getLineForOffset(caretOffset.coerceAtMost(result.layoutInput.text.length))
                     val top = result.getLineTop(line).roundToInt()
                     val bottom = result.getLineBottom(line).roundToInt()
                     when {
@@ -1880,7 +1893,7 @@ internal fun PreeditLabel(text: String, visuals: CandidateBarVisuals, onEdit: ((
                 softWrap = true, style = textStyle, onTextLayout = { layout = it; tap.layout(it) },
                 modifier = Modifier.padding(vertical = 4.dp)
                     .heightIn(max = with(density) { viewportPx.toDp() })
-                    .verticalScroll(lines).then(tap.textModifier()).testTag("candidate-preedit-text"))
+                    .verticalScroll(lines).then(drawCaret).then(tap.textModifier()).testTag("candidate-preedit-text"))
         }
     }
 }
