@@ -135,29 +135,32 @@ fun SymbolKeyboardLayout(
     ) {
     // 最先画 = 在所有键帽底下，只从键缝里露出来。
     KeyGapLightLayer(gapLight, Modifier.matchParentSize())
-    Column(modifier = Modifier.fillMaxSize()) {
+    BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
+        val gridHeightDp = (maxHeight.value * 0.75f - 4f).coerceAtLeast(1f)
+        val grid = symbolGridGeometry(maxWidth.value, gridHeightDp)
+        val columns = grid.columns
+        val cellWidth = maxWidth / columns
+        // 和字母键同一个字号：同一基准、同一键帽尺度，也跟「按键字号」走（用户 11-18：符号和按键字号不一样）。
+        val symbolFontSize = keyLabelSizeSp("中", KeyboardKeyMetrics.LabelSize.value, maxWidth.value / columns,
+            grid.rowHeightDp, LocalDensity.current.fontScale,
+            LocalKeyboardInputPreferences.current.keyTextScale).sp
+        // 符号网格与底栏共用同一套格宽与键缝度量，保证「中文」「123」、标签栏与「删除」与上方符号键逐列对齐。
+        val gridMetrics = keyVisualMetrics(
+            policy = KeyVisualPolicy.Qwerty.copy(maxKeyWidth = Float.MAX_VALUE, minGutter = 0f),
+            availableWidthDp = maxWidth.value,
+            availableHeightDp = grid.rowHeightDp * 3f,
+            columns = columns.toFloat(),
+            rows = 3f, verticalInsetDp = 0f,
+        )
+        CompositionLocalProvider(LocalKeyboardKeyVisualMetrics provides gridMetrics) {
+        Column(modifier = Modifier.fillMaxSize()) {
         // 内容区：符号网格 + HorizontalPager
-        BoxWithConstraints(
+        Box(
             modifier = Modifier
                 .fillMaxWidth()
                 .weight(3f)
                 .padding(bottom = 4.dp)
         ) {
-            val grid = symbolGridGeometry(maxWidth.value, maxHeight.value)
-            val columns = grid.columns
-            // 和字母键同一个字号：同一基准、同一键帽尺度，也跟「按键字号」走（用户 11-18：符号和按键字号不一样）。
-            val symbolFontSize = keyLabelSizeSp("中", KeyboardKeyMetrics.LabelSize.value, maxWidth.value / columns,
-                grid.rowHeightDp, LocalDensity.current.fontScale,
-                LocalKeyboardInputPreferences.current.keyTextScale).sp
-            // 符号网格自成一格：按网格自身格宽算度量（不套主体键宽上限/gutter）
-            val gridMetrics = keyVisualMetrics(
-                policy = KeyVisualPolicy.Qwerty.copy(maxKeyWidth = Float.MAX_VALUE, minGutter = 0f),
-                availableWidthDp = maxWidth.value,
-                availableHeightDp = grid.rowHeightDp * 3f,
-                columns = columns.toFloat(),
-                rows = 3f, verticalInsetDp = 0f,
-            )
-            CompositionLocalProvider(LocalKeyboardKeyVisualMetrics provides gridMetrics) {
             HorizontalPager(
                 state = pagerState,
                 modifier = Modifier.fillMaxSize()
@@ -214,10 +217,7 @@ fun SymbolKeyboardLayout(
             }
         }
 
-        }
-
-        // 和标准 26 键共用底栏权重；分类只占余下空间，不挤压两侧入口。
-        val bottom = QwertyBottomRowWeights.Standard
+        // 底栏与上方符号网格按列对齐：「中文」「123」「删除」各占 1 列，中间标签栏占余下列且每项标签同为 1 列宽。
         Row(
             modifier = Modifier
                 .fillMaxWidth()
@@ -233,21 +233,19 @@ fun SymbolKeyboardLayout(
                         if (onKeyPressDown != null) onKeyPressDown(action) else onHapticFeedback?.invoke()
                     },
                     backgroundColor = specialKeyBackgroundColor, textColor = specialKeyTextColor,
-                    modifier = Modifier.weight(bottom.mode),
+                    modifier = Modifier.weight(1f),
                     shadowEnabled = shadowEnabled, shadowElevation = shadowElevation,
                     shadowShapeRadius = shadowShapeRadius,
                 )
             }
-            BoxWithConstraints(
+            Box(
                 modifier = Modifier
-                    .weight(bottom.total - 2 * bottom.mode - bottom.enter)
+                    .weight((columns - 3).toFloat().coerceAtLeast(1f))
                     .fillMaxHeight()
                     .testTag("symbol-category-strip"),
                 contentAlignment = Alignment.CenterStart,
             ) {
-                // The rail uses the same footer and key inset as the adjacent actions.
-                // Only tab width is capped; a tablet must not get a shorter category row.
-                val tabWidth = (maxHeight * 1.1f).coerceIn(48.dp, 88.dp)
+                val tabWidth = cellWidth
                 val glass = LocalKeyboardInputPreferences.current.frostedGlass
                 // Under glass the rail is a translucent keycap like its neighbours, not a solid bar.
                 // A light tint over whatever is below (solid colour, gradient or glass); on a solid
@@ -292,7 +290,7 @@ fun SymbolKeyboardLayout(
                 onSwipeUp = { onSelect("clear_all") }, onSwipeDown = { onSelect("undo_clear") },
                 backgroundColor = specialKeyBackgroundColor,
                 iconColor = specialKeyTextColor,
-                modifier = Modifier.weight(bottom.enter).testTag("symbol-delete")
+                modifier = Modifier.weight(1f).testTag("symbol-delete")
                     .semantics { contentDescription = "删除" },
                 shadowEnabled = shadowEnabled,
                 shadowElevation = shadowElevation,
@@ -300,6 +298,8 @@ fun SymbolKeyboardLayout(
             )
         }
 
+        }
+        }
     }
     }
     }
