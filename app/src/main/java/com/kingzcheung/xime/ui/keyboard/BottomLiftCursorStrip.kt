@@ -4,7 +4,6 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
-import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
 import androidx.compose.foundation.interaction.PressInteraction
@@ -42,7 +41,11 @@ import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import com.kingzcheung.xime.keyboard.ToolbarButton
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
 import kotlin.math.abs
+import kotlin.math.hypot
 
 internal const val BOTTOM_LIFT_ACTION_BUTTON_MIN_HEIGHT_DP = 28
 private const val BOTTOM_LIFT_CLIPBOARD_LONG_PRESS_MS = 220L
@@ -140,32 +143,49 @@ private fun BottomLiftActionIcon(
     val touchModifier = if (longPressTimeoutMillis != null && onLongClick != null) {
         Modifier.pointerInput(enabled, longPressTimeoutMillis) {
             if (!enabled) return@pointerInput
-            awaitEachGesture {
-                val down = awaitFirstDown(requireUnconsumed = false)
-                val press = PressInteraction.Press(down.position)
-                interactionSource.tryEmit(press)
-                var longTriggered = false
-                val up = withTimeoutOrNull(longPressTimeoutMillis) {
-                    waitForUpOrCancellation()
-                }
-                if (up != null) {
-                    interactionSource.tryEmit(PressInteraction.Release(press))
-                    latestOnClick()
-                } else {
-                    // 区分是真正超时触发长按，还是手指移出/被滑动移光标取消。
-                    val stillPressed = currentEvent.changes.any { it.id == down.id && it.pressed && !it.isConsumed }
-                    if (stillPressed) {
+            coroutineScope {
+                val gestureScope = this
+                val slop = viewConfiguration.touchSlop
+                awaitEachGesture {
+                    val down = awaitFirstDown(requireUnconsumed = false)
+                    val downPos = down.position
+                    val press = PressInteraction.Press(downPos)
+                    interactionSource.tryEmit(press)
+                    var longTriggered = false
+                    val longPressJob = gestureScope.launch {
+                        delay(longPressTimeoutMillis)
                         longTriggered = true
                         interactionSource.tryEmit(PressInteraction.Release(press))
                         latestOnLongClick?.invoke()
-                        // 消费剩余抬手事件，避免再触发单击或其他手势。
+                    }
+                    try {
                         while (true) {
                             val event = awaitPointerEvent()
-                            event.changes.forEach { if (it.id == down.id) it.consume() }
-                            if (event.changes.none { it.id == down.id && it.pressed }) break
+                            val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                            if (longTriggered) {
+                                change.consume()
+                                if (!change.pressed) break
+                                continue
+                            }
+                            if (!change.pressed) {
+                                longPressJob.cancel()
+                                if (!change.isConsumed) {
+                                    interactionSource.tryEmit(PressInteraction.Release(press))
+                                    latestOnClick()
+                                } else {
+                                    interactionSource.tryEmit(PressInteraction.Cancel(press))
+                                }
+                                break
+                            }
+                            val moved = hypot(change.position.x - downPos.x, change.position.y - downPos.y)
+                            if (change.isConsumed || moved > slop) {
+                                longPressJob.cancel()
+                                interactionSource.tryEmit(PressInteraction.Cancel(press))
+                                break
+                            }
                         }
-                    } else if (!longTriggered) {
-                        interactionSource.tryEmit(PressInteraction.Cancel(press))
+                    } finally {
+                        longPressJob.cancel()
                     }
                 }
             }
