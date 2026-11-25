@@ -192,15 +192,29 @@ fun Modifier.keyboardBackground(
     }
 }
 
+internal object ThemeImageCache {
+    private val cache = object : LinkedHashMap<String, ImageBitmap>(4, 0.75f, true) {
+        override fun removeEldestEntry(eldest: MutableMap.MutableEntry<String, ImageBitmap>?): Boolean = size > 4
+    }
+
+    @Synchronized fun get(src: String): ImageBitmap? = cache[src]
+    @Synchronized fun put(src: String, bitmap: ImageBitmap) { cache[src] = bitmap }
+}
+
 private fun themeImageSource(background: BackgroundConfig, isDark: Boolean): String? =
     if (isDark) background.srcDark ?: background.src else background.src
 
 @Composable
 private fun rememberThemeImage(src: String): ImageBitmap? {
     val context = LocalContext.current
-    var imageBitmap by remember { mutableStateOf<ImageBitmap?>(null) }
+    // 命中内存缓存时首帧同步返回，关闭玻璃特效切回原图皮肤时不先闪一帧纯白/浅灰底色。
+    var imageBitmap by remember(src) { mutableStateOf(ThemeImageCache.get(src)) }
     LaunchedEffect(src) {
-        imageBitmap = try {
+        if (ThemeImageCache.get(src) != null) {
+            imageBitmap = ThemeImageCache.get(src)
+            return@LaunchedEffect
+        }
+        val decoded = try {
             withContext(Dispatchers.Default) {
                 // 按屏幕宽度降采样：4000 px 的主题图整张解码要占几十 MB，键盘只铺满一屏宽。
                 val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
@@ -213,6 +227,8 @@ private fun rememberThemeImage(src: String): ImageBitmap? {
                 }
             }
         } catch (e: Exception) { null }
+        if (decoded != null) ThemeImageCache.put(src, decoded)
+        imageBitmap = decoded
     }
     return imageBitmap
 }

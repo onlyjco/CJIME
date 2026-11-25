@@ -34,7 +34,9 @@ import kotlin.math.abs
 @Composable
 internal fun ReorderableToolbar(
     actions: List<ToolbarAction>, accent: Color, onReorder: ((List<String>) -> Unit)?,
-    modifier: Modifier = Modifier, content: @Composable (ToolbarAction) -> Unit,
+    modifier: Modifier = Modifier,
+    onScrollableChange: ((Boolean) -> Unit)? = null,
+    content: @Composable (ToolbarAction) -> Unit,
 ) {
     val ids = actions.map { it.item.id }
     var order by remember { mutableStateOf(ids) }
@@ -124,6 +126,8 @@ internal fun ReorderableToolbar(
         }) {
         // 每个图标占等宽一格，整格可点；放不下时按最小格宽横向滚动。
         val slotWidth = maxOf(maxWidth / displayedOrder.size.coerceAtLeast(1), 36.dp)
+        val scrollable = scroll.maxValue > 0 || (36.dp * displayedOrder.size > maxWidth + 0.5.dp)
+        SideEffect { onScrollableChange?.invoke(scrollable) }
         Row(Modifier.horizontalScroll(scroll, enabled = inlineEditor?.dragging == null && scroll.maxValue > 0).widthIn(min = maxWidth),
             horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
             displayedOrder.forEach { id ->

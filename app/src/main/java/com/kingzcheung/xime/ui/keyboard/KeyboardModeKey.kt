@@ -39,6 +39,9 @@ internal fun KeyboardModeKey(
     androidx.compose.runtime.CompositionLocalProvider(LocalKeyboardPunctuation provides null) {
     val useCtrlDrag = ctrlTargets != null && onCtrlShortcut != null &&
         (target.action == "symbol" || (allowMergedCtrlDrag && target.action == "number"))
+    val mergedLongPressSymbol: (() -> Unit)? = if (allowMergedCtrlDrag && target.action == "number") {
+        { onKeyPress("symbol") }
+    } else null
     if (useCtrlDrag) CtrlSymbolKeyButton(
         text = target.label,
         targets = ctrlTargets,
@@ -52,6 +55,7 @@ internal fun KeyboardModeKey(
         shadowEnabled = shadowEnabled,
         shadowElevation = shadowElevation,
         shadowShapeRadius = shadowShapeRadius,
+        onLongPress = mergedLongPressSymbol,
     ) else KeyButton(
         text = target.label,
         fontSize = 16.sp,

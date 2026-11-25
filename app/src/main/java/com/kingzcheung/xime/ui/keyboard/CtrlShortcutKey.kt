@@ -47,15 +47,19 @@ internal fun Modifier.ctrlSymbolKeyGesture(
     onOpenSymbols: () -> Unit,
     onShortcut: (Char) -> Unit,
     onPressedChange: (Boolean) -> Unit,
+    /** 合并数字与符号键时：长按未拖动/未使用 Ctrl 松手后进入符号键盘。 */
+    onLongPress: (() -> Unit)? = null,
 ): Modifier = composed {
     var bounds by remember { mutableStateOf(Rect.Zero) }
     val dragSpace = LocalKeyDragSpace.current
     val hold by rememberUpdatedState(holdMillis)
     val down by rememberUpdatedState(onPressDown)
     val open by rememberUpdatedState(onOpenSymbols)
+    val longPress by rememberUpdatedState(onLongPress)
     val shortcut by rememberUpdatedState(onShortcut)
     val pressed by rememberUpdatedState(onPressedChange)
     val scope = rememberCoroutineScope()
+    val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     onGloballyPositioned { bounds = Rect(dragSpace.point(it), it.size.toSize()) }.pointerInput(targets) {
         awaitEachGesture {
             // 先于键帽自己的手势拿到按下（Initial），键帽只负责画。
@@ -64,12 +68,23 @@ internal fun Modifier.ctrlSymbolKeyGesture(
             pressed(true)
             down()
             targets.beginCtrl { shortcut(it) }
+            val hasLongPress = longPress != null
+            val longPressMs = if (hasLongPress) minOf(hold, 400L) else hold
+            var longPressArmed = false
+            val longPressTimer = if (hasLongPress) scope.launch {
+                delay(longPressMs)
+                if (!targets.ctrlUsed) {
+                    longPressArmed = true
+                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                }
+            } else null
             val faces = scope.launch {
                 delay(hold)
                 targets.showCtrlFaces()
             }
             var dragged = false
             var tap = false
+            var triggerLongPress = false
             try {
                 while (true) {
                     val event = awaitPointerEvent(PointerEventPass.Initial)
@@ -78,19 +93,26 @@ internal fun Modifier.ctrlSymbolKeyGesture(
                     val pointer = bounds.topLeft + change.position
                     dragged = dragged || !bounds.contains(pointer) ||
                         (change.position - first.position).getDistance() > viewConfiguration.touchSlop
+                    if (dragged) longPressTimer?.cancel()
                     val target = if (dragged) targets.move(bounds, pointer) else null
                     if (!change.pressed) {
                         if (dragged) target?.ctrl?.let(shortcut)
-                        else tap = !targets.ctrlUsed && change.uptimeMillis - first.uptimeMillis < hold
+                        else if (!targets.ctrlUsed) {
+                            val elapsed = change.uptimeMillis - first.uptimeMillis
+                            if (hasLongPress && (longPressArmed || elapsed >= longPressMs)) triggerLongPress = true
+                            else if (elapsed < hold) tap = true
+                        }
                         break
                     }
                 }
             } finally {
+                longPressTimer?.cancel()
                 faces.cancel()
                 targets.finish()
                 pressed(false)
             }
-            if (tap) open()
+            if (triggerLongPress) longPress?.invoke()
+            else if (tap) open()
         }
     }
 }
@@ -145,6 +167,7 @@ internal fun CtrlSymbolKeyButton(
     shadowEnabled: Boolean,
     shadowElevation: androidx.compose.ui.unit.Dp,
     shadowShapeRadius: androidx.compose.ui.unit.Dp,
+    onLongPress: (() -> Unit)? = null,
 ) {
     var pressed by remember { mutableStateOf(false) }
     // 键帽的 KeyButton 不接手势（由 ctrlSymbolKeyGesture 接），松手的「按键抬起震动」在这里给（用户 11-23）。
@@ -157,7 +180,8 @@ internal fun CtrlSymbolKeyButton(
         backgroundColor = backgroundColor,
         textColor = textColor,
         modifier = modifier.ctrlSymbolKeyGesture(targets, holdMillis, onPressDown, onOpenSymbols, onShortcut,
-            onPressedChange = { pressed = it; if (!it) release?.invoke() }),
+            onPressedChange = { pressed = it; if (!it) release?.invoke() },
+            onLongPress = onLongPress),
         shadowEnabled = shadowEnabled,
         shadowElevation = shadowElevation,
         shadowShapeRadius = shadowShapeRadius,

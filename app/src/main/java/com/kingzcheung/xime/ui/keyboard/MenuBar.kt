@@ -164,7 +164,12 @@ fun MenuItemButton(
     val content = if (showSelectedBox) (if (textColor.luminance() > .5f) Color.Black else Color.White) else textColor
     Box(modifier.onGloballyPositioned { inlineEditor?.registerMenuSize(it.boundsInRoot()) }
         .then(if (item.toolbarItem != null && !item.hidden) Modifier.inlineQuickActionTarget(item.id) else Modifier)
-        .combinedClickable(enabled = inlineEditor?.active != true, onLongClick = item.onLongClick) { item.action() }
+        .combinedClickable(
+            interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
+            indication = null,
+            enabled = inlineEditor?.active != true,
+            onLongClick = item.onLongClick,
+        ) { item.action() }
         .semantics {
             item.currentState?.let { stateDescription = it }
             item.selected?.let { selected = it }

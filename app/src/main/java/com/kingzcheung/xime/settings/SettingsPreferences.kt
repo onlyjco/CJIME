@@ -414,6 +414,14 @@ object SettingsPreferences {
 
     const val KEY_INCOGNITO = "incognito_mode"
     private const val KEY_INCOGNITO_INSTALL = "incognito_initialized_install"
+    const val KEY_INCOGNITO_SKIP_CONFIRM = "incognito_skip_confirm"
+
+    fun shouldSkipIncognitoConfirm(context: Context): Boolean =
+        getPrefs(context).getBoolean(KEY_INCOGNITO_SKIP_CONFIRM, false)
+
+    fun setSkipIncognitoConfirm(context: Context, skip: Boolean) {
+        getPrefs(context).edit().putBoolean(KEY_INCOGNITO_SKIP_CONFIRM, skip).apply()
+    }
 
     /** 每次换版本都从关闭开始；同版本重启保留手动选择。 */
     internal fun initializeIncognitoForVersion(context: Context, versionCode: Int) {

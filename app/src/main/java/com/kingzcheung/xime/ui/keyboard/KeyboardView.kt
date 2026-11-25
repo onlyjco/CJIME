@@ -1262,6 +1262,7 @@ fun KeyboardView(
                     })
                     ToolbarButton.INCOGNITO -> ({
                         if (quickToggles.incognito) SettingsPreferences.setIncognito(quickContext, false)
+                        else if (SettingsPreferences.shouldSkipIncognitoConfirm(quickContext)) SettingsPreferences.setIncognito(quickContext, true)
                         else incognitoConfirm = true
                     })
                     // 英文状态标点固定半角，入口不出现，避免“点了看不到变化，实际却改了状态”。
@@ -3088,6 +3089,7 @@ fun KeyboardView(
             keyBgColor, keyTextColor, accentColor)
         // 画在面板之后：从菜单或打开着的面板上点「无痕」时，确认卡也在最上面。
         if (incognitoConfirm) {
+            var incognitoDontAskAgain by remember { mutableStateOf(false) }
             KeyboardConfirmCard(
                 title = "开启无痕模式？",
                 message = "开启后打字不学新词、不调选词顺序，新复制的内容不会记进剪贴板；已有的剪贴板记录照常能用。再点一次「无痕」就关闭。",
@@ -3095,9 +3097,15 @@ fun KeyboardView(
                 destructive = false,
                 tag = "incognito-confirm",
                 modifier = Modifier.matchParentSize(),
+                checkboxLabel = "下次不再提示",
+                checked = incognitoDontAskAgain,
+                onCheckedChange = { incognitoDontAskAgain = it },
                 onCancel = { onHapticFeedback?.invoke(); incognitoConfirm = false },
                 onConfirm = {
                     onHapticFeedback?.invoke()
+                    if (incognitoDontAskAgain) {
+                        SettingsPreferences.setSkipIncognitoConfirm(quickContext, true)
+                    }
                     incognitoConfirm = false
                     SettingsPreferences.setIncognito(quickContext, true)
                 })
@@ -3349,7 +3357,8 @@ internal fun KeyboardConfirmCard(title: String, message: String, confirmLabel: S
     tag: String, modifier: Modifier, onCancel: () -> Unit, onConfirm: () -> Unit,
     extraLabel: String? = null, onExtra: () -> Unit = {},
     /** 第二个附加按钮（长按候选的「固定在第 N 位」）；按钮多了一行放不下就换行。 */
-    extra2Label: String? = null, onExtra2: () -> Unit = {}) {
+    extra2Label: String? = null, onExtra2: () -> Unit = {},
+    checkboxLabel: String? = null, checked: Boolean = false, onCheckedChange: ((Boolean) -> Unit)? = null) {
     val cardColors = keyboardCardColors()
     Box(
         modifier = modifier
@@ -3380,6 +3389,34 @@ internal fun KeyboardConfirmCard(title: String, message: String, confirmLabel: S
                     style = MaterialTheme.typography.bodyMedium,
                     color = cardColors.text.copy(alpha = .7f)
                 )
+                }
+                if (checkboxLabel != null && onCheckedChange != null) {
+                    Spacer(Modifier.height(10.dp))
+                    Row(
+                        modifier = Modifier
+                            .clickable(
+                                interactionSource = remember { MutableInteractionSource() },
+                                indication = null,
+                                onClick = { onCheckedChange(!checked) }
+                            )
+                            .testTag("$tag-checkbox"),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        androidx.compose.material3.Checkbox(
+                            checked = checked,
+                            onCheckedChange = null,
+                            modifier = Modifier.size(20.dp),
+                            colors = androidx.compose.material3.CheckboxDefaults.colors(
+                                uncheckedColor = cardColors.text.copy(alpha = 0.6f),
+                            ),
+                        )
+                        Spacer(Modifier.width(8.dp))
+                        Text(
+                            text = checkboxLabel,
+                            style = MaterialTheme.typography.bodySmall,
+                            color = cardColors.text.copy(alpha = 0.85f),
+                        )
+                    }
                 }
                 Spacer(Modifier.height(12.dp))
                 ConfirmCardButtons {

@@ -501,6 +501,12 @@ fun CandidateBar(
     val cardTopCorner = LocalKeyboardCardTopCorner.current
     val toolbarDragSession = LocalFloatingKeyboardDrag.current
     val toolbarInlineEditor = LocalInlineQuickActionEditor.current
+    var toolbarScrollable by remember { mutableStateOf(false) }
+    SideEffect {
+        if (state !is CandidateBarState.Idle || inlineSuggestions.isNotEmpty() || splitGapX != null) {
+            toolbarScrollable = false
+        }
+    }
     Column(
         modifier = modifier
             .fillMaxWidth()
@@ -508,7 +514,7 @@ fun CandidateBar(
                 else Modifier.height(44.dp))
             .floatingToolbarDrag(
                 session = toolbarDragSession,
-                enabled = state is CandidateBarState.Idle && toolbarInlineEditor?.dragging == null,
+                enabled = state is CandidateBarState.Idle && toolbarInlineEditor?.dragging == null && !toolbarScrollable,
             )
             .onGloballyPositioned {
                 barOrigin = it.positionInWindow()
@@ -877,7 +883,8 @@ fun CandidateBar(
                         ReorderableToolbar(toolbarActions, protectedVisuals.accentColor, callbacks.onReorderToolbar,
                             modifier = Modifier.weight(1f).onGloballyPositioned {
                                 editor?.toolbarArea = it.boundsInRoot()
-                            }) { action ->
+                            },
+                            onScrollableChange = { toolbarScrollable = it }) { action ->
                             ToolbarActionButton(action, protectedVisuals, iconButtonTint, voiceAmplitude, voiceRecognitionState,
                                 modifier = Modifier.fillMaxWidth())
                         }
@@ -1571,6 +1578,10 @@ private fun Modifier.glassStripBoost(alpha: Float): Modifier {
     val backdrop = shared?.takeIf { it.windowRoot === root }
     val feather = com.kingzcheung.xime.ui.theme.LocalGlassTopFeather.current?.takeIf { it.windowRoot === root }
     val fallback = backdrop?.fallback ?: com.kingzcheung.xime.ui.theme.LocalMaterialPalette.current?.surface
+    val themeBg = com.kingzcheung.xime.ui.theme.KeyboardThemes.getRenderingScheme(
+        SettingsPreferences.getKeyboardTheme(LocalContext.current)
+    ).keyboardBackground
+    val layeredTheme = themeBg?.type == "gradient" || themeBg?.type == "image"
     var origin by remember { mutableStateOf(androidx.compose.ui.geometry.Offset.Zero) }
     val surfaceKey = remember { Any() }
     if (backdrop != null) DisposableEffect(backdrop.reportSurfaceTop, surfaceKey) {
@@ -1583,18 +1594,27 @@ private fun Modifier.glassStripBoost(alpha: Float): Modifier {
     }.then(com.kingzcheung.xime.ui.theme.motionRedrawIsolation(backdrop?.motion)).drawBehind {
         drawUnderTopFeather(feather?.top?.value?.minus(origin.y), feather?.heightPx ?: 0f) {
             val image = backdrop?.image?.takeIf { backdrop.frame.size.width > 0 && backdrop.frame.size.height > 0 }
-            if (image == null) drawRect(fallback.copy(alpha = 1f), alpha = alpha)
-            else {
-                val offset = backdrop.frame.offsetIn(origin)
-                clipRect(offset.x, offset.y, offset.x + backdrop.frame.size.width,
-                    offset.y + backdrop.frame.size.height, androidx.compose.ui.graphics.ClipOp.Difference) {
-                    drawRect(fallback.copy(alpha = 1f), alpha = alpha)
+            if (image == null) {
+                // 渐变/图片皮肤在无共享底图时（悬浮或过渡帧）绝不用纯灰 fallback 糊住工具栏，避免顶部与键区皮肤断层。
+                if (!layeredTheme) drawRect(fallback.copy(alpha = 1f), alpha = alpha)
+            } else {
+                val rawOffset = backdrop.frame.offsetIn(origin)
+                val offset = if (rawOffset.y > 0f) androidx.compose.ui.geometry.Offset(rawOffset.x, 0f) else rawOffset
+                val drawSize = if (rawOffset.y > 0f) androidx.compose.ui.unit.IntSize(
+                    backdrop.frame.size.width,
+                    (backdrop.frame.size.height + rawOffset.y.roundToInt()).coerceAtLeast(size.height.roundToInt()),
+                ) else backdrop.frame.size
+                if (!layeredTheme) {
+                    clipRect(offset.x, offset.y, offset.x + drawSize.width,
+                        offset.y + drawSize.height, androidx.compose.ui.graphics.ClipOp.Difference) {
+                        drawRect(fallback.copy(alpha = 1f), alpha = alpha)
+                    }
                 }
                 clipRect {
                     // 动态背景：和键盘本体同一个样子动。
                     withSharedBackdropMotion(backdrop, offset) {
                         translate(offset.x, offset.y) {
-                            drawImage(image, dstSize = backdrop.frame.size, alpha = alpha,
+                            drawImage(image, dstSize = drawSize, alpha = alpha,
                                 filterQuality = androidx.compose.ui.graphics.FilterQuality.Medium)
                         }
                     }

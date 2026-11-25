@@ -114,17 +114,21 @@ internal fun Modifier.frostedGlassBackground(
                 val image = shared.image?.takeIf { shared.frame.size.width > 0 && shared.frame.size.height > 0 }
                 if (image == null) drawRect(shared.fallback, alpha = shared.opacity)
                 else {
-                    val offset = shared.frame.offsetIn(origin)
-                    // The window/inset frame and this surface may move on different layout passes.
-                    // Tint only uncovered pixels so translucent glass is composited exactly once.
-                    clipRect(offset.x, offset.y, offset.x + shared.frame.size.width,
-                        offset.y + shared.frame.size.height, androidx.compose.ui.graphics.ClipOp.Difference) {
+                    val rawOffset = shared.frame.offsetIn(origin)
+                    // 过渡帧若 frame 顶部滞后于表面顶部（rawOffset.y > 0），把图向上延伸覆盖顶部，避免工具栏区域露出纯灰 fallback 断层。
+                    val offset = if (rawOffset.y > 0f) Offset(rawOffset.x, 0f) else rawOffset
+                    val drawSize = if (rawOffset.y > 0f) IntSize(
+                        shared.frame.size.width,
+                        (shared.frame.size.height + rawOffset.y.roundToInt()).coerceAtLeast(size.height.roundToInt()),
+                    ) else shared.frame.size
+                    clipRect(offset.x, offset.y, offset.x + drawSize.width,
+                        offset.y + drawSize.height, androidx.compose.ui.graphics.ClipOp.Difference) {
                         drawRect(shared.fallback, alpha = shared.opacity)
                     }
                     if (imageSlot == null) clipRect {
                         withSharedBackdropMotion(shared, offset) {
                             translate(offset.x, offset.y) {
-                                drawImage(image, dstSize = shared.frame.size, alpha = shared.opacity,
+                                drawImage(image, dstSize = drawSize, alpha = shared.opacity,
                                     filterQuality = FilterQuality.Medium)
                             }
                         }
@@ -207,6 +211,10 @@ internal fun rememberFrostedBackgroundImage(
     LaunchedEffect(context, source) {
         val decoded = source?.takeIf { it.isNotBlank() }?.let {
             withContext(Dispatchers.IO) { decodeFrostedImage(context, it) }
+        }
+        // 开玻璃时同步预热原图缓存，关闭玻璃切回原图皮肤时零闪白。
+        if (source != null && decoded != null && ThemeImageCache.get(source) == null) {
+            ThemeImageCache.put(source, decoded.bitmap.asImageBitmap())
         }
         loaded = source to decoded
     }

@@ -628,7 +628,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         // 语音悬浮条、实体键盘浮条时键盘不在屏幕上：不要键盘那块模糊。原来留着收起前量到的键盘位置，
         // 拖悬浮条、柔化顶边切换等一调到这里就把它放回来，键盘容器在窗口里的位置又变了，整块模糊挪到屏幕最上面，
         // 糊住 App 上半截（用户 11-22 手机截图：开了语音浮窗后上面一大块变模糊）。
-        val keyboardOffScreen = uiState.value.voiceCollapsed || uiState.value.isCompact
+        // 悬浮拖动期间隐藏模糊窗口，避免原地残留；停稳/松手后按新坐标刷新。
+        val keyboardOffScreen = uiState.value.voiceCollapsed || uiState.value.isCompact ||
+            (uiState.value.isFloatingMode && floatingDragging)
         val card = withFilledSides(when {
             keyboardOffScreen -> null
             handwriting -> handwritingGlassControls
@@ -690,6 +692,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     }
 
     private fun updateGlassConfiguration(config: com.kingzcheung.xime.settings.FrostedGlassConfig, mode: String) {
+        val wasEnabled = glassConfig.enabled
         if (glassSurfaceMode != mode) {
             glassSurfaceMode = mode
             glassSurfaceBounds.clear()
@@ -697,6 +700,17 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             glassBlurWindows.values.forEach { it.setRegion(null) }
         }
         glassConfig = config.normalized()
+        // 关闭玻璃时延后一帧再拆模糊子窗口，让 Compose 的不透明底图先送上屏，避免关玻璃瞬间闪白。
+        if (wasEnabled && !glassConfig.enabled && ::keyboardContainer.isInitialized && keyboardContainer.isAttachedToWindow) {
+            keyboardContainer.postOnAnimation {
+                if (!glassConfig.enabled) {
+                    (glassSurfaceBounds.keys + glassBlurWindows.keys).toSet().forEach { name ->
+                        updateGlassSurface(name, glassSurfaceBounds[name], glassSurfaceOrigins[name])
+                    }
+                }
+            }
+            return
+        }
         (glassSurfaceBounds.keys + glassBlurWindows.keys).toSet().forEach { name ->
             updateGlassSurface(name, glassSurfaceBounds[name], glassSurfaceOrigins[name])
         }
@@ -2573,7 +2587,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 )
                 XimeTheme(darkTheme = isDarkTheme, themeId = state.themeId) {
                     com.kingzcheung.xime.ui.theme.KeyboardBackdropHost(
-                        enabled = frostedGlass.enabled && !state.isCompact && !state.voiceCollapsed && !state.isFloatingMode && !roundedKeyboardBottom,
+                        enabled = frostedGlass.enabled && !state.isCompact && !state.voiceCollapsed && !state.isFloatingMode,
                         background = rootTheme.keyboardBackground, isDark = isDark,
                         fallback = cardBg, glass = frostedGlass,
                         backdropHeight = (contentHeight + contentBottomPaddingDp + activeBottomDp).dp,
@@ -3222,14 +3236,16 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                             checkFixedKeyboardBottom(bottom, activeBottomDp + contentBottomPaddingDp)
                                         }
                                     }
-                                    if (!handwritingExpanded && state.isFloatingMode && !state.showKeyboardResize && cardHeightPx > 0) {
-                                        currentEffectiveKeyboardHeight = (cardHeightPx / density.density).roundToInt()
-                                        currentFloatingCardHeightDp = currentEffectiveKeyboardHeight
-                                        currentFloatingCardWidthDp = ((right - left) / density.density).roundToInt()
+                                    if (!handwritingExpanded && state.isFloatingMode && cardHeightPx > 0) {
                                         val bounds = android.graphics.Rect(left, top, right, bottom)
+                                        if (!state.showKeyboardResize) {
+                                            currentEffectiveKeyboardHeight = (cardHeightPx / density.density).roundToInt()
+                                            currentFloatingCardHeightDp = currentEffectiveKeyboardHeight
+                                            currentFloatingCardWidthDp = ((right - left) / density.density).roundToInt()
+                                        }
                                         if (floatingCardBounds != bounds) {
                                             floatingCardBounds = bounds
-                                            if (!floatingDragging) keyboardContainer.requestLayout()
+                                            if (!state.showKeyboardResize && !floatingDragging) keyboardContainer.requestLayout()
                                         }
                                     }
                                 },
@@ -3242,7 +3258,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                 onFloatingDragStateChange = { dragging ->
                                     if (floatingDragging != dragging) {
                                         floatingDragging = dragging
-                                        if (!dragging) {
+                                        if (dragging) {
+                                            updateKeyboardGlass()
+                                        } else {
                                             floatingCardBounds?.let { b ->
                                                 keyboardGlassCard = if (uiState.value.isFloatingMode && com.kingzcheung.xime.ui.keyboard
                                                         .isFloatingRotated(uiState.value.floatingRotation)) null

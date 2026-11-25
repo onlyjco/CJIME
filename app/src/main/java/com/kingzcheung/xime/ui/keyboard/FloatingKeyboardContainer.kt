@@ -378,10 +378,13 @@ internal fun FloatingKeyboardContainer(
         val liveCornerRectState = remember(geometryLocked) { mutableStateOf<ResizeRect?>(null) }
         var cornerResizing by remember(geometryLocked) { mutableStateOf(false) }
         var cornerPauseTick by remember(geometryLocked) { mutableIntStateOf(0) }
+        var cornerPaused by remember(geometryLocked) { mutableStateOf(false) }
         LaunchedEffect(cornerResizing, cornerPauseTick) {
+            cornerPaused = false
             if (cornerResizing && cornerPauseTick > 0) {
                 kotlinx.coroutines.delay(100L)
                 liveCornerRectState.value?.let { settledCornerRect = it }
+                cornerPaused = true
             }
         }
         val cardRect = previewRect ?: settledCornerRect ?: baseRect
@@ -399,6 +402,15 @@ internal fun FloatingKeyboardContainer(
         val safeOffsetX = (baseRect.centerX / density.density - maxWidth.value / 2f)
         val dockGesture = remember(maxWidth, cardTotalHeight, screenHeightDp, minOffsetY, geometryLocked) { FloatingDockGesture() }
         var isDragging by remember(dockGesture) { mutableStateOf(false) }
+        var dragMotionTick by remember(dockGesture) { mutableIntStateOf(0) }
+        var dragPaused by remember(dockGesture) { mutableStateOf(false) }
+        LaunchedEffect(isDragging, dragMotionTick) {
+            dragPaused = false
+            if (isDragging) {
+                kotlinx.coroutines.delay(120L)
+                dragPaused = true
+            }
+        }
         var dragX by remember(dockGesture) { mutableFloatStateOf(safeOffsetX) }
         var dragY by remember(dockGesture) { mutableFloatStateOf(safeOffsetY) }
         var rawDragY by remember(dockGesture) { mutableFloatStateOf(safeOffsetY) }
@@ -427,7 +439,7 @@ internal fun FloatingKeyboardContainer(
         val currentOnDragStateChange by rememberUpdatedState(onDragStateChange)
         val currentExternalDragging by rememberUpdatedState(externalDragging)
         LaunchedEffect(dockGesture, undockFollow, geometryLocked) {
-            snapshotFlow { isDragging || cornerResizing || currentExternalDragging || undockFollow?.finger != null }
+            snapshotFlow { (isDragging && !dragPaused) || (cornerResizing && !cornerPaused) || currentExternalDragging || undockFollow?.finger != null }
                 .distinctUntilChanged()
                 .collect { currentOnDragStateChange(it) }
         }
@@ -468,6 +480,24 @@ internal fun FloatingKeyboardContainer(
         var holdPhase by remember { mutableStateOf(FloatingLockHoldPhase.Idle) }
         val lockSweep = rememberFloatingLockSweep(holdPhase, floatingLockHoldMs(geometryLocked) - FLOATING_HOLD_QUIET_MS)
         val lockNudge = rememberFloatingLockNudge()
+        var indicatorActivityTick by remember { mutableIntStateOf(0) }
+        var indicatorBright by remember { mutableStateOf(true) }
+        LaunchedEffect(isDragging, cornerResizing, holdPhase, indicatorActivityTick, geometryLocked) {
+            if (geometryLocked) {
+                indicatorBright = true
+                return@LaunchedEffect
+            }
+            indicatorBright = true
+            if (!isDragging && !cornerResizing && holdPhase == FloatingLockHoldPhase.Idle) {
+                kotlinx.coroutines.delay(2000L)
+                indicatorBright = false
+            }
+        }
+        val indicatorAlpha by androidx.compose.animation.core.animateFloatAsState(
+            targetValue = if (geometryLocked || indicatorBright) 1f else 0.35f,
+            animationSpec = androidx.compose.animation.core.tween(300),
+            label = "floating-drag-indicator-alpha",
+        )
         val startFloatingDrag = {
             dockGesture.cancel()
             dragX = safeOffsetX
@@ -475,9 +505,16 @@ internal fun FloatingKeyboardContainer(
             rawDragY = safeOffsetY
             dragStartX = safeOffsetX
             dragStartY = safeOffsetY
+            dragPaused = false
+            dragMotionTick++
+            indicatorActivityTick++
             isDragging = true
         }
         val moveFloatingDrag: (Offset) -> Unit = move@{ dragAmount ->
+            if (dragAmount != Offset.Zero) {
+                dragPaused = false
+                dragMotionTick++
+            }
             if (rotatedRect != null) {
                 // 拖动量来自转过的卡片自身坐标，转回屏幕方向再移动。
                 val radians = Math.toRadians(restingRotation.toDouble())
@@ -635,7 +672,8 @@ internal fun FloatingKeyboardContainer(
                         LocalDensity provides Density(density = density.density * contentScale,
                             fontScale = density.fontScale * fontScaleFactor),
                         LocalFloatingContentScale provides contentScale,
-                        LocalFloatingBackgroundBleed provides backgroundBleed,
+                        // 剪贴板展开时上层容器加了 clipToBounds 会截断向下延伸的背景，禁用 bleed 让拖动条自己铺底色，避免丢失下沿显示。
+                        LocalFloatingBackgroundBleed provides if (clipboardExpansion == null) backgroundBleed else null,
                         LocalFloatingKeyboardRotation provides restingRotation,
                         LocalKeyDragSpace provides dragSpace,
                         LocalFloatingKeyCapInset provides capInset,
@@ -653,12 +691,17 @@ internal fun FloatingKeyboardContainer(
             Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                 .height(footerDp.dp.coerceAtMost(cardTotalHeight))
                 .testTag("floating-footer-background")
-                .then(if (backgroundBleed.consumed) Modifier else Modifier.keyboardPanelBackground(backgroundColor)))
+                .then(if (clipboardExpansion == null && backgroundBleed.consumed) Modifier else Modifier.keyboardPanelBackground(backgroundColor)))
             // 拖动区从最下一排的键帽下沿算起，小横条在这一段里居中；键帽下沿以下仍接按键触摸。
             Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                 .height((dragAreaHeight + capInset.floatValue.dp).coerceAtMost(cardTotalHeight))
                 .testTag("floating-footer"), contentAlignment = Alignment.Center) {
-                if (!hideDragBar) FloatingFooterIndicator(geometryLocked, dragIndicatorColor, footerDp.toFloat(), lockNudge)
+                if (!hideDragBar) FloatingFooterIndicator(
+                    geometryLocked,
+                    dragIndicatorColor.copy(alpha = dragIndicatorColor.alpha * indicatorAlpha),
+                    footerDp.toFloat(),
+                    lockNudge,
+                )
             }
             if (!hideDragBar && previewRect == null) DragBar(
                 modifier = Modifier.align(Alignment.BottomCenter).height(dragAreaHeight),
@@ -677,7 +720,10 @@ internal fun FloatingKeyboardContainer(
                 onDragEnd = endFloatingDrag,
                 onDragCancel = cancelFloatingDrag,
                 // 点一下拖动条也亮出四角角标：亮着时拖角调大小、点角打开调节界面。
-                onTap = { if (onCornerResize != null && rotatedRect == null) highlight.trigger() },
+                onTap = {
+                    indicatorActivityTick++
+                    if (onCornerResize != null && rotatedRect == null) highlight.trigger()
+                },
             )
         }
 
