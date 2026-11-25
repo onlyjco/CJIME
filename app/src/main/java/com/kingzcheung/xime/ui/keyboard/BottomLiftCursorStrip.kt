@@ -152,8 +152,10 @@ private fun BottomLiftActionIcon(
                     val press = PressInteraction.Press(downPos)
                     interactionSource.tryEmit(press)
                     var longTriggered = false
+                    val alreadyElapsed = (android.os.SystemClock.uptimeMillis() - down.uptimeMillis).coerceAtLeast(0L)
+                    val remainingDelay = (longPressTimeoutMillis - alreadyElapsed).coerceIn(40L, longPressTimeoutMillis)
                     val longPressJob = gestureScope.launch {
-                        delay(longPressTimeoutMillis)
+                        delay(remainingDelay)
                         longTriggered = true
                         interactionSource.tryEmit(PressInteraction.Release(press))
                         latestOnLongClick?.invoke()

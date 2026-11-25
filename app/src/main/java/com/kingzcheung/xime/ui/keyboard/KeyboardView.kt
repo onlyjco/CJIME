@@ -627,6 +627,7 @@ fun KeyboardView(
                     imm?.showInputMethodPicker()
                 }
             } else {
+                onHapticFeedback?.invoke()
                 viewModel.toggleOverlay(OverlayRoute.SchemaList)
             }
         }
