@@ -2359,6 +2359,18 @@ internal fun resolveLetterKeyLongPressMenu(
         )
     }
 
+    if (key.length == 2 && key.all { it.lowercaseChar() in 'a'..'z' } && accentLetters.isEmpty()) {
+        // 14 键合并键（qw）：两个大写在前、两个小写在后（Shift 态反过来），松手默认对准左侧字母。
+        val upper = key.map { it.uppercase() }
+        val lower = key.map { it.lowercase() }
+        val items = if (isShifted) lower + upper else upper + lower
+        return LetterLongPressMenu(
+            items = items,
+            defaultIndex = 0,
+            onSelect = { selected -> commitLongPressChoice(selected, onCommitText, onKeyPress, accentLetters) },
+        )
+    }
+
     val longPressConfig = KeysConfigHelper.getKeyGesture(key, isAsciiMode)?.longPress ?: return null
     if (longPressConfig.display != "bubble") return null
     val items = longPressConfig.values.map { longPressShownLabel(it.label, isShifted, accentLetters) }
