@@ -4,6 +4,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.outlined.Assignment
 import androidx.compose.material.icons.automirrored.outlined.VolumeUp
 import androidx.compose.material.icons.outlined.BlurOn
+import androidx.compose.material.icons.outlined.Draw
 import androidx.compose.material.icons.outlined.EmojiEmotions
 import androidx.compose.material.icons.outlined.Explore
 import androidx.compose.material.icons.outlined.Gesture
@@ -30,7 +31,7 @@ enum class ToolbarButton(
     SYMBOL("symbol", "符号", Icons.Outlined.Paid),
     // 保留已保存的旧 ID，悬浮模式统一在键盘调节中设置。
     FLOAT("float", "键盘调节", Icons.Outlined.Tune),
-    HANDWRITING_LOOKUP("handwriting_lookup", "手写", Icons.Outlined.Gesture),
+    HANDWRITING_LOOKUP("handwriting_lookup", "手写", Icons.Outlined.Draw),
     EDIT("edit", "编辑", Icons.Outlined.OpenWith),
     VOICE("voice", "语音", Icons.Outlined.Mic),
     // 以下原为菜单专属；工具栏与菜单共用一组入口，可放在任一处或不使用。
