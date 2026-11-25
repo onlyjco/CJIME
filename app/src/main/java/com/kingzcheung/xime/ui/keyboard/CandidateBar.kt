@@ -580,14 +580,6 @@ fun CandidateBar(
             }
         }
 
-        if (state is CandidateBarState.ClipboardDisplay) {
-            Box(Modifier.fillMaxWidth()) {
-                ClipboardPreviewBar(state.candidates, protectedVisuals, callbacks, iconButtonContainer, state.image,
-                    extractedCount = state.extractedCount)
-            }
-            return@Column
-        }
-
         val rowDensity = LocalDensity.current
         BoxWithConstraints(
             modifier = Modifier
@@ -618,6 +610,11 @@ fun CandidateBar(
         }
         // 同心：胶囊圆角 = 键盘卡片圆角 - 胶囊离栏边的距离（上下各 6dp），和卡片四角同心。
         val edgeCorner = if (edgeStyle == EdgeButtonStyle.CONCENTRIC) FloatingKeyboardCardCorner - 6.dp else null
+        if (state is CandidateBarState.ClipboardDisplay) {
+            ClipboardPreviewBar(state.candidates, protectedVisuals, callbacks, iconButtonContainer, state.image,
+                extractedCount = state.extractedCount, edgeSlot = edgeSlot, edgeCorner = edgeCorner)
+            return@BoxWithConstraints
+        }
         // 窄键盘两端锚定在候选箭头的中心，中间工具均分余宽。宽键盘的所有工具仍各占完整一格。
         // 两者之间不再在 600dp 一步跳变：收起键从展开键的圆按宽度逐渐拉成等分格胶囊（用户 11-09，#263）。
         val toolbarSlot = when {
@@ -1121,6 +1118,8 @@ private fun ClipboardPreviewBar(
     iconButtonContainer: Color,
     image: com.kingzcheung.xime.clipboard.ClipboardImage? = null,
     @Suppress("UNUSED_PARAMETER") extractedCount: Int = 0,
+    edgeSlot: androidx.compose.ui.unit.Dp? = null,
+    edgeCorner: androidx.compose.ui.unit.Dp? = null,
 ) {
     val previews = remember(candidates) { candidates.map { it.replace(Regex("[\\r\\n]+"), " ") } }
     val textMeasurer = rememberTextMeasurer()
@@ -1141,7 +1140,8 @@ private fun ClipboardPreviewBar(
             else Modifier.border(1.dp, visuals.accentColor.copy(alpha = 0.45f), CircleShape))
     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically) {
         KeyboardBackButton({ callbacks.onDismissClipboardPreview?.invoke() },
-            iconButtonContainer, visuals.textColor, label = "返回工具栏")
+            iconButtonContainer, visuals.textColor, label = "返回工具栏",
+            slotWidth = edgeSlot, cornerRadius = edgeCorner, continuousPill = true)
         BoxWithConstraints(Modifier.weight(1f).padding(horizontal = 12.dp), contentAlignment = Alignment.Center) {
             val itemGapPx = with(density) { 16.dp.roundToPx() }
             /** 一串预览排成一行要多宽；超过 [limitPx] 或有很长的一项就按 [limitPx] 算（反正要横滑）。 */
@@ -1186,12 +1186,12 @@ private fun ClipboardPreviewBar(
         }
         if (callbacks.onHideKeyboard != null) {
             KeyboardToolbarButton(callbacks.onHideKeyboard, iconButtonContainer,
-                modifier = Modifier.testTag("toolbar-hide")) {
+                modifier = Modifier.testTag("toolbar-hide"), slotWidth = edgeSlot, cornerRadius = edgeCorner, continuousPill = true) {
                 Icon(Icons.Default.KeyboardArrowDown, contentDescription = "收起键盘",
                     tint = visuals.textColor, modifier = Modifier.size(24.dp * LocalCandidateSizeFactor.current))
             }
         } else {
-            Spacer(Modifier.size(40.dp))
+            Spacer(Modifier.size(edgeSlot ?: 40.dp))
         }
     }
 }
