@@ -24,6 +24,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -35,6 +36,8 @@ import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
+import androidx.compose.ui.platform.LocalViewConfiguration
+import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
@@ -43,6 +46,7 @@ import com.kingzcheung.xime.keyboard.ToolbarButton
 import kotlin.math.abs
 
 internal const val BOTTOM_LIFT_ACTION_BUTTON_MIN_HEIGHT_DP = 28
+private const val BOTTOM_LIFT_CLIPBOARD_LONG_PRESS_MS = 240L
 
 /**
  * 固定键盘的底部留白（「调节键盘」里往上拖出来的那一条）。
@@ -109,6 +113,7 @@ internal fun BottomLiftSpacer(
                 iconSize = iconSize,
                 enabled = actionsEnabled,
                 testTag = "bottom-lift-clipboard",
+                longPressTimeoutMillis = BOTTOM_LIFT_CLIPBOARD_LONG_PRESS_MS,
                 onLongClick = onOpenFavorites,
                 onClick = onOpenClipboard,
             )
@@ -125,9 +130,18 @@ private fun BottomLiftActionIcon(
     iconSize: Dp,
     enabled: Boolean,
     testTag: String,
+    longPressTimeoutMillis: Long? = null,
     onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
+    val baseConfig = LocalViewConfiguration.current
+    val effectiveConfig = remember(baseConfig, longPressTimeoutMillis) {
+        if (longPressTimeoutMillis == null) baseConfig
+        else object : ViewConfiguration by baseConfig {
+            override val longPressTimeoutMillis: Long = longPressTimeoutMillis
+        }
+    }
+    CompositionLocalProvider(LocalViewConfiguration provides effectiveConfig) {
     val interactionSource = remember { MutableInteractionSource() }
     val rippleSize = (iconSize.value + 12f).dp
     Box(
@@ -159,6 +173,7 @@ private fun BottomLiftActionIcon(
                 modifier = Modifier.size(iconSize),
             )
         }
+    }
     }
 }
 
