@@ -12,7 +12,7 @@ import kotlinx.coroutines.withContext
 internal class ImePinyinSyllableSelector(private val service: XimeInputMethodService) {
     private fun eligible(state: InputUIState): Boolean = !state.isAsciiMode &&
         state.inputProfile.language == InputLanguage.CHINESE &&
-        state.inputProfile.scheme in setOf(InputScheme.PINYIN, InputScheme.DOUBLE_PINYIN) &&
+        state.inputProfile.capabilities.editablePinyin &&
         state.inputProfile.layout.kind != LayoutKind.T9
 
     fun request(revision: Long, reply: (PinyinSyllableChoices?) -> Unit) {

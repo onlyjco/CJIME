@@ -2392,9 +2392,13 @@ fun KeyboardView(
                                 }
                                 "emoji" -> viewModel.showOverlay(OverlayRoute.Emoji)
                                 else -> {
-                                    // 连续触摸可能早于下一次重组，提交时读取真实 Shift 状态。
+                                    // 连续触摸可能早于下一次重组，提交时读取真实 Shift 状态；显式选出的小写（长按或大写锁定时从 Shift 滑出）不再转大写。
                                     val shift = viewModel.shiftMode.value
-                                    callbacks.onKeyPress(shift.applyToKey(key), shift.isShifted)
+                                    if (com.kingzcheung.xime.service.ExplicitLowercase.peek(key)) {
+                                        callbacks.onKeyPress(key, false)
+                                    } else {
+                                        callbacks.onKeyPress(shift.applyToKey(key), shift.isShifted)
+                                    }
                                     viewModel.onCharacterTyped()
                                 }
                             }

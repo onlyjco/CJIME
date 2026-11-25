@@ -130,6 +130,7 @@ object SchemaManager {
                 file.delete()
             }
         }
+        invalidateRecognizerLeadsCache()
         Log.i(TAG, "rime/ directory cleaned")
     }
 
@@ -184,16 +185,17 @@ object SchemaManager {
                     val entryNames = mutableListOf<String>()
                     ZipFile(file).use { zip ->
                         zip.entries().asSequence().forEach { entry ->
-                            if (!entry.isDirectory && !isAppleDouble(entry.name)) {
-                                entryNames.add(entry.name)
+                            val normalized = normalizeArchiveEntryName(entry.name)
+                            if (!entry.isDirectory && normalized.isNotEmpty() && !isAppleDouble(normalized)) {
+                                entryNames.add(normalized)
                             }
                         }
                     }
                     val baseDir = findSchemaBaseDir(entryNames)
                     ZipFile(file).use { zip ->
                         zip.entries().asSequence().forEach { entry ->
-                            val originalName = entry.name
-                            if (entry.isDirectory || isAppleDouble(originalName)) return@forEach
+                            val originalName = normalizeArchiveEntryName(entry.name)
+                            if (entry.isDirectory || originalName.isEmpty() || isAppleDouble(originalName)) return@forEach
                             val name = archiveTarget(originalName, baseDir) ?: return@forEach
                             if (isProtectedImportName(name)) return@forEach
                             val hash = zip.getInputStream(entry).use { streamSha256(it) }
@@ -208,8 +210,9 @@ object SchemaManager {
                         TarArchiveInputStream(GzipCompressorInputStream(input)).use { tarIn ->
                             var entry = tarIn.nextEntry
                             while (entry != null) {
-                                if (!entry.isDirectory && !isAppleDouble(entry.name)) {
-                                    entryNames.add(entry.name)
+                                val normalized = normalizeArchiveEntryName(entry.name)
+                                if (!entry.isDirectory && normalized.isNotEmpty() && !isAppleDouble(normalized)) {
+                                    entryNames.add(normalized)
                                 }
                                 entry = tarIn.nextEntry
                             }
@@ -220,8 +223,8 @@ object SchemaManager {
                         TarArchiveInputStream(GzipCompressorInputStream(input)).use { tarIn ->
                             var entry = tarIn.nextEntry
                             while (entry != null) {
-                                val originalName = entry.name
-                                if (entry.isDirectory || isAppleDouble(originalName)) {
+                                val originalName = normalizeArchiveEntryName(entry.name)
+                                if (entry.isDirectory || originalName.isEmpty() || isAppleDouble(originalName)) {
                                     entry = tarIn.nextEntry
                                     continue
                                 }
@@ -295,7 +298,9 @@ object SchemaManager {
             val sha256Map = computeTargetSha256Map(context, packageId)
             FileLogger.i(TAG, "installPackageFromMarketDir: computed sha256 for ${sha256Map.size} files")
 
-            val conflicts = SchemaManifestManager.detectConflicts(context, packageId, targetFiles, sha256Map)
+            val conflicts = SchemaManifestManager.detectConflicts(
+                context, packageId, targetFiles, sha256Map, overwriteUserConfig = !fromMarket,
+            )
             if (conflicts.isNotEmpty() && !replaceConflictingFiles) {
                 FileLogger.w(TAG, "installPackageFromMarketDir: conflicts detected: ${conflicts.map { "${it.fileName} (${it.claimedBy})" }}")
                 return@withContext InstallFromDirResult(success = false, conflicts = conflicts)
@@ -392,6 +397,7 @@ object SchemaManager {
                 LanguagePreferences.enableForSchema(context, firstSchema)
             }
 
+            invalidateRecognizerLeadsCache()
             FileLogger.i(TAG, "installPackageFromMarketDir: success for $packageId, firstSchema=$firstSchema")
             InstallFromDirResult(success = true, newSchemaIds = newIds, unresolvedDeps = unresolved,
                 parseFailures = parseFailures, resourcesOnly = definitions.isEmpty(), keptExistingFiles = keptExisting)
@@ -411,7 +417,8 @@ object SchemaManager {
                 val names = mutableListOf<String>()
                 ZipFile(archiveFile).use { zip ->
                     zip.entries().asSequence().forEach { entry ->
-                        if (!entry.isDirectory && !isAppleDouble(entry.name)) names.add(entry.name)
+                        val normalized = normalizeArchiveEntryName(entry.name)
+                        if (!entry.isDirectory && normalized.isNotEmpty() && !isAppleDouble(normalized)) names.add(normalized)
                     }
                 }
                 names
@@ -421,7 +428,8 @@ object SchemaManager {
                 TarArchiveInputStream(GzipCompressorInputStream(archiveFile.inputStream().buffered())).use { tar ->
                     var entry = tar.nextEntry
                     while (entry != null) {
-                        if (!entry.isDirectory && !isAppleDouble(entry.name)) names.add(entry.name)
+                        val normalized = normalizeArchiveEntryName(entry.name)
+                        if (!entry.isDirectory && normalized.isNotEmpty() && !isAppleDouble(normalized)) names.add(normalized)
                         entry = tar.nextEntry
                     }
                 }
@@ -704,6 +712,13 @@ object SchemaManager {
         }
 
         schemas.sortBy { it.name }
+        val extGlideIds = runCatching {
+            com.kingzcheung.xime.glide.ExternalGlideEncodings.parse(
+                SettingsPreferences.getPrefsPublic(context)
+                    .getString(com.kingzcheung.xime.glide.ExternalGlideEncodings.KEY, null)
+            ).keys
+        }.getOrDefault(emptySet())
+        InputProfiles.updateExternalGlideEncodings(extGlideIds)
         InputProfiles.updateInstalled(schemas)
         return schemas
     }
@@ -797,7 +812,9 @@ object SchemaManager {
         val file = File(getRimeDir(context), "$schemaId.schema.yaml")
         if (!file.exists()) return null
         return try {
-            val entry = yaml.decodeFromString(SchemaYaml.serializer(), file.readText().trimStart('\uFEFF')).schema
+            val text = file.readText().trimStart('\uFEFF')
+            val block = extractSchemaBlock(text) ?: return null
+            val entry = yaml.decodeFromString(SchemaYaml.serializer(), block).schema
             ChineseSchemas.displayName(schemaId, entry.name).ifEmpty { null }
         } catch (e: Exception) {
             try { Log.e(TAG, "Failed to parse schema name for $schemaId", e) } catch (_: Exception) {}
@@ -806,6 +823,10 @@ object SchemaManager {
     }
 
     @Volatile private var recognizerLeads: Pair<String, Set<Char>>? = null
+
+    fun invalidateRecognizerLeadsCache() {
+        recognizerLeads = null
+    }
 
     /**
      * 导入方案作者自己写的 recognizer/patterns 里以固定字符开头的规则（`^V` 计算、`` ^` `` 部件组字）的开头字符（GitHub #118）。
@@ -1141,10 +1162,28 @@ object SchemaManager {
 
     /** 两个卸载入口使用同一个结果，失败时不改启用列表、下载文件或市场标记。 */
     suspend fun uninstallPackage(context: Context, packageId: String): UninstallResult {
+        val beforeSchemas = discoverSchemas(context).map { it.schemaId }.toSet()
         val result = SchemaManifestManager.uninstallWithManifest(context, packageId)
         if (!result.success) return result
+        invalidateRecognizerLeadsCache()
         SettingsPreferences.removeInstalledMarketId(context, packageId)
         val available = discoverSchemas(context).map { it.schemaId }.toSet()
+        val removedIds = (beforeSchemas - available) + packageId
+        if (removedIds.isNotEmpty()) {
+            removedIds.forEach { SchemaLanguageChoice.remove(context, it) }
+            val prefs = SettingsPreferences.getPrefsPublic(context)
+            val oldMap = com.kingzcheung.xime.glide.ExternalGlideEncodings.parse(
+                prefs.getString(com.kingzcheung.xime.glide.ExternalGlideEncodings.KEY, null)
+            )
+            val newMap = oldMap - removedIds
+            if (newMap.size != oldMap.size) {
+                prefs.edit().putString(
+                    com.kingzcheung.xime.glide.ExternalGlideEncodings.KEY,
+                    com.kingzcheung.xime.glide.ExternalGlideEncodings.format(newMap)
+                ).apply()
+                InputProfiles.updateExternalGlideEncodings(newMap.keys)
+            }
+        }
         val previous = getEnabledSchemas(context)
         val remaining = previous.filter { it in available }
         if (remaining != previous) setEnabledSchemas(context, remaining)
@@ -1267,7 +1306,11 @@ object SchemaManager {
                 ImportResult(false)
             }
         } else {
-            // 非压缩包：直接放入 rime/ 目录，不经过 market
+            // 非压缩包：直接放入 rime/ 目录，不经过 market；仍需阻断系统受保护文件和路径穿越。
+            if (name.isBlank() || name == "." || name == ".." || '/' in name || '\\' in name || isProtectedImportName(name)) {
+                FileLogger.w(TAG, "Refuse direct import of protected/unsafe file: $name")
+                return@withContext ImportResult(false)
+            }
             val rimeDir = getRimeDir(context)
             try {
                 rimeDir.mkdirs()
@@ -1275,6 +1318,7 @@ object SchemaManager {
                 inputStream.use { input ->
                     target.outputStream().use { output -> input.copyTo(output) }
                 }
+                invalidateRecognizerLeadsCache()
                 // 如果是 .schema.yaml 文件，自动启用
                 if (autoEnable && name.endsWith(".schema.yaml")) {
                     val schemaId = name.removeSuffix(".schema.yaml")
@@ -1302,7 +1346,7 @@ object SchemaManager {
                 else -> context.contentResolver.openInputStream(uri)
             } ?: return@withContext ImportResult(false)
 
-            saveImportedFile(context, displayName, inputStream)
+            saveImportedFile(context, displayName, inputStream, stageSchemeFiles = true)
         }
     }
 
@@ -1329,13 +1373,18 @@ object SchemaManager {
      * 则返回 "rime-ice-main/"，解压时剥离此前缀。
      * 基目录下的子目录（如 cn_dicts/）会原样保留。
      */
+    /** Windows 压缩工具可能写出反斜杠路径分隔符，统一转为正斜杠并去掉前导斜杠。 */
+    internal fun normalizeArchiveEntryName(name: String): String =
+        name.replace('\\', '/').trimStart('/')
+
     internal fun findSchemaBaseDir(entryNames: List<String>): String {
-        val schemaEntries = entryNames.filter { it.endsWith(".schema.yaml") }
+        val normalized = entryNames.map(::normalizeArchiveEntryName).filter { it.isNotBlank() }
+        val schemaEntries = normalized.filter { it.endsWith(".schema.yaml") }
         if (schemaEntries.isEmpty()) {
             // 无 .schema.yaml 的包(如 rime-essay 只含 essay.txt、rime-prelude 含 symbols.yaml）：
             // 若所有条目同处唯一壳目录（GitHub 归档形如 <repo>-<branch>/），剥掉它，
             // 否则文件会落进子目录（rime/rime-essay-master/essay.txt）导致 rime 读不到。
-            val files = entryNames.filter { it.isNotBlank() }
+            val files = normalized
             if (files.isEmpty() || files.any { !it.contains('/') }) return ""
             val tops = files.map { it.substringBefore('/') }.distinct()
             return if (tops.size == 1) "${tops[0]}/" else ""
@@ -1357,7 +1406,8 @@ object SchemaManager {
 
     // 多平台发行包常把 Rime、Fcitx 和其它码表放在并列目录；只安装选定 Rime 根下的资源。
     private fun archiveTarget(entry: String, baseDir: String): String? =
-        entry.takeIf { it.startsWith(baseDir) }?.removePrefix(baseDir)
+        normalizeArchiveEntryName(entry).takeIf { it.isNotEmpty() && it.startsWith(baseDir) }?.removePrefix(baseDir)
+            ?.takeIf { it.isNotEmpty() }
 
     private fun importZip(context: Context, uri: Uri, targetDir: File): Boolean {
         try {
@@ -1367,7 +1417,8 @@ object SchemaManager {
                 ZipInputStream(input.buffered()).use { zis ->
                     var entry = zis.nextEntry
                     while (entry != null) {
-                        if (!entry.isDirectory && !isAppleDouble(entry.name)) entryNames.add(entry.name)
+                        val normalized = normalizeArchiveEntryName(entry.name)
+                        if (!entry.isDirectory && normalized.isNotEmpty() && !isAppleDouble(normalized)) entryNames.add(normalized)
                         zis.closeEntry()
                         entry = zis.nextEntry
                     }
@@ -1386,7 +1437,7 @@ object SchemaManager {
                 ZipInputStream(input.buffered()).use { zis ->
                     var entry = zis.nextEntry
                     while (entry != null) {
-                        val originalName = entry.name
+                        val originalName = normalizeArchiveEntryName(entry.name)
                         val name = archiveTarget(originalName, baseDir)
                         if (name != null && !entry.isDirectory && !isAppleDouble(originalName) && !isProtectedImportName(name)) {
                             val file = safeChild(targetDir, name)
@@ -1621,8 +1672,9 @@ object SchemaManager {
             val entryNames = mutableListOf<String>()
             ZipFile(zipFile).use { zip ->
                 zip.entries().asSequence().forEach { entry ->
-                    if (!entry.isDirectory && !isAppleDouble(entry.name)) {
-                        entryNames.add(entry.name)
+                    val normalized = normalizeArchiveEntryName(entry.name)
+                    if (!entry.isDirectory && normalized.isNotEmpty() && !isAppleDouble(normalized)) {
+                        entryNames.add(normalized)
                     }
                 }
             }
@@ -1636,8 +1688,8 @@ object SchemaManager {
             var count = 0
             ZipFile(zipFile).use { zip ->
                 zip.entries().asSequence().forEach { entry ->
-                    val originalName = entry.name
-                    if (entry.isDirectory || isAppleDouble(originalName)) return@forEach
+                    val originalName = normalizeArchiveEntryName(entry.name)
+                    if (entry.isDirectory || originalName.isEmpty() || isAppleDouble(originalName)) return@forEach
                     val name = archiveTarget(originalName, baseDir) ?: return@forEach
                     if (name == "default.yaml" && onPackageDefaults != null && entry.size in 1L..262144L) {
                         zip.getInputStream(entry).bufferedReader().use { onPackageDefaults(it.readText()) }
@@ -1686,8 +1738,9 @@ object SchemaManager {
             TarArchiveInputStream(GzipCompressorInputStream(tarGzFile.inputStream().buffered())).use { tarIn ->
                 var entry = tarIn.nextEntry
                 while (entry != null) {
-                    if (!entry.isDirectory && !isAppleDouble(entry.name)) {
-                        entryNames.add(entry.name)
+                    val normalized = normalizeArchiveEntryName(entry.name)
+                    if (!entry.isDirectory && normalized.isNotEmpty() && !isAppleDouble(normalized)) {
+                        entryNames.add(normalized)
                     }
                     entry = tarIn.nextEntry
                 }
@@ -1703,8 +1756,8 @@ object SchemaManager {
             TarArchiveInputStream(GzipCompressorInputStream(tarGzFile.inputStream().buffered())).use { tarIn ->
                 var entry = tarIn.nextEntry
                 while (entry != null) {
-                    val originalName = entry.name
-                    if (entry.isDirectory || isAppleDouble(originalName)) {
+                    val originalName = normalizeArchiveEntryName(entry.name)
+                    if (entry.isDirectory || originalName.isEmpty() || isAppleDouble(originalName)) {
                         entry = tarIn.nextEntry
                         continue
                     }

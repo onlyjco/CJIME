@@ -1976,9 +1976,13 @@ internal fun ShiftCapsKeyButton(
                     // 键面已是「分词」（打拼音中）：这一按只管分词，不按住 Shift、不拖出大写，键盘不闪大写，
                     // 也不会按住打出大写字母把拼音打断（#464）。
                     val splitTap = currentSplit?.invoke() == true
+                    val startedCapsLock = viewModel.shiftMode.value == ShiftMode.CAPS
                     // 按住 Shift 之前按下、还没抬的字母先按原样出（见 KeyPressOrder），不被这次 Shift 变成大写。
                     if (!splitTap) KeyPressOrder.settleAll()
-                    if (!splitTap) viewModel.beginShiftHold()
+                    if (!splitTap) {
+                        targets?.setLowercaseSlide(startedCapsLock)
+                        viewModel.beginShiftHold()
+                    }
                     var released = false
                     var dragged = false
                     var upTime = down.uptimeMillis

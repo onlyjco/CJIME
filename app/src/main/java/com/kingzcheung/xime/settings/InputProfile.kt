@@ -115,6 +115,19 @@ object InputProfiles {
      * 只是组字区的编码可以点开改（#565）：改的是方案收到的字母本身，不按全拼或双拼重排。
      */
     private val editableExternalIds = setOf("wanxiang", "wanxiang_pro", "wanxiang_lite", "wanxiang_pure")
+    @Volatile private var glideConfiguredExternalIds: Set<String> = emptySet()
+
+    /** 用户在「滑行输入」里为自定义方案指定了全拼/双拼编码时，同样开放编码编辑和音节条能力。 */
+    internal fun updateExternalGlideEncodings(ids: Set<String>) {
+        if (glideConfiguredExternalIds == ids) return
+        glideConfiguredExternalIds = ids
+        descriptions.clear()
+        if (installed.isNotEmpty()) {
+            installed = installed.mapValues { (id, profile) ->
+                profile.copy(capabilities = capabilities(profile.scheme, id))
+            }
+        }
+    }
 
     fun describe(id: String, language: InputLanguage? = null, scheme: InputScheme? = null): InputProfile {
         // Built-in descriptions are reused on every key; custom layouts remain live after edits.
@@ -141,7 +154,7 @@ object InputProfiles {
 
     private fun capabilities(scheme: InputScheme, id: String) = InputCapabilities(
         editablePinyin = scheme == InputScheme.PINYIN || scheme == InputScheme.DOUBLE_PINYIN ||
-            (scheme == InputScheme.EXTERNAL && id in editableExternalIds),
+            (scheme == InputScheme.EXTERNAL && (id in editableExternalIds || id in glideConfiguredExternalIds)),
         caseSensitiveCode = false,
     )
 

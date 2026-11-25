@@ -145,13 +145,14 @@ object SchemaManifestManager {
         schemeId: String,
         targetFiles: List<String>,
         newFileSha256: Map<String, String> = emptyMap(),
+        overwriteUserConfig: Boolean = false,
     ): List<FileConflictInfo> = withContext(Dispatchers.IO) {
         val registry = loadRegistry(context)
         val files = registry.optJSONObject("files") ?: JSONObject()
         val conflicts = mutableListOf<FileConflictInfo>()
         for (fileName in targetFiles) {
             val target = safeTarget(SchemaManager.getRimeDir(context), fileName)
-            if (!target.isFile || isUserDataFile(fileName)) continue
+            if (!target.isFile || (isUserDataFile(fileName) && !(overwriteUserConfig && isImportableUserConfig(fileName)))) continue
             val existingHash = fileSha256(target) ?: error("无法校验 $fileName")
             val newHash = newFileSha256[fileName] ?: continue
             val entry = files.optJSONObject(fileName)

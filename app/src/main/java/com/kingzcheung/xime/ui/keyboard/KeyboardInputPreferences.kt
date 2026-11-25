@@ -551,7 +551,9 @@ data class KeyboardInputPreferences(
                 personalChineseGlideLearning = prefs.getBoolean("personal_chinese_glide_learning", true),
                 deleteChineseGlideCharacter = prefs.getBoolean(DELETE_CHINESE_GLIDE_CHARACTER_KEY, false),
                 externalGlideEncodings = com.kingzcheung.xime.glide.ExternalGlideEncodings.parse(
-                    prefs.getString(com.kingzcheung.xime.glide.ExternalGlideEncodings.KEY, null)),
+                    prefs.getString(com.kingzcheung.xime.glide.ExternalGlideEncodings.KEY, null)).also {
+                    com.kingzcheung.xime.settings.InputProfiles.updateExternalGlideEncodings(it.keys)
+                },
                 glidePreview = prefs.getBoolean(GLIDE_PREVIEW_KEY, false),
                 letterLongPressMenu = prefs.getBoolean("letter_long_press_menu", false),
                 cornerSymbolInput = prefs.getBoolean(CORNER_SYMBOL_INPUT_KEY, true),
@@ -629,6 +631,7 @@ data class KeyboardInputPreferences(
             .putBoolean(DELETE_CHINESE_GLIDE_CHARACTER_KEY, deleteChineseGlideCharacter)
             .putString(com.kingzcheung.xime.glide.ExternalGlideEncodings.KEY,
                 com.kingzcheung.xime.glide.ExternalGlideEncodings.format(externalGlideEncodings))
+            .also { com.kingzcheung.xime.settings.InputProfiles.updateExternalGlideEncodings(externalGlideEncodings.keys) }
             .putBoolean(GLIDE_PREVIEW_KEY, glidePreview)
             .putBoolean("t9_flick_letters", t9FlickLetters)
             .putBoolean("t9_glide_typing", t9GlideTyping)

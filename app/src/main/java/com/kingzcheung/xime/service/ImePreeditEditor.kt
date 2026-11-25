@@ -268,10 +268,18 @@ internal class ImePreeditEditor(private val service: XimeInputMethodService) {
                 if (!owner.isActive() || !isOwnerCurrent(session)) return@withContext
                 if (session.isT9) service.keyboardCallbacks?.onT9RefreshAfterPreeditEdit?.invoke()
                 // A caret-only move leaves the host's text and composing span intact.
-                service.sessionController.updateUIWithResult(result, updateInputBoxComposition = changed)
-                // A host drag has already placed the cursor. Replaying queued positions here
-                // would pull the handle backwards while the user is still dragging it.
-                if (key?.startsWith("preedit_cursor:inline:") != true) service.showInlineEditCaret(next)
+                // 改字/退格且光标在编码中间时，把写组合区与放回光标合进同一批编辑，避免光标在编码末尾闪一下再跳回。
+                val restoreInlineCaret = key?.startsWith("preedit_cursor:inline:") != true
+                val batchIc = if (changed && restoreInlineCaret) service.currentInputConnection else null
+                batchIc?.beginBatchEdit()
+                try {
+                    service.sessionController.updateUIWithResult(result, updateInputBoxComposition = changed)
+                    // A host drag has already placed the cursor. Replaying queued positions here
+                    // would pull the handle backwards while the user is still dragging it.
+                    if (restoreInlineCaret) service.showInlineEditCaret(next)
+                } finally {
+                    batchIc?.endBatchEdit()
+                }
                 reply(next)
             }
         }

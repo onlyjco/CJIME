@@ -134,6 +134,14 @@ private fun ChineseOutputSection() {
             checked = input.greekLetters, onCheckedChange = { input.copy(greekLetters = it).save(context) },
             costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.GREEK_LETTERS)
         CandidateExtraLegend("greek-letters-legend", "pi", listOf("批", "皮"), "π", input.greekLetters)
+        HorizontalDivider()
+        var smartPunct by remember { mutableStateOf(com.kingzcheung.xime.service.SmartPunctuation.isEnabled(context)) }
+        SettingsToggleItem(Icons.TwoTone.Translate, "智能标点",
+            "在数字或英文字母后输入标点符号时自动转为半角",
+            checked = smartPunct, onCheckedChange = {
+                smartPunct = it
+                com.kingzcheung.xime.service.SmartPunctuation.setEnabled(context, it)
+            })
     }
 }
 

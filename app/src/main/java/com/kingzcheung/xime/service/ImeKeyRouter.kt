@@ -798,11 +798,17 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         publishUi {
             if (!service.rimeEngine.isCandidateRevisionCurrent(result.engineRevision)) return@publishUi
             if (clearPreviousAssociation) service.candidateState.value = service.candidateState.value.copy(associationCandidates = emptyList())
-            service.sessionController.updateUIWithResult(
-                transformed?.let { result.copy(candidates = it.candidates.toTypedArray()) } ?: result,
-                transformed?.actions ?: emptyList()
-            )
-            if (caretSnapshot != null) service.showInlinePinyinCaret(caretSnapshot, state.inputSessionId, state.currentSchemaId)
+            val batchIc = if (caretSnapshot != null) service.currentInputConnection else null
+            batchIc?.beginBatchEdit()
+            try {
+                service.sessionController.updateUIWithResult(
+                    transformed?.let { result.copy(candidates = it.candidates.toTypedArray()) } ?: result,
+                    transformed?.actions ?: emptyList()
+                )
+                if (caretSnapshot != null) service.showInlinePinyinCaret(caretSnapshot, state.inputSessionId, state.currentSchemaId)
+            } finally {
+                batchIc?.endBatchEdit()
+            }
             if (afterUpdate != null) afterUpdate()
         }
     }
@@ -1019,8 +1025,14 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
             SettingsPreferences.getPrefsPublic(service).getBoolean("personal_chinese_glide_learning", true)
 
     private fun recordPersonalChineseGlideCommit(inputCode: String, committedText: String) {
-        if (!personalChineseGlideLearningActive() || !chineseKeyboardActive()) return
-        val sessionId = service.uiState.value.inputSessionId
+        val ui = service.uiState.value
+        val extGlideConfigured = ui.inputProfile.scheme == com.kingzcheung.xime.settings.InputScheme.EXTERNAL &&
+            com.kingzcheung.xime.glide.ExternalGlideEncodings.parse(
+                SettingsPreferences.getPrefsPublic(service)
+                    .getString(com.kingzcheung.xime.glide.ExternalGlideEncodings.KEY, null)
+            ).containsKey(ui.currentSchemaId)
+        if (!personalChineseGlideLearningActive() || ui.isAsciiMode || (!chineseKeyboardActive() && !extGlideConfigured)) return
+        val sessionId = ui.inputSessionId
         val schemaKey = currentGlideLearningKey()
         val filesDir = service.filesDir
         service.serviceScope.launch(Dispatchers.IO) {
@@ -1147,13 +1159,19 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                         // 这一笔的键是成批送的，不经 sendTransformedResult：双拼打第一个键时留到出结果才清的
                         // 上一次联想（deferAssociationClear）要在这里清，否则上屏后接着划，旧联想词还挂在候选栏。
                         service.candidateState.value = service.candidateState.value.copy(associationCandidates = emptyList())
-                        service.sessionController.updateUIWithResult(
-                            transformed?.let { result.copy(candidates = it.candidates.toTypedArray()) } ?: result,
-                            transformed?.actions ?: emptyList(),
-                            updateInputBoxComposition = service.isGlidePreviewHeld(previewToken),
-                        )
-                        service.finishGlidePreview(previewToken, true)
-                        service.showInlinePinyinCaret(caretSnapshot, glideSession, glideSchema)
+                        val batchIc = service.currentInputConnection
+                        batchIc?.beginBatchEdit()
+                        try {
+                            service.sessionController.updateUIWithResult(
+                                transformed?.let { result.copy(candidates = it.candidates.toTypedArray()) } ?: result,
+                                transformed?.actions ?: emptyList(),
+                                updateInputBoxComposition = service.isGlidePreviewHeld(previewToken),
+                            )
+                            service.finishGlidePreview(previewToken, true)
+                            service.showInlinePinyinCaret(caretSnapshot, glideSession, glideSchema)
+                        } finally {
+                            batchIc?.endBatchEdit()
+                        }
                     } else {
                         // 这一笔的键已经进了引擎，只是读到的结果过期了：按引擎现在的状态再刷一次，别让打进去的字看不见。
                         FileLogger.w("GlideDrop", "glide finish stale result=${result != null}")

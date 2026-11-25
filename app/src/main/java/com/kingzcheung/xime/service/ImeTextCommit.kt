@@ -265,17 +265,31 @@ internal class ImeTextCommit(private val service: XimeInputMethodService) {
                 return@literal
             }
             if (owner != service.uiState.value.inputSessionId) return@literal
-            // 数字后面点中文键盘的「。」「，」：先上半角（3.14、1,000），接着打的不是数字时再改成全角（11-25，见 DigitSeparatorGuess）。
-            val digitHalf = if (!hardware && !emailDomain && paired == literal &&
-                engine.getInput().isEmpty() && service.t9PartialSegments.isEmpty())
-                DigitSeparatorGuess.halfFor(literal)?.takeIf { digitSeparatorAllowed() } else null
-            val half = digitHalf?.takeIf {
-                withContext(Dispatchers.Main) {
-                    DigitSeparatorGuess.digitBefore(runCatching { service.currentInputConnection?.getTextBeforeCursor(1, 0) }.getOrNull())
+            // 智能标点开关：数字或英文字母后输入中文/全角标点符号时，自动全部转为半角（并按半角重新配对成对符号）。
+            var effectiveOutput = output
+            var effectiveCaret = caret
+            if (!hardware && !emailDomain && SmartPunctuation.isEnabled(service) && digitSeparatorAllowed()) {
+                val halfLiteral = SmartPunctuation.toHalfWidth(literal)
+                if (halfLiteral != literal) {
+                    val preceding: CharSequence? = if (engine.getInput().isNotEmpty()) {
+                        engine.getInput()
+                    } else if (service.t9PartialSegments.isNotEmpty()) {
+                        service.t9PartialSegments.last().text
+                    } else {
+                        withContext(Dispatchers.Main) {
+                            runCatching { service.currentInputConnection?.getTextBeforeCursor(1, 0) }.getOrNull()
+                        }
+                    }
+                    if (SmartPunctuation.isAfterDigitOrEnglish(preceding)) {
+                        val (halfPaired, halfCaret) = if (!service.isTerminalEditor() &&
+                            com.kingzcheung.xime.settings.SettingsPreferences.isPairedSymbolsEnabled(service))
+                            PairedSymbols.commitFor(halfLiteral) else halfLiteral to CommitCaret.NONE
+                        effectiveOutput = halfPaired
+                        effectiveCaret = halfCaret
+                    }
                 }
             }
-            val committed = commitCompositionAndLiteral(half?.toString() ?: output, asTyped = true, caret = caret)
-            if (committed && half != null) withContext(Dispatchers.Main) { service.digitSeparatorGuess.arm(half) }
+            val committed = commitCompositionAndLiteral(effectiveOutput, asTyped = true, caret = effectiveCaret)
             // 打 @（中文符号面板是全角 ＠）时给邮箱后缀（默认开），给着后缀时接着打的点、数字重新筛；
             // 邮箱框走上面的直接上屏，在那里给。
             if (committed && (literal == "@" || literal == "＠" ||

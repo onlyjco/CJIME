@@ -314,16 +314,19 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
         }
     }
 
-    /** 写读音后把输入框光标挪到读音里第 [caret] 个字后面（setComposingText 只能把光标放在两头）。 */
+    /** 写读音后把输入框光标挪到读音里第 [caret] 个字后面（setComposingText 只能把光标放在两头）；放进同一批编辑避免光标在末尾闪一下。 */
     private fun showInputBoxCompositionWithCaret(ic: android.view.inputmethod.InputConnection, text: String, caret: Int) {
         ic.beginBatchEdit()
-        val written = try { ic.setComposingText(text, 1) } finally { ic.endBatchEdit() }
-        if (!written) return
-        service.markInputBoxComposing(text)
-        val value = runCatching { ic.getExtractedText(android.view.inputmethod.ExtractedTextRequest(), 0) }.getOrNull() ?: return
-        if (value.startOffset < 0 || value.selectionStart != value.selectionEnd) return
-        val position = value.startOffset + value.selectionStart - (text.length - caret)
-        if (position >= 0 && ic.setSelection(position, position)) service.moveInlineCompositionCaret(caret)
+        try {
+            if (!ic.setComposingText(text, 1)) return
+            service.markInputBoxComposing(text)
+            val value = runCatching { ic.getExtractedText(android.view.inputmethod.ExtractedTextRequest(), 0) }.getOrNull() ?: return
+            if (value.startOffset < 0 || value.selectionStart != value.selectionEnd) return
+            val position = value.startOffset + value.selectionStart - (text.length - caret)
+            if (position >= 0 && ic.setSelection(position, position)) service.moveInlineCompositionCaret(caret)
+        } finally {
+            ic.endBatchEdit()
+        }
     }
 
     internal fun updateUIWithResult(

@@ -26,6 +26,12 @@ internal class ShiftSlideTargets(
     /** 这次按住 Shift 已经拖出过 Shift 键：14 键据此把双字母键拆成单字母键，直到松开 Shift（用户 10-21）。 */
     var dragging by mutableStateOf(false)
         private set
+    /** 大写锁定时从 Shift 滑到字母：临时输入小写字母，松手后仍保持大写锁定。 */
+    var lowercaseSlide by mutableStateOf(false)
+        private set
+    fun setLowercaseSlide(enabled: Boolean) {
+        lowercaseSlide = enabled
+    }
     /** 按住符号键当 Ctrl：字母键改显示快捷键，拖到字母上松手发 Ctrl+字母，不选候选（用户 10-24）。 */
     var ctrl by mutableStateOf(false)
         private set
@@ -122,7 +128,15 @@ internal class ShiftSlideTargets(
             val letter = char.uppercaseChar().toString()
             val cell = Rect(bounds.left + bounds.width * index / letters.length, bounds.top,
                 bounds.left + bounds.width * (index + 1) / letters.length, bounds.bottom)
-            Target(letter, cell, ctrlLetterOf(char)) { commit(letter) }
+            Target(letter, cell, ctrlLetterOf(char)) {
+                if (lowercaseSlide) {
+                    val lower = char.lowercaseChar().toString()
+                    com.kingzcheung.xime.service.ExplicitLowercase.mark(lower)
+                    commit(lower)
+                } else {
+                    commit(letter)
+                }
+            }
         }
     }
     fun remove(id: Any) {
@@ -204,6 +218,7 @@ internal class ShiftSlideTargets(
     fun finish() {
         clearDrag()
         dragging = false
+        lowercaseSlide = false
         ctrl = false
         ctrlFaces = false
         ctrlShortcut = null

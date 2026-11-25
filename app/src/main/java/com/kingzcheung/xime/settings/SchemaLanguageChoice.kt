@@ -33,6 +33,13 @@ object SchemaLanguageChoice {
         if (language != null) LanguagePreferences.enableForSchema(context, schemaId)
     }
 
+    /** 卸载方案时清理该方案保存的语言覆盖项，避免残留脏配置。 */
+    fun remove(context: Context, schemaId: String) {
+        runCatching {
+            SettingsPreferences.getPrefsPublic(context).edit().remove(PREFIX + schemaId).apply()
+        }
+    }
+
     /**
      * CyIME 自带或自己生成的方案（英文词典依赖、Easy English Nano、全拼漏键候选等）也没写语言，
      * 但不是用户导入的输入方案，不给选语言，也不列进「导入方案的语言」。

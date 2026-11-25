@@ -12,6 +12,12 @@ internal object ExplicitLowercase {
         pending = if (letter.length == 1 && letter[0].isLowerCase()) letter to now else null
     }
 
+    /** 只读检查：用于键盘按键分发前避免把显式小写再次按 Shift 转成大写。 */
+    fun peek(key: String, now: Long = android.os.SystemClock.uptimeMillis()): Boolean {
+        val (letter, at) = pending ?: return false
+        return letter == key && now - at in 0..TTL_MS
+    }
+
     fun consume(key: String, now: Long = android.os.SystemClock.uptimeMillis()): Boolean {
         val (letter, at) = pending ?: return false
         pending = null

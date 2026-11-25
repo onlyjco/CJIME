@@ -168,6 +168,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("候选里显示表情", chinesePath, chinese, "表情 emoji 联想表情 候选表情 开心 爱心 笑脸"),
         SettingsSearchEntry("打符号名出符号", chinesePath, chinese, "符号 符号名 加号 减号 等号 问号 括号 引号 百分号 标点 打字出符号 数学符号"),
         SettingsSearchEntry("希腊字母", chinesePath, chinese, "希腊 希腊字母 西塔 派 圆周率 阿尔法 贝塔 伽马 德尔塔 兰姆达 西格玛 欧米伽 xita pi alpha theta 数学符号 物理符号"),
+        SettingsSearchEntry("智能标点", chinesePath, chinese, "智能标点 标点 半角 全角 数字 英文 自动半角 小数点 符号"),
         page("中文输入", languages, chinese, "中文 拼音 繁体 生僻字 日文汉字 韩文汉字 粤语字 时间日期 表情 符号名 希腊字母 纠错 模糊音 候选"),
         page("英文输入", languages, english, "英文 英语 网址 邮箱 自动空格 空格 邮箱后缀"),
         SettingsSearchEntry("导入方案", languages, "languages", "导入 导入方案 rime 方案文件 压缩包 zip yaml 外部方案 第三方方案 自定义方案 万象 雾凇 白霜 怎么导入 导入在哪"),
