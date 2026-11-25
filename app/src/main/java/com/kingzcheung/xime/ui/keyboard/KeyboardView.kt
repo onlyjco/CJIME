@@ -404,7 +404,7 @@ fun KeyboardView(
     // 背景单独一段：悬浮时在卡片里往下画到拖动条底（bleedBottomOut/In），整张卡片一张图。
     val contentPaint = if (state.handwritingExpanded) null else Modifier
         .keyboardBackground(themeScheme.keyboardBackground, state.isDarkTheme, keyboardBgColor,
-            imageSlot = backgroundImageSlot)
+            frostedGlass = inputPreferences.frostedGlass, imageSlot = backgroundImageSlot)
         .splitGapCutout(splitKeyboardGap)
     val panelMaterial = Modifier.inheritKeyboardBackground(!state.handwritingExpanded)
     // 面板透出键盘本身的背景时（玻璃，或图片、渐变主题），面板下面的按键要挖掉；见 panelSeesKeyboardBackground。
@@ -424,12 +424,25 @@ fun KeyboardView(
     }
     val inlineMotionScope = rememberCoroutineScope()
     val inlineEditor = remember(state.inputSessionId) { InlineQuickActionEditor(inlineMotionScope) }
+    val menuOverlayOpen = (page as? KeyboardPage.Overlay)?.route is OverlayRoute.Menu
+    var saveHintShownInMenu by remember(state.inputSessionId, menuOverlayOpen) { mutableStateOf(false) }
     var showInlineSaveHint by remember(state.inputSessionId) { mutableStateOf(false) }
-    LaunchedEffect(inlineEditor.active) {
-        showInlineSaveHint = inlineEditor.active
-        if (inlineEditor.active) {
-            kotlinx.coroutines.delay(2500)
+    LaunchedEffect(inlineEditor.active, menuOverlayOpen) {
+        if (inlineEditor.active && menuOverlayOpen && !saveHintShownInMenu) {
+            saveHintShownInMenu = true
+            showInlineSaveHint = true
+            kotlinx.coroutines.delay(1000L)
             showInlineSaveHint = false
+        } else if (!inlineEditor.active) {
+            showInlineSaveHint = false
+        }
+    }
+    var showInlineEditHint by remember(state.inputSessionId) { mutableStateOf(false) }
+    LaunchedEffect(menuOverlayOpen) {
+        showInlineEditHint = menuOverlayOpen && !inlineEditor.active
+        if (showInlineEditHint) {
+            kotlinx.coroutines.delay(1000L)
+            showInlineEditHint = false
         }
     }
     LaunchedEffect(page) {
@@ -442,6 +455,7 @@ fun KeyboardView(
     // 按住空格说话滑到右上角锁定：空格和键区右上角浮出的锁按钮共用这一份状态（SpaceVoiceLock）。
     val spaceVoiceLock = remember { SpaceVoiceLockState() }
     CompositionLocalProvider(
+        androidx.compose.foundation.LocalIndication provides NoKeyboardIndication,
         LocalInlineQuickActionEditor provides inlineEditor,
         LocalSpaceVoiceLock provides spaceVoiceLock,
         LocalKeyGapLightVoice provides gapLightVoice,
@@ -1085,19 +1099,24 @@ fun KeyboardView(
                     sentenceApplying -> true
                     key == "space" || key == "enter" -> { applySentenceEdit(false); true }
                     key == "clear_all" || key == "clear_composition" -> {
+                        val atSentenceEnd = owner.end == owner.snapshot.sentence.length
                         if (!viewModel.candidatePageExpanded.value && sentenceCode.isEmpty() && sentenceConfirmed.isEmpty()) {
-                            // 局部内容已删空且展开页已收起：用剩余原始编码重建未选词输入态后清空，
-                            // 既不误清宿主正文，下滑撤回也能恢复局部删除后的未选词编码。
-                            sentenceApplying = true
-                            callbacks.onPrepareEmptySentenceClear?.invoke(owner) { applied ->
-                                if (sentenceEdit === owner) {
-                                    if (applied) {
-                                        closeSentenceEdit(restorePreview = false)
-                                        callbacks.onPreeditKeyInput = null
-                                        callbacks.onKeyPress("clear_composition_undoable", false)
-                                    } else sentenceApplying = false
-                                }
-                            } ?: run { sentenceApplying = false }
+                            if (atSentenceEnd) {
+                                applySentenceEdit(false)
+                            } else {
+                                // 局部内容已删空且展开页已收起：用剩余原始编码重建未选词输入态后清空，
+                                // 既不误清宿主正文，下滑撤回也能恢复局部删除后的未选词编码。
+                                sentenceApplying = true
+                                callbacks.onPrepareEmptySentenceClear?.invoke(owner) { applied ->
+                                    if (sentenceEdit === owner) {
+                                        if (applied) {
+                                            closeSentenceEdit(restorePreview = false)
+                                            callbacks.onPreeditKeyInput = null
+                                            callbacks.onKeyPress("clear_composition_undoable", false)
+                                        } else sentenceApplying = false
+                                    }
+                                } ?: run { sentenceApplying = false }
+                            }
                         } else {
                             sentenceCode = ""
                             sentenceWord = ""
@@ -1105,9 +1124,14 @@ fun KeyboardView(
                             sentenceConfirmed = emptyList()
                             sentenceReplaceOnType = false
                             sentenceJustSelected = false
-                            previewSentenceCode(owner)
-                            refreshSentenceWords(owner)
-                            if (!callbacks.isDeleteDragging()) viewModel.setCandidatePageExpanded(false)
+                            if (atSentenceEnd) {
+                                if (!callbacks.isDeleteDragging()) viewModel.setCandidatePageExpanded(false)
+                                applySentenceEdit(false)
+                            } else {
+                                previewSentenceCode(owner)
+                                refreshSentenceWords(owner)
+                                if (!callbacks.isDeleteDragging()) viewModel.setCandidatePageExpanded(false)
+                            }
                         }
                         true
                     }
@@ -1130,9 +1154,15 @@ fun KeyboardView(
                         sentenceJustSelected = false
                         sentenceReplaceOnType = false
                         sentenceWordCode = ""
-                        previewSentenceCode(owner)
-                        refreshSentenceWords(owner)
-                        if (sentenceCode.isEmpty()) viewModel.setCandidatePageExpanded(false)
+                        if (sentenceCode.isEmpty() && sentenceConfirmed.isEmpty() && owner.end == owner.snapshot.sentence.length) {
+                            // 框选到句尾且删空时直接落地删除并退出局部修改，避免滞留空态导致后续退格/标点/滑行异常。
+                            viewModel.setCandidatePageExpanded(false)
+                            applySentenceEdit(false)
+                        } else {
+                            previewSentenceCode(owner)
+                            refreshSentenceWords(owner)
+                            if (sentenceCode.isEmpty()) viewModel.setCandidatePageExpanded(false)
+                        }
                         true
                     }
                     typed != null -> {
@@ -1250,7 +1280,10 @@ fun KeyboardView(
                                 ((nineGlideMenu || state.isAsciiMode || chineseGlideMenu) && inputPreferences.cursorGesture != CursorGestureMode.KEYBOARD)))
                             ({ item.button.flipGesture(quickContext, inputPreferences, chineseGlideMenu, nineGlideMenu) }) else return null
                     ToolbarButton.SOUND -> ({
-                        SettingsPreferences.setSoundAndVibrationEnabled(quickContext, !(quickToggles.sound || quickToggles.vibration))
+                        val turningOn = !(quickToggles.sound || quickToggles.vibration)
+                        SettingsPreferences.setSoundAndVibrationEnabled(quickContext, turningOn)
+                        // 从关闭切到开启时，前序 toolbarFeedback() 因当时仍为关闭被跳过，开启后补触发一次声音与震动反馈。
+                        if (turningOn) toolbarFeedback()
                     })
                     ToolbarButton.FLOATING -> ({
                         viewModel.closeOverlay()
@@ -1308,7 +1341,8 @@ fun KeyboardView(
                 com.kingzcheung.xime.keyboard.ToolbarPressMenu(load = { load(plugin.pluginId) },
                     onChoose = { key, option -> toolbarFeedback(); choose(plugin.pluginId, key, option) })
             }
-            return ToolbarAction(item, onLongClick = openSettings, pressMenu = pressMenu, active = if (item is ToolbarButtonItem.Plugin)
+            val toolbarLongClick = if ((item as? ToolbarButtonItem.Builtin)?.button == ToolbarButton.CLIPBOARD) bottomLiftOpenFavorites else null
+            return ToolbarAction(item, onLongClick = openSettings, pressMenu = pressMenu, onToolbarLongClick = toolbarLongClick, active = if (item is ToolbarButtonItem.Plugin)
                 item.action == "open_panel" && toolPanelOpenFor(state.toolPanelVisible, state.toolPanelPluginId, item.pluginId)
                 else item is ToolbarButtonItem.Builtin && when (item.button) {
                 ToolbarButton.EDIT -> (page as? KeyboardPage.Overlay)?.route == OverlayRoute.Edit
@@ -1658,11 +1692,20 @@ fun KeyboardView(
             ) {
                 if (sentenceEdit != null) {
                     val owner = sentenceEdit!!
-                    CandidateBarState.ChineseCandidates(
-                        candidates = listOf(owner.sentence(sentenceReplacement(owner))) + sentenceWordIndices.map { sentenceWords[it].text },
-                        comments = emptyList(), inputText = sentenceCode, preeditText = sentenceCode,
-                        hasMore = sentenceWordIndices.isNotEmpty(),
-                    )
+                    val editedSentence = owner.sentence(sentenceReplacement(owner))
+                    val sentenceCandidates = buildList {
+                        if (editedSentence.isNotEmpty()) add(editedSentence)
+                        sentenceWordIndices.forEach { add(sentenceWords[it].text) }
+                    }
+                    if (sentenceCandidates.isEmpty()) {
+                        CandidateBarState.Idle
+                    } else {
+                        CandidateBarState.ChineseCandidates(
+                            candidates = sentenceCandidates,
+                            comments = emptyList(), inputText = sentenceCode, preeditText = sentenceCode,
+                            hasMore = sentenceWordIndices.isNotEmpty(),
+                        )
+                    }
                 } else if (showHandwritingCandidates) {
                     CandidateBarState.AssociationOnly(
                         candidates = handwritingCandidates,
@@ -2292,10 +2335,11 @@ fun KeyboardView(
                 )
                 }
             }
-            val spaceStrokeController = remember(candidatePageExpanded, state.isAsciiMode, showHandwritingCandidates, strokeTable, state.inputSessionId, state.currentSchemaId) {
+            val spaceStrokeController = remember(candidatePageExpanded, state.isAsciiMode, showHandwritingCandidates, strokeTable, state.inputSessionId, state.currentSchemaId, inputPreferences.spaceStrokeFilter) {
                 SpaceStrokeController(
                     canTrigger = {
-                        !candidatePageExpanded && !state.isAsciiMode && !showHandwritingCandidates && strokeTable != null &&
+                        inputPreferences.spaceStrokeFilter &&
+                            !candidatePageExpanded && !state.isAsciiMode && !showHandwritingCandidates && strokeTable != null &&
                             candidateState.value.let { cs ->
                                 cs.isComposing || cs.candidates.isNotEmpty() || cs.associationCandidates.isNotEmpty()
                             }
@@ -2377,6 +2421,27 @@ fun KeyboardView(
                     MainType.FULL -> {
                         val suppressCursorMove = remember { mutableStateOf(false) }
                         val cursorMod = keyboardSwipeCursor(callbacks.onCursorMove, inputPreferences, suppressCursorMove)
+                        val keyAreaStrokeMod = Modifier.keyboardAreaStrokeGesture(
+                            enabled = inputPreferences.keyboardStrokeFilter &&
+                                keyboardState !is KeyboardLayoutState.Stroke &&
+                                keyboardState !is KeyboardLayoutState.English,
+                            isT9 = keyboardState is KeyboardLayoutState.T9Pinyin,
+                            canTrigger = {
+                                !candidatePageExpanded && !state.isAsciiMode && !showHandwritingCandidates &&
+                                    strokeTable != null && sentenceEdit == null &&
+                                    candidateState.value.let { cs ->
+                                        cs.isComposing || cs.candidates.isNotEmpty() || cs.associationCandidates.isNotEmpty()
+                                    }
+                            },
+                            onStroke = { ch ->
+                                addCandidateStroke(ch)
+                                if (!candidatePageExpanded && sentenceEdit == null && candidateState.value.candidates.isNotEmpty()) {
+                                    callbacks.onExtendCandidateStrip?.invoke()
+                                }
+                            },
+                            onDrawing = { strokeDrawing = it },
+                            onInk = ::updateCandidateStrokeInk,
+                        )
 
                         val fullScreenOnKeyPress: (String) -> Unit = { key ->
                             when (key) {
@@ -2510,7 +2575,7 @@ fun KeyboardView(
                                 callbacks = if (previewLetterLayout) remember { KeyboardCallbacks(onKeyPress = { _, _ -> }, onCandidateSelect = {}) }
                                     else callbacks,
                                 onKeyPress = handleKeyboardKeyPress,
-                                modifier = Modifier.weight(1f).then(cursorMod),
+                                modifier = Modifier.weight(1f).then(keyAreaStrokeMod).then(cursorMod),
                                 t9Controller = t9Controller,
                             )
                         }
@@ -3086,7 +3151,7 @@ fun KeyboardView(
         )
         }
         InlineQuickActionOverlay(inlineEditor, toolbarQuickActions + menuQuickActions, showInlineSaveHint,
-            keyBgColor, keyTextColor, accentColor)
+            keyBgColor, keyTextColor, accentColor, showEditHint = showInlineEditHint)
         // 画在面板之后：从菜单或打开着的面板上点「无痕」时，确认卡也在最上面。
         if (incognitoConfirm) {
             var incognitoDontAskAgain by remember { mutableStateOf(false) }

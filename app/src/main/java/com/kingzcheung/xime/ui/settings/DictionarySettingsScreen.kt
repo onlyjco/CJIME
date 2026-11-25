@@ -74,7 +74,14 @@ fun DictionarySettingsContent(
     @Suppress("UNUSED_PARAMETER") onCellDictionaries: () -> Unit = {},
     onContribute: () -> Unit = {},
 ) {
+    val dictTabs = listOf("我的短语", "导入词库", "删掉的候选", "查词")
     var selectedDictTab by remember { mutableIntStateOf(0) }
+    val searchRequest = SettingsSearchFocus.request
+    LaunchedEffect(searchRequest) {
+        val keys = searchRequest?.keys ?: return@LaunchedEffect
+        val tabIndex = dictTabs.indexOfFirst { it in keys }
+        if (tabIndex >= 0) selectedDictTab = tabIndex
+    }
     val customPhraseVM: CustomPhraseViewModel = viewModel(key = "dict_custom_phrase")
     val customPhraseState by customPhraseVM.uiState.collectAsStateWithLifecycle()
     LaunchedEffect(Unit) { customPhraseVM.loadShared() }
@@ -83,7 +90,7 @@ fun DictionarySettingsContent(
         modifier = Modifier.imePadding(),
         topBar = {
             TopAppBar(
-                title = { Text("词库") },
+                title = { Text("词库", modifier = Modifier.settingsSearchTitleAnchor("词库")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
@@ -108,12 +115,18 @@ fun DictionarySettingsContent(
     ) { innerPadding ->
         Column(modifier = Modifier.fillMaxSize().padding(innerPadding)) {
             PrimaryTabRow(selectedTabIndex = selectedDictTab, containerColor = MaterialTheme.colorScheme.surface) {
-                listOf("我的短语", "导入词库", "删掉的候选", "查词").forEachIndexed { index, title ->
+                dictTabs.forEachIndexed { index, title ->
                     // 四个标签平分一行，窄屏一格不到 90dp：文字标签自带左右各 16dp 留白，「删掉的候选」放不下
                     // 被截成「删掉的候」（#352）。自己排内容，左右只留 4dp。
                     Tab(selected = selectedDictTab == index, onClick = { selectedDictTab = index }) {
                         Box(Modifier.height(48.dp).padding(horizontal = 4.dp), contentAlignment = Alignment.Center) {
-                            Text(title, maxLines = 1, softWrap = false, style = MaterialTheme.typography.titleSmall)
+                            Text(
+                                title,
+                                maxLines = 1,
+                                softWrap = false,
+                                style = MaterialTheme.typography.titleSmall,
+                                modifier = Modifier.settingsSearchTitleAnchor(title),
+                            )
                         }
                     }
                 }

@@ -287,7 +287,7 @@ fun LanguageKeyButton(
                     val menuJob = if (imePicker) scope.launch {
                         delay((menuHoldSeconds * 1000).roundToLong())
                         pickerShown = true
-                        view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                        view.performKeyboardHaptic(android.view.HapticFeedbackConstants.LONG_PRESS)
                         val imm = context.getSystemService(android.content.Context.INPUT_METHOD_SERVICE)
                             as? android.view.inputmethod.InputMethodManager
                         @Suppress("DEPRECATION")
@@ -303,7 +303,7 @@ fun LanguageKeyButton(
                         edgeScrollArmed = false
                         menuOpen = true
                         suppressCursorMove.value = true
-                        view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                        view.performKeyboardHaptic(android.view.HapticFeedbackConstants.LONG_PRESS)
                     } else null
                     try {
                         while (true) {

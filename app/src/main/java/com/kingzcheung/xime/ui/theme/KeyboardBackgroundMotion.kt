@@ -247,14 +247,20 @@ class BackgroundImageSlot {
     var fadeToken by mutableIntStateOf(0)
         private set
     private var key: Any? = null
+    private var lastGlass: Boolean? = null
 
-    /** [key] 是这张图本身（位图对象）：同一张图只换画法时不淡入淡出。 */
-    fun update(key: Any?, frame: () -> Rect?, draw: (DrawScope.() -> Unit)?) {
-        if (key != null && this.key != null && key !== this.key && this.draw != null) {
+    /** [key] 是这张图本身（位图对象）：同一张图只换画法时不淡入淡出；玻璃开关切换时直接切换不淡入。 */
+    fun update(key: Any?, frame: () -> Rect?, draw: (DrawScope.() -> Unit)?, glass: Boolean = false) {
+        val glassChanged = lastGlass != null && lastGlass != glass
+        if (glassChanged) {
+            previousDraw = null
+            fade.floatValue = 1f
+        } else if (key != null && this.key != null && key !== this.key && this.draw != null) {
             previousDraw = this.draw
             fade.floatValue = 0f
             fadeToken++
         }
+        lastGlass = glass
         this.key = key
         this.frame = frame
         this.draw = draw

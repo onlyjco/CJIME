@@ -250,7 +250,7 @@ fun PluginConfigFormScreen(
                 )
             }
         ) { padding ->
-            val listState = rememberLazyListState()
+            val listState = rememberSettingsSearchListState()
             LazyColumn(
                 state = listState,
                 modifier = Modifier.settingsGutterScroll(listState)

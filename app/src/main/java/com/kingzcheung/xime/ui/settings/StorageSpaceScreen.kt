@@ -120,7 +120,7 @@ fun StorageSpaceScreen(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             TopAppBar(
-                title = { Text("存储空间") },
+                title = { Text("存储空间", modifier = Modifier.settingsSearchTitleAnchor("存储空间")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(

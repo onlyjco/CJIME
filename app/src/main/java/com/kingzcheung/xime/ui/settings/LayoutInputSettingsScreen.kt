@@ -200,6 +200,10 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                 // 「键盘面板滑动光标」和滑行冲突：照常显示，被锁时置灰并写明被谁锁（见 InputGestureLocks）。
                 val glideLock = com.kingzcheung.xime.ui.keyboard.InputGestureLocks.lockFor(settings,
                     com.kingzcheung.xime.ui.keyboard.InputGestureLock.Option.GLIDE_TYPING, true)
+                val chineseGlideLock = glideLock ?: com.kingzcheung.xime.ui.keyboard.InputGestureLocks.lockFor(settings,
+                    com.kingzcheung.xime.ui.keyboard.InputGestureLock.Option.CHINESE_GLIDE_TYPING, true)
+                val t9GlideLock = glideLock ?: com.kingzcheung.xime.ui.keyboard.InputGestureLocks.lockFor(settings,
+                    com.kingzcheung.xime.ui.keyboard.InputGestureLock.Option.T9_GLIDE_TYPING, true)
                 SettingsSection(title = "布局", content = {
                     SettingsToggleItem(Icons.TwoTone.Gesture, "英文滑行",
                         "在英文 26 键上划过字母输入整个单词",
@@ -214,7 +218,7 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                         checked = settings.chineseGlideTyping, onCheckedChange = {
                             settings = settings.copy(chineseGlideTyping = it); settings.save(context)
                         },
-                        lockMessage = glideLock?.takeIf { !settings.chineseGlideTyping }?.message,
+                        lockMessage = chineseGlideLock?.takeIf { !settings.chineseGlideTyping }?.message,
                         costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.CHINESE_GLIDE)
                     ExternalGlideSchemeItems(settings) { settings = it; it.save(context) }
                     HorizontalDivider()
@@ -223,7 +227,7 @@ internal fun LayoutInputSettingsContent(category: LayoutInputCategory, onBack: (
                         checked = settings.t9GlideTyping, onCheckedChange = {
                             settings = settings.copy(t9GlideTyping = it); settings.save(context)
                         },
-                        lockMessage = glideLock?.takeIf { !settings.t9GlideTyping }?.message,
+                        lockMessage = t9GlideLock?.takeIf { !settings.t9GlideTyping }?.message,
                         costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.T9_GLIDE)
                 })
                 SettingsSection(title = "选项", content = {

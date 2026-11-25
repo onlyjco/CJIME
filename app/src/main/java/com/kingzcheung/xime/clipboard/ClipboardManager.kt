@@ -934,9 +934,15 @@ class ClipboardManager private constructor(private val context: Context) {
      * 固定的不动（固定的本来就排在最前，顺序是用户排的）；没有这条记录时什么都不做。
      */
     fun moveToTop(text: String, now: Long = System.currentTimeMillis()) {
+        val current = _clipboardItems.value
+        val item = current.filter { it.text == text && !it.isPinned }.maxByOrNull { it.timestamp } ?: return
+        val bumpedTime = maxOf(now, (current.maxOfOrNull { it.timestamp } ?: 0L) + 1L)
+        // 先同步更新内存列表排序，避免剪贴板保持打开或立刻重开时看到旧位置。
+        _clipboardItems.value = current.map {
+            if (it.id == item.id) it.copy(timestamp = bumpedTime) else it
+        }.sortedWith(compareByDescending<ClipboardItem> { it.isPinned }.thenByDescending { it.timestamp })
         scope.launch {
-            val item = _clipboardItems.value.filter { it.text == text && !it.isPinned }.maxByOrNull { it.timestamp } ?: return@launch
-            dao.updateTimestamp(item.id, now)
+            dao.updateTimestamp(item.id, bumpedTime)
         }
     }
 

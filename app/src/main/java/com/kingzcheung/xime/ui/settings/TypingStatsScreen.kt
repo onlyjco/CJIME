@@ -79,7 +79,7 @@ fun TypingStatsScreen(onBack: () -> Unit) {
 
     Scaffold(modifier = Modifier.testTag("typing-stats"), containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
-            TopAppBar(title = { Text("打字统计") }, navigationIcon = {
+            TopAppBar(title = { Text("打字统计", modifier = Modifier.settingsSearchTitleAnchor("打字统计")) }, navigationIcon = {
                 IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
             }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface))
         }) { padding ->

@@ -121,7 +121,8 @@ fun SpeechToTextSettingsContent(
         topBar = {
             TopAppBar(
                 title = { Text("语音转文本", style = MaterialTheme.typography.titleMedium,
-                    maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                    maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    modifier = Modifier.settingsSearchTitleAnchor("语音转文本")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(

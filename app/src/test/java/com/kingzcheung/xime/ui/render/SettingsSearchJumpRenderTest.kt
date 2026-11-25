@@ -73,6 +73,42 @@ class SettingsSearchJumpRenderTest {
         assertNull("定位后请求要清掉，只亮一次", SettingsSearchFocus.request)
     }
 
+    @Test fun jumpScrollsLongPressSpaceIntoView() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        KeyboardThemes.initFromConfig(context)
+        rule.mainClock.autoAdvance = false
+        open("长按空格")
+        rule.setContent { XimeTheme(darkTheme = false, themeId = "soft_blue") { Page("gestures") } }
+        rule.mainClock.advanceTimeBy(2_000)
+        rule.waitForIdle()
+        rule.onNodeWithTag("settings-search-anchor:长按空格").assertIsDisplayed()
+        assertNull("长按空格定位后请求要清掉", SettingsSearchFocus.request)
+    }
+
+    @Test fun jumpScrollsFunctionKeyHintIntoView() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        KeyboardThemes.initFromConfig(context)
+        rule.mainClock.autoAdvance = false
+        open("功能键不显示提示字")
+        rule.setContent { XimeTheme(darkTheme = false, themeId = "soft_blue") { Page("theme") } }
+        rule.mainClock.advanceTimeBy(2_500)
+        rule.waitForIdle()
+        rule.onNodeWithTag("settings-search-anchor:功能键不显示提示字").assertIsDisplayed()
+        assertNull("功能键不显示提示字定位后请求要清掉", SettingsSearchFocus.request)
+    }
+
+    @Test fun jumpHighlightsPageTitleForSectionEntry() {
+        val context = ApplicationProvider.getApplicationContext<Context>()
+        KeyboardThemes.initFromConfig(context)
+        rule.mainClock.autoAdvance = false
+        open("按键与手势")
+        rule.setContent { XimeTheme(darkTheme = false, themeId = "soft_blue") { Page("gestures") } }
+        rule.mainClock.advanceTimeBy(1_200)
+        rule.waitForIdle()
+        rule.onNodeWithTag("settings-search-anchor:按键与手势").assertIsDisplayed()
+        assertNull("大选项标题定位后请求要清掉", SettingsSearchFocus.request)
+    }
+
     @Test fun renderHighlight() {
         val out = System.getenv("CYIME_RENDER_OUT")
         assumeTrue(!out.isNullOrEmpty())

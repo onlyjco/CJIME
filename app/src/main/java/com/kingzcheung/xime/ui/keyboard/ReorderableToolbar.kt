@@ -49,6 +49,7 @@ internal fun ReorderableToolbar(
     val scroll = rememberScrollState()
     val edge = with(LocalDensity.current) { 24.dp.toPx() }
     val haptic = LocalHapticFeedback.current
+    val hapticContext = androidx.compose.ui.platform.LocalContext.current
     val scope = rememberCoroutineScope()
     val inlineEditor = LocalInlineQuickActionEditor.current
     // The inline editor already owns the draft order; render it in the same frame so
@@ -100,7 +101,7 @@ internal fun ReorderableToolbar(
                     dragged = order.firstOrNull { bounds[it]?.contains(pointer) == true }
                     if (dragged != null) {
                         ToolbarPressMenuGate.reordering = true
-                        haptic.performHapticFeedback(HapticFeedbackType.LongPress)
+                        haptic.performKeyboardHaptic(hapticContext, HapticFeedbackType.LongPress)
                     }
                 }
                 try {
@@ -125,15 +126,22 @@ internal fun ReorderableToolbar(
             }
         }) {
         // 每个图标占等宽一格，整格可点；放不下时按最小格宽横向滚动。
-        val slotWidth = maxOf(maxWidth / displayedOrder.size.coerceAtLeast(1), 36.dp)
-        val scrollable = scroll.maxValue > 0 || (36.dp * displayedOrder.size > maxWidth + 0.5.dp)
-        SideEffect { onScrollableChange?.invoke(scrollable) }
-        Row(Modifier.horizontalScroll(scroll, enabled = inlineEditor?.dragging == null && scroll.maxValue > 0).widthIn(min = maxWidth),
-            horizontalArrangement = Arrangement.SpaceEvenly, verticalAlignment = Alignment.CenterVertically) {
+        // 不满时不用 horizontalScroll 且按 weight(1f) 均分，避免 dp→px 取整多出 1~2px 造成微幅横滑。
+        val count = displayedOrder.size.coerceAtLeast(1)
+        val minSlotPx = with(LocalDensity.current) { 36.dp.roundToPx() }
+        val needsScroll = count * minSlotPx > constraints.maxWidth
+        val slotWidth = maxOf(maxWidth / count, 36.dp)
+        SideEffect { onScrollableChange?.invoke(needsScroll) }
+        Row(
+            if (needsScroll) Modifier.horizontalScroll(scroll, enabled = inlineEditor?.dragging == null).widthIn(min = maxWidth)
+            else Modifier.fillMaxWidth(),
+            horizontalArrangement = Arrangement.SpaceEvenly,
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
             displayedOrder.forEach { id ->
                 val action = actions.firstOrNull { it.item.id == id } ?: return@forEach
                 key(id) {
-                    Box(Modifier.width(slotWidth).testTag("toolbar-slot")
+                    Box((if (needsScroll) Modifier.width(36.dp) else Modifier.weight(1f)).testTag("toolbar-slot")
                         .onGloballyPositioned { bounds[id] = Rect(it.positionInRoot(), Size(it.size.width.toFloat(), it.size.height.toFloat())) },
                         contentAlignment = Alignment.Center) {
                         content(action)

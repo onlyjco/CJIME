@@ -16,9 +16,11 @@ import androidx.compose.runtime.staticCompositionLocalOf
 import androidx.compose.ui.composed
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.LayoutCoordinates
 import androidx.compose.ui.layout.onGloballyPositioned
+import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlin.math.abs
@@ -120,6 +122,86 @@ internal fun Modifier.candidateStrokeGesture(
 internal fun candidateStrokeLabel(code: String): String = code.map {
     when (it) { 'h' -> '一'; 's' -> '丨'; 'p' -> '丿'; 'n', 'N' -> '丶'; else -> '乛' }
 }.joinToString("")
+
+/**
+ * 有候选时直接在按键区画笔画筛选候选：在 [PointerEventPass.Initial] 监听拖动，
+ * 短点击不消费事件以保证正常打字；起笔避开底排（空格/回车/切换）、退格键、Shift 键与九键左侧标点栏，
+ * 多指快速连打时立即放弃以免打断输入。
+ */
+internal fun Modifier.keyboardAreaStrokeGesture(
+    enabled: Boolean,
+    isT9: Boolean,
+    canTrigger: () -> Boolean,
+    onStroke: (Char) -> Unit,
+    onDrawing: (Boolean) -> Unit = {},
+    onInk: (Offset?) -> Unit = {},
+): Modifier = if (!enabled) this else composed {
+    val currentCanTrigger by rememberUpdatedState(canTrigger)
+    val currentOnStroke by rememberUpdatedState(onStroke)
+    val currentOnDrawing by rememberUpdatedState(onDrawing)
+    val currentOnInk by rememberUpdatedState(onInk)
+    var coordinates by remember { mutableStateOf<LayoutCoordinates?>(null) }
+    Modifier.onGloballyPositioned { coordinates = it }.pointerInput(isT9) {
+        val points = ArrayList<Offset>()
+        fun append(point: Offset) {
+            points.add(point)
+            coordinates?.takeIf { it.isAttached }?.localToRoot(point)?.let { currentOnInk(it) }
+        }
+        val activationPx = maxOf(viewConfiguration.touchSlop * 2f, 18.dp.toPx())
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
+            if (down.isConsumed || !currentCanTrigger()) return@awaitEachGesture
+            val w = size.width.toFloat().coerceAtLeast(1f)
+            val h = size.height.toFloat().coerceAtLeast(1f)
+            val rx = down.position.x / w
+            val ry = down.position.y / h
+            // 底排交给空格键自身开关与符号/回车键；九键避开左标点栏与右功能列，26/14 键避开 Shift 与退格键。
+            if (ry > 0.76f) return@awaitEachGesture
+            if (isT9) {
+                if (rx < 0.18f || rx > 0.78f) return@awaitEachGesture
+            } else {
+                if (ry > 0.50f && (rx < 0.14f || rx > 0.86f)) return@awaitEachGesture
+            }
+            var drawing = false
+            points.clear()
+            try {
+                while (true) {
+                    val event = awaitPointerEvent(PointerEventPass.Initial)
+                    val change = event.changes.firstOrNull { it.id == down.id } ?: break
+                    // 多指并发打字：未进入画笔态前立刻让出。
+                    if (!drawing && event.changes.count { it.pressed } > 1) break
+                    if (!drawing) {
+                        if (!change.pressed) break
+                        if (change.isConsumed || !currentCanTrigger()) break
+                        if ((change.position - down.position).getDistance() >= activationPx) {
+                            drawing = true
+                            currentOnDrawing(true)
+                            currentOnInk(null)
+                            append(down.position)
+                            change.historical.forEach { append(it.position) }
+                            append(change.position)
+                            event.changes.forEach { it.consume() }
+                        }
+                    } else {
+                        change.historical.forEach { append(it.position) }
+                        append(change.position)
+                        event.changes.forEach { it.consume() }
+                        if (!change.pressed) {
+                            classifyCandidateStroke(points, density)?.let { currentOnStroke(it) }
+                            break
+                        }
+                    }
+                }
+            } finally {
+                if (drawing) {
+                    currentOnDrawing(false)
+                    currentOnInk(null)
+                }
+                points.clear()
+            }
+        }
+    }
+}
 
 /**
  * 候选栏未展开时从空格起笔触发笔画筛选的控制器。

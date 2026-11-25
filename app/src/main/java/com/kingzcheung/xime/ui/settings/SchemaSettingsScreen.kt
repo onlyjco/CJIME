@@ -269,7 +269,7 @@ fun SchemaSettingsContent(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("已安装的方案") },
+                title = { Text("已安装的方案", modifier = Modifier.settingsSearchTitleAnchor("已安装的方案")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")

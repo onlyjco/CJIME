@@ -73,7 +73,7 @@ class SettingsSearchTest {
     /** 「时长与距离」默认收起：里面每一项搜到都要能让它自动展开（用户 10-31）。 */
     @Test fun foldedTimingItemsExpandOnSearch() {
         val folded = SettingsSearchIndex.filter { it.section == "时长与距离" }.map { it.title }
-        assertEquals(5, folded.size)
+        assertEquals(6, folded.size)
         assertTrue("没登记自动展开：${folded - TIMING_SEARCH_KEYS}", TIMING_SEARCH_KEYS.containsAll(folded))
     }
 
@@ -236,8 +236,11 @@ class SettingsSearchTest {
         assertFalse(SettingsSearchFocus.claim("移动光标时振动", second))
         SettingsSearchFocus.unregister("光标与空格")
         SettingsSearchFocus.unregister("移动光标时振动")
-        // 整页条目不带定位。
+        // 整页大选项定位到目标页标题，由 TopAppBar 标题显示高亮动画。
         SettingsSearchFocus.open(SettingsSearchIndex.first { it.title == "主题与外观" })
+        val pageReq = SettingsSearchFocus.request!!
+        assertEquals(listOf("主题与外观"), pageReq.keys)
+        assertTrue(SettingsSearchFocus.claim("主题与外观", pageReq))
         assertNull(SettingsSearchFocus.request)
     }
 

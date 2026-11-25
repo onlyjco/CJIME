@@ -677,19 +677,19 @@ private fun LayoutDisplayPage(
             }
 
             if (page == "key_tips") item { KeyTipsSettings() }
-            if (page == "gestures") item {
+            if (page == "gestures") item(key = "gestures-symbols") {
                 InputExperienceSettings(setOf(InputExperiencePart.SYMBOLS), "角标与长按")
             }
-            if (page == "gestures") item { InputExperienceSettings(setOf(InputExperiencePart.DELETE), "删除键") }
-            if (page == "gestures") item { InputExperienceSettings(setOf(InputExperiencePart.CURSOR), "光标与空格") }
-            if (page == "gestures") item { InputExperienceSettings(setOf(InputExperiencePart.EDGE), "屏幕边缘") }
+            if (page == "gestures") item(key = "gestures-delete") { InputExperienceSettings(setOf(InputExperiencePart.DELETE), "删除键") }
+            if (page == "gestures") item(key = "gestures-cursor") { InputExperienceSettings(setOf(InputExperiencePart.CURSOR), "光标与空格") }
+            if (page == "gestures") item(key = "gestures-edge") { InputExperienceSettings(setOf(InputExperiencePart.EDGE), "屏幕边缘") }
             // 大多数人不会去调的时长、距离滑条收在一起，默认收起（用户 10-31）；设置搜索点中会自动展开。
-            if (page == "gestures") item {
+            if (page == "gestures") item(key = "gestures-timing") {
                 InputExperienceSettings(setOf(InputExperiencePart.TIMING), "时长与距离",
                     collapsedSummary = "长按时长、光标灵敏度")
             }
             // 隐藏操作的说明（用户 10-31）：这一页最下面一行，点进去是「按键技巧」；它不是设置，不占上面的位置。
-            if (page == "gestures") item {
+            if (page == "gestures") item(key = "gestures-tips") {
                 SettingsSection(title = "说明", searchKey = "按键技巧入口", content = {
                     SettingsItem(Icons.TwoTone.Lightbulb, "按键技巧",
                         "Shift、Ctrl、空格、删除键的小技巧", showArrow = true,

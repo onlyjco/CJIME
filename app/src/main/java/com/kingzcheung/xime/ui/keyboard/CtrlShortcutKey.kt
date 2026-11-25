@@ -60,6 +60,7 @@ internal fun Modifier.ctrlSymbolKeyGesture(
     val pressed by rememberUpdatedState(onPressedChange)
     val scope = rememberCoroutineScope()
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val hapticContext = androidx.compose.ui.platform.LocalContext.current
     onGloballyPositioned { bounds = Rect(dragSpace.point(it), it.size.toSize()) }.pointerInput(targets) {
         awaitEachGesture {
             // 先于键帽自己的手势拿到按下（Initial），键帽只负责画。
@@ -75,7 +76,7 @@ internal fun Modifier.ctrlSymbolKeyGesture(
                 delay(longPressMs)
                 if (!targets.ctrlUsed) {
                     longPressArmed = true
-                    haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                    haptic.performKeyboardHaptic(hapticContext, androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                 }
             } else null
             val faces = scope.launch {

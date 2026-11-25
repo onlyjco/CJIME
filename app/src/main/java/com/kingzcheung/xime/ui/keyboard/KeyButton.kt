@@ -181,7 +181,7 @@ fun KeyButton(
         onUp = onSwipe,
         onDown = onSwipeDown,
         onLongPress = onLongClick,
-        onLongPressFeedback = { view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS) },
+        onLongPressFeedback = { view.performKeyboardHaptic(android.view.HapticFeedbackConstants.LONG_PRESS) },
     )
     val currentActions by rememberUpdatedState(keyActions)
 
@@ -498,7 +498,7 @@ fun SwipeableKeyButton(
         onLongPress = if (flickLongPressNow) { { onFlickLongPress?.invoke() } } else null,
         longPressBubbleText = flickLongPressLabel?.takeIf { flickLongPressNow },
         longPressTimeoutMillis = if (flickLongPressNow) inputPreferences.symbolLongPressMs else 300L,
-        onLongPressFeedback = { view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS) },
+        onLongPressFeedback = { view.performKeyboardHaptic(android.view.HapticFeedbackConstants.LONG_PRESS) },
     ) else KeyGestureActions(
         text = text,
         onTap = tapOrCtrl,
@@ -535,7 +535,7 @@ fun SwipeableKeyButton(
         longPressMenuCells = longPressMenuCells,
         onLongPressSelect = onLongPressSelect,
         longPressTimeoutMillis = longPressTimeoutMillis,
-        onLongPressFeedback = { view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS) },
+        onLongPressFeedback = { view.performKeyboardHaptic(android.view.HapticFeedbackConstants.LONG_PRESS) },
     ).let { actions ->
         // 「上下滑输入符号」关着：长按也不出角标（「长按输入」、滑行时的两格角标、底排标点长按都不加）。
         if (!cornerSymbols) actions

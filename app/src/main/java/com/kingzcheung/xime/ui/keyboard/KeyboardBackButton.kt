@@ -43,31 +43,22 @@ internal fun KeyboardToolbarButton(
     continuousPill: Boolean = false,
     content: @Composable () -> Unit,
 ) {
-    // 底板只在按下时出现，松手淡出；平时只有图标，与工具栏其他图标一致。
+    // 去掉按下亮底与 300ms 渐隐，仅保留平时底色（如候选栏两端按钮的 restingFill）。
     val source = remember { MutableInteractionSource() }
-    val pressed by source.collectIsPressedAsState()
-    val pressAlpha by animateFloatAsState(if (pressed) 1f else 0f,
-        animationSpec = tween(if (pressed) 0 else 300), label = "toolbar-button-press")
-    val disc = (if (restingFill.alpha > 0f) Modifier.background(restingFill) else Modifier)
-        .background(background.copy(alpha = background.alpha * pressAlpha))
-        .border(1.dp, outline.copy(alpha = outline.alpha * pressAlpha), CircleShape)
+    val disc = if (restingFill.alpha > 0f) Modifier.background(restingFill) else Modifier
     if (slotWidth != null) {
         val pill = if (continuousPill) edgePillSize(slotWidth) else toolbarPillSize(slotWidth)
         val shape = cornerRadius?.let { androidx.compose.foundation.shape.RoundedCornerShape(it) } ?: CircleShape
         Box(modifier.width(slotWidth).height(40.dp).clickable(source, indication = null, onClick = onClick),
             contentAlignment = Alignment.Center) {
-            Box(Modifier.size(pill).clip(shape).then(disc)
-                .then(if (pressed) Modifier.visualMaterial(VisualStyles.current, cornerRadius ?: (pill.height / 2),
-                    com.kingzcheung.xime.ui.theme.MaterialLevel.RAISED) else Modifier),
+            Box(Modifier.size(pill).clip(shape).then(disc),
                 contentAlignment = Alignment.Center) { content() }
         }
         return
     }
     Box(modifier.size(40.dp).clip(CircleShape).clickable(source, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center) {
-        Box(Modifier.size(32.dp).clip(CircleShape).then(disc)
-            .then(if (pressed) Modifier.visualMaterial(VisualStyles.current, 16.dp,
-                com.kingzcheung.xime.ui.theme.MaterialLevel.RAISED) else Modifier), contentAlignment = Alignment.Center) { content() }
+        Box(Modifier.size(32.dp).clip(CircleShape).then(disc), contentAlignment = Alignment.Center) { content() }
     }
 }
 

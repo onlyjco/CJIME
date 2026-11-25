@@ -40,7 +40,7 @@ fun HandwritingSettingsContent(
 ) {
     Scaffold(modifier = Modifier.testTag("handwriting-settings"), containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
-            TopAppBar(title = { Text("手写") }, navigationIcon = {
+            TopAppBar(title = { Text("手写", modifier = Modifier.settingsSearchTitleAnchor("手写")) }, navigationIcon = {
                 IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
             }, colors = TopAppBarDefaults.topAppBarColors(containerColor = MaterialTheme.colorScheme.surface))
         }) { padding ->

@@ -541,6 +541,12 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     private var glassConfig = com.kingzcheung.xime.settings.FrostedGlassConfig()
     private var glassWindowVisible = false
     private var glassSurfaceMode = ""
+    /**
+     * 固定不透明键盘关闭玻璃时，延后到键盘收起（onWindowHidden）再拆模糊子窗：
+     * 模糊子窗位于 IME 窗口下方（mSubLayer=-2）且矩形与键盘完全一致，已被不透明键盘完全遮住；
+     * 在键盘仍显示时对附着子窗做 dismiss 或 setBackgroundBlurRadius(0) 都会触发 HyperOS PassBlur 重合成闪白。
+     */
+    private var deferGlassBlurUntilHidden = false
     // 整块键盘透明度与玻璃材质相乘：模糊窗口随按键一起淡出，而不是始终满强度地糊住宿主。
     private var glassOpacity = 1f
     /** 「柔化顶部边缘」的细条模糊窗口各自的透明度系数（乘在 [glassOpacity] 上）；其他窗口是 1。 */
@@ -571,6 +577,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             glassSurfaceBounds[name] = android.graphics.Rect(bounds)
             if (measuredAt == null) glassSurfaceOrigins.remove(name) else glassSurfaceOrigins[name] = measuredAt
         }
+        if (deferGlassBlurUntilHidden && !glassConfig.enabled) return
         val surface = glassBlurWindows[name] ?: if (glassConfig.enabled && bounds != null) {
             ImeGlassBlurWindow(this, name, anchorOrigin = { glassAnchorOrigin() }) { window.window?.decorView }
                 .also { glassBlurWindows[name] = it }
@@ -688,28 +695,41 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     private fun updateGlassOpacity(opacity: Float) {
         if (glassOpacity == opacity) return
         glassOpacity = opacity
+        if (deferGlassBlurUntilHidden && !glassConfig.enabled && opacity < 0.99f) {
+            // 键盘转为半透明时下方模糊会透出，立即解除延后并关闭模糊窗。
+            deferGlassBlurUntilHidden = false
+            (glassSurfaceBounds.keys + glassBlurWindows.keys).toSet().forEach { name ->
+                updateGlassSurface(name, glassSurfaceBounds[name], glassSurfaceOrigins[name])
+            }
+            return
+        }
+        if (deferGlassBlurUntilHidden && !glassConfig.enabled) return
         glassBlurWindows.forEach { (name, surface) -> surface.setOpacity(opacity * (glassAlphaScale[name] ?: 1f)) }
     }
 
     private fun updateGlassConfiguration(config: com.kingzcheung.xime.settings.FrostedGlassConfig, mode: String) {
         val wasEnabled = glassConfig.enabled
-        if (glassSurfaceMode != mode) {
+        val modeChanged = glassSurfaceMode != mode
+        glassConfig = config.normalized()
+        // 固定键盘与非拖动中的悬浮键盘，只要不透明且非全屏手写，关闭玻璃时都直接延后到收起再拆模糊子窗，
+        // 避免键盘显示期间触碰附着模糊子窗导致 HyperOS 重排闪白。
+        val canDeferRemoval = !glassConfig.enabled && !modeChanged &&
+            (mode == "fixed" || (mode == "floating" && !floatingDragging)) &&
+            !uiState.value.handwritingExpanded &&
+            glassOpacity >= 0.99f && ::keyboardContainer.isInitialized && keyboardContainer.isAttachedToWindow
+        if (glassConfig.enabled) {
+            deferGlassBlurUntilHidden = false
+        } else if ((wasEnabled || deferGlassBlurUntilHidden) && canDeferRemoval) {
+            deferGlassBlurUntilHidden = true
+            return
+        } else {
+            deferGlassBlurUntilHidden = false
+        }
+        if (modeChanged) {
             glassSurfaceMode = mode
             glassSurfaceBounds.clear()
             glassSurfaceOrigins.clear()
             glassBlurWindows.values.forEach { it.setRegion(null) }
-        }
-        glassConfig = config.normalized()
-        // 关闭玻璃时延后一帧再拆模糊子窗口，让 Compose 的不透明底图先送上屏，避免关玻璃瞬间闪白。
-        if (wasEnabled && !glassConfig.enabled && ::keyboardContainer.isInitialized && keyboardContainer.isAttachedToWindow) {
-            keyboardContainer.postOnAnimation {
-                if (!glassConfig.enabled) {
-                    (glassSurfaceBounds.keys + glassBlurWindows.keys).toSet().forEach { name ->
-                        updateGlassSurface(name, glassSurfaceBounds[name], glassSurfaceOrigins[name])
-                    }
-                }
-            }
-            return
         }
         (glassSurfaceBounds.keys + glassBlurWindows.keys).toSet().forEach { name ->
             updateGlassSurface(name, glassSurfaceBounds[name], glassSurfaceOrigins[name])
@@ -1207,7 +1227,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 // 卡片顶角由 Compose 跟着改；模糊窗的圆角要在这里重新配一次。
                 SettingsPreferences.KEY_ROUNDED_KEYBOARD_TOP, SettingsPreferences.KEY_FILL_KEYBOARD_BLANK -> updateKeyboardGlass()
                 SettingsPreferences.KEY_VISUAL_STYLE, SettingsPreferences.KEY_ROUNDED_KEYBOARD_BOTTOM,
-                com.kingzcheung.xime.settings.FrostedGlassPreferences.KEY_ENABLED,
                 "dark_mode", "keyboard_theme", "show_bottom_buttons", "keyboard_height_dp", "keyboard_height_dp_landscape", "keyboard_bottom_padding_dp", "keyboard_opacity" -> {
                     com.kingzcheung.xime.ui.theme.VisualStyles.current = SettingsPreferences.getVisualStyle(this@XimeInputMethodService)
                     loadDarkModePreference()
@@ -2889,6 +2908,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                     .graphicsLayer { alpha = keyboardLayerOpacity }
                                     .keyboardBackgroundBesideCard(rootTheme.keyboardBackground, isDark, keyboardBgColor,
                                         card = { navigationStripCard.value },
+                                        frostedGlass = frostedGlass,
                                         topCorner = if (com.kingzcheung.xime.ui.keyboard.rememberRoundedKeyboardTop()) corner else 0.dp,
                                         bottomCorner = if (roundedKeyboardBottom) corner else 0.dp)
                             )
@@ -2907,7 +2927,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                 surface = Modifier
                                     .graphicsLayer { alpha = keyboardLayerOpacity }
                                     .keyboardBackgroundBelowCard(rootTheme.keyboardBackground, isDark, keyboardBgColor,
-                                        card = stripCard, filledSides = filledSides),
+                                        card = stripCard, frostedGlass = frostedGlass, filledSides = filledSides),
                             )
                         }
                         Box(
@@ -3259,6 +3279,10 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                     if (floatingDragging != dragging) {
                                         floatingDragging = dragging
                                         if (dragging) {
+                                            // 悬浮拖动起手若存在关闭玻璃延后保留的模糊窗，需立即解除延后避免原地残留。
+                                            if (deferGlassBlurUntilHidden && !glassConfig.enabled) {
+                                                deferGlassBlurUntilHidden = false
+                                            }
                                             updateKeyboardGlass()
                                         } else {
                                             floatingCardBounds?.let { b ->
@@ -5003,6 +5027,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         // 下滑那一段键盘后面没有模糊，应用的字清清楚楚透出来，看着就是「闪一下」。模糊窗口是输入法窗口的
         // 子窗口，键盘收完会跟着一起藏，晚拆不会多露一块；1 秒内又弹出来（切聊天框）就直接接着用，不重建。
         mainHandler.removeCallbacks(hideGlassBlurWindows)
+        deferGlassBlurUntilHidden = false
         mainHandler.postDelayed(hideGlassBlurWindows, GLASS_BLUR_HIDE_DELAY_MS)
         // 收起动画放完、收起时要清的界面状态重组完，再让界面停下（见 [quietHiddenKeyboard]）。
         mainHandler.removeCallbacks(quietHiddenKeyboard)
@@ -5040,8 +5065,14 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         HeapReclaim.onKeyboardShown()
         KeyboardPanelLaunch.previewVisible = settingsPreviewEditor
         mainHandler.removeCallbacks(hideGlassBlurWindows)
+        deferGlassBlurUntilHidden = false
         glassWindowVisible = true
-        glassBlurWindows.values.forEach { it.setVisible(true) }
+        if (glassConfig.enabled) {
+            glassBlurWindows.values.forEach { it.setVisible(true) }
+        } else {
+            // 1 秒内重新弹出且玻璃已关闭：直接拆掉上一次延后残留的模糊子窗，不再先 show 再 mute。
+            glassBlurWindows.values.forEach { it.setVisible(false) }
+        }
         startVoiceAfterPermission()
         requestHardwareCursorUpdates()
         startRuntimeObservation()
@@ -5233,6 +5264,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             connection = { editorConnection() }, session = { uiState.value.inputSessionId },
             baseline = { inlineComposition.text.takeIf { inlineComposition.active } },
             canStart = { !uiState.value.inputTarget.isInternal && !isSecretEditor() && !isTerminalEditor() &&
+                keyboardCallbacks?.onSentenceGlideCode == null &&
                 (!inlineComposition.active || inlineComposition.text?.let { inlineComposition.caret == it.length } == true) },
             mark = { markInputBoxComposing(it) },
             owns = { inlineComposition.active && inlineComposition.text == it && inlineComposition.caret == it.length },
@@ -5259,6 +5291,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     private var glidePreviewRevision = 0L
     internal fun showGlidePreviewCode(code: String, session: Long, gesture: Int) {
         if (session != uiState.value.inputSessionId) return
+        // 局部修改期间输入框由 ImeSentenceEditor 预览控制，不启动整句滑行预览，防止覆写并清空后续滑行码。
+        if (keyboardCallbacks?.onSentenceGlideCode != null) return
         if (gesture != glidePreviewGesture) {
             glidePreviewGesture = gesture
             glidePreviewRevision = rimeEngine.glidePreviewRevision()
@@ -5625,6 +5659,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         if (com.kingzcheung.xime.ui.keyboard.CursorLineMetrics.requester === cursorLineRequester)
             com.kingzcheung.xime.ui.keyboard.CursorLineMetrics.requester = null
         mainHandler.removeCallbacks(hideGlassBlurWindows)
+        deferGlassBlurUntilHidden = false
         mainHandler.removeCallbacks(releaseHandwritingWhileHidden)
         glassBlurWindows.values.forEach { it.dispose() }
         glassBlurWindows.clear()

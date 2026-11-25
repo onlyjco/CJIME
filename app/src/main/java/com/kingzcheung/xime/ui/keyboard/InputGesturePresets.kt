@@ -83,7 +83,8 @@ object CursorChoices {
 /** 一个被锁住的选项值：[option] 不能设成 [lockedValue]，原因是 [by] 这个设置。 */
 data class InputGestureLock(val option: Option, val lockedValue: Any, val by: String) {
     enum class Option {
-        SYMBOL_INPUT_MODE, LETTER_LONG_PRESS_MENU, GLIDE_TYPING, CURSOR_GESTURE, T9_FLICK_LETTERS,
+        SYMBOL_INPUT_MODE, LETTER_LONG_PRESS_MENU, GLIDE_TYPING, CHINESE_GLIDE_TYPING, T9_GLIDE_TYPING,
+        CURSOR_GESTURE, T9_FLICK_LETTERS, KEYBOARD_STROKE_FILTER,
         /** 双拼键位提示 ↔ 上方/下方角标提示（两个开关都用 [CORNER_HINTS]）。 */
         DOUBLE_PINYIN_KEY_HINTS, CORNER_HINTS,
         /** Shift 键分词 ↔ ing 放在 Shift 键上；Shift 键分词 ↔ 双拼辅助码（打字时 Shift 键变成「辅」）。 */
@@ -114,6 +115,8 @@ object InputGestureLocks {
     fun of(settings: KeyboardInputPreferences): List<InputGestureLock> = buildList {
         if (settings.t9GlideTyping && settings.cursorGesture != CursorGestureMode.KEYBOARD) {
             add(InputGestureLock(InputGestureLock.Option.T9_FLICK_LETTERS, true, "九键滑行"))
+        } else if (settings.keyboardStrokeFilter) {
+            add(InputGestureLock(InputGestureLock.Option.T9_FLICK_LETTERS, true, "按键区笔画筛选"))
         } else if (settings.symbolInputMode == SymbolInputMode.LONG_PRESS) {
             add(InputGestureLock(InputGestureLock.Option.T9_FLICK_LETTERS, false, "按键角标的符号和数字：长按输入"))
         }
@@ -128,9 +131,25 @@ object InputGestureLocks {
             add(InputGestureLock(InputGestureLock.Option.CURSOR_GESTURE, CursorGestureMode.KEYBOARD, "中文滑行"))
         } else if (settings.t9GlideTyping) {
             add(InputGestureLock(InputGestureLock.Option.CURSOR_GESTURE, CursorGestureMode.KEYBOARD, "九键滑行"))
+        } else if (settings.keyboardStrokeFilter) {
+            add(InputGestureLock(InputGestureLock.Option.CURSOR_GESTURE, CursorGestureMode.KEYBOARD, "按键区笔画筛选"))
         }
         if (settings.cursorGesture == CursorGestureMode.KEYBOARD) {
             add(InputGestureLock(InputGestureLock.Option.GLIDE_TYPING, true, "键盘面板滑动光标"))
+        }
+        // 按键区笔画筛选占用有候选时按键区的手指拖动，与中文滑行、九键滑行、键盘面板滑动光标、九键拂动互锁。
+        if (settings.keyboardStrokeFilter) {
+            add(InputGestureLock(InputGestureLock.Option.CHINESE_GLIDE_TYPING, true, "按键区笔画筛选"))
+            add(InputGestureLock(InputGestureLock.Option.T9_GLIDE_TYPING, true, "按键区笔画筛选"))
+        }
+        if (settings.chineseGlideTyping) {
+            add(InputGestureLock(InputGestureLock.Option.KEYBOARD_STROKE_FILTER, true, "中文滑行"))
+        } else if (settings.t9GlideTyping) {
+            add(InputGestureLock(InputGestureLock.Option.KEYBOARD_STROKE_FILTER, true, "九键滑行"))
+        } else if (settings.cursorGesture == CursorGestureMode.KEYBOARD) {
+            add(InputGestureLock(InputGestureLock.Option.KEYBOARD_STROKE_FILTER, true, "键盘面板滑动光标"))
+        } else if (settings.t9FlickLetters) {
+            add(InputGestureLock(InputGestureLock.Option.KEYBOARD_STROKE_FILTER, true, "拂动选字母"))
         }
         if (settings.doublePinyinSemicolonOnShift) {
             add(InputGestureLock(InputGestureLock.Option.SHIFT_SYLLABLE_SPLIT, true, "ing 放在 Shift 键上"))

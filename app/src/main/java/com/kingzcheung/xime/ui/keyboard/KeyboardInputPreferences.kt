@@ -277,6 +277,10 @@ data class KeyboardInputPreferences(
     val cursorSwipeLines: Float = 1f,
     /** 固定键盘底部留白（调节键盘里往上拖出的那一条）上左右滑动移动光标；默认关（用户 10-31 要求新增）。 */
     val bottomLiftCursor: Boolean = false,
+    /** 有候选时从空格键滑动起笔触发笔画筛选；默认开。 */
+    val spaceStrokeFilter: Boolean = true,
+    /** 有候选时直接在按键区画笔画筛选候选；默认关，与中文/九键滑行、键盘面板滑动光标、九键拂动互锁。 */
+    val keyboardStrokeFilter: Boolean = false,
     /** 固定键盘底部留白达到一定高度时显示「切换中英文」「剪贴板」两个快捷按钮；默认开。 */
     val bottomLiftActions: Boolean = true,
     /** 打开底部留白快捷按钮后可选：合并符号与数字为 123（保留拖动功能）、隐藏键盘切换中英文键并居中延长空格；默认关。 */
@@ -389,6 +393,10 @@ data class KeyboardInputPreferences(
         const val CYLM_LONG_ALTERNATIVE_KEY = "cylm_long_alternative"
         /** 底部留白滑动移动光标，见 [bottomLiftCursor]。 */
         const val BOTTOM_LIFT_CURSOR_KEY = "bottom_lift_cursor"
+        /** 空格键笔画筛选，见 [spaceStrokeFilter]。 */
+        const val SPACE_STROKE_FILTER_KEY = "space_stroke_filter"
+        /** 按键区笔画筛选，见 [keyboardStrokeFilter]。 */
+        const val KEYBOARD_STROKE_FILTER_KEY = "keyboard_stroke_filter"
         /** 底部留白显示切换语言/剪贴板快捷按钮，见 [bottomLiftActions]。 */
         const val BOTTOM_LIFT_ACTIONS_KEY = "bottom_lift_actions"
         /** 底部留白子开关：合并符号与数字并隐藏键盘语言切换键，见 [bottomLiftCompactBottomRow]。 */
@@ -424,7 +432,7 @@ data class KeyboardInputPreferences(
                 com.kingzcheung.xime.settings.SpellingPatches.AUX_CODE_KEY,
                 SettingsPreferences.KEY_SWIPE_UP_HINTS_ENABLED, SettingsPreferences.KEY_SWIPE_DOWN_HINTS_ENABLED,
                 *SideSymbolTarget.entries.map { it.prefKey }.toTypedArray(),
-                BOTTOM_LIFT_CURSOR_KEY, BOTTOM_LIFT_ACTIONS_KEY, BOTTOM_LIFT_COMPACT_BOTTOM_ROW_KEY, VOICE_SWIPE_CANCEL_KEY, EDGE_GESTURE_EXCLUSION_KEY, HANDWRITING_RECOGNIZE_EARLY_KEY,
+                BOTTOM_LIFT_CURSOR_KEY, SPACE_STROKE_FILTER_KEY, KEYBOARD_STROKE_FILTER_KEY, BOTTOM_LIFT_ACTIONS_KEY, BOTTOM_LIFT_COMPACT_BOTTOM_ROW_KEY, VOICE_SWIPE_CANCEL_KEY, EDGE_GESTURE_EXCLUSION_KEY, HANDWRITING_RECOGNIZE_EARLY_KEY,
                 "handwriting_pause_seconds", "handwriting_pause_seconds_v2", "handwriting_formula_delimiter") + FrostedGlassPreferences.keys +
                 com.kingzcheung.xime.settings.KeyGapLightPreferences.keys
         }
@@ -492,6 +500,8 @@ data class KeyboardInputPreferences(
                 cursorStepHaptic = prefs.getBoolean("cursor_step_haptic", true),
                 cursorStepSound = prefs.getBoolean("cursor_step_sound", false),
                 bottomLiftCursor = prefs.getBoolean(BOTTOM_LIFT_CURSOR_KEY, false),
+                spaceStrokeFilter = prefs.getBoolean(SPACE_STROKE_FILTER_KEY, true),
+                keyboardStrokeFilter = prefs.getBoolean(KEYBOARD_STROKE_FILTER_KEY, false),
                 bottomLiftActions = prefs.getBoolean(BOTTOM_LIFT_ACTIONS_KEY, true),
                 bottomLiftCompactBottomRow = prefs.getBoolean(BOTTOM_LIFT_COMPACT_BOTTOM_ROW_KEY, false),
                 voiceSwipeCancel = prefs.getBoolean(VOICE_SWIPE_CANCEL_KEY, false),
@@ -642,6 +652,8 @@ data class KeyboardInputPreferences(
             .putBoolean("cursor_step_haptic", cursorStepHaptic)
             .putBoolean("cursor_step_sound", cursorStepSound)
             .putBoolean(BOTTOM_LIFT_CURSOR_KEY, bottomLiftCursor)
+            .putBoolean(SPACE_STROKE_FILTER_KEY, spaceStrokeFilter)
+            .putBoolean(KEYBOARD_STROKE_FILTER_KEY, keyboardStrokeFilter)
             .putBoolean(BOTTOM_LIFT_ACTIONS_KEY, bottomLiftActions)
             .putBoolean(BOTTOM_LIFT_COMPACT_BOTTOM_ROW_KEY, bottomLiftCompactBottomRow)
             .putBoolean(VOICE_SWIPE_CANCEL_KEY, voiceSwipeCancel)

@@ -1128,7 +1128,19 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         val input = service.candidateState.value.inputText
         submittingGlide = previewToken != null
         try {
-            if (input.isNotEmpty() && input.last() != '\'') handleKeyPress("'", false)
+            if (input.isNotEmpty() && input.last() != '\'') {
+                // 段首（caret <= confirmed，如局部修改落地后整段处于 kSelected）不补分词符，
+                // 避免 Rime Speller 拒收 '\'' 后落入标点器打断滑行编码。
+                postRimeJob("glide_sep") {
+                    val snap = service.rimeEngine.readPinyinEditSnapshot()
+                    val raw = snap?.getOrNull(0).orEmpty()
+                    val caret = snap?.getOrNull(1)?.toIntOrNull() ?: raw.length
+                    val confirmed = snap?.getOrNull(2)?.toIntOrNull() ?: 0
+                    if (raw.isNotEmpty() && !raw.endsWith('\'') && caret > confirmed) {
+                        service.rimeEngine.processKey('\''.code, 0)
+                    }
+                }
+            }
             code.forEach { handleKeyPress(it.toString(), false) }
         } finally {
             submittingGlide = false

@@ -214,8 +214,7 @@ private fun BottomLiftActionIcon(
         Box(
             modifier = Modifier
                 .size(rippleSize)
-                .clip(CircleShape)
-                .indication(interactionSource, ripple(bounded = true)),
+                .clip(CircleShape),
             contentAlignment = Alignment.Center,
         ) {
             Icon(

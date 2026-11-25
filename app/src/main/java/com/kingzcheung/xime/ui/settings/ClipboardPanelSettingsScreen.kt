@@ -218,7 +218,7 @@ private fun ClipboardPasteSettings() {
     // Same switch as the clipboard's own ⋯ menu (same preference).
     var closeAfterPaste by remember { mutableStateOf(clipboardClosesAfterPaste(prefs)) }
     var showInBar by remember { mutableStateOf(clipboardShowsInCandidateBar(context)) }
-    var pasteToTop by remember { mutableStateOf(prefs.getBoolean(CLIPBOARD_PASTE_TO_TOP_KEY, false)) }
+    var pasteToTop by remember { mutableStateOf(prefs.getBoolean(CLIPBOARD_PASTE_TO_TOP_KEY, true)) }
     SettingsSection(title = "粘贴", content = {
         // 用户 11-20 转来的反馈：最新复制的内容要能选不显示。默认开，和以前一样。
         SettingsToggleItem(

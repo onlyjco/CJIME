@@ -34,7 +34,7 @@ fun OtherSettingsContent(onBack: () -> Unit, onNavigateToRoute: (String) -> Unit
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             TopAppBar(
-                title = { Text(stringResource(R.string.item_other_title)) },
+                title = { Text(stringResource(R.string.item_other_title), modifier = Modifier.settingsSearchTitleAnchor("其他设置")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(imageVector = Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")

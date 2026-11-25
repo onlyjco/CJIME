@@ -94,19 +94,21 @@ private fun slashedIcon(name: String, base: ImageVector): ImageVector {
 internal val FullWidthToolbarIcon: ImageVector by lazy {
     ImageVector.Builder("FullWidthToolbar", 24.dp, 24.dp, 24f, 24f)
         .apply { copyNodesFrom(FullWidthIcon.root) }
-        .addPath(
-            pathData = addPathNodes(
-                "M7.36 15.55L11.23 15.55L11.23 14.32L8.18 14.32L8.18 13.01L11.23 13.01" +
-                    "L11.23 11.97L9.25 11.97L9.25 11.17Q8.58 11.65 7.81 12.11Q7.51 11.69 6.90 10.91" +
-                    "Q10.18 9.15 11.34 7.14L13.14 7.14L12.87 7.53Q14.19 9.42 17.10 10.79" +
-                    "Q16.56 11.46 16.18 12.00Q15.41 11.59 14.74 11.13L14.74 11.97L12.76 11.97" +
-                    "L12.76 13.01L15.84 13.01L15.84 14.32L12.76 14.32L12.76 15.55L16.64 15.55" +
-                    "L16.64 16.86L7.36 16.86L7.36 15.55Z" +
-                    "M12.00 8.61Q11.16 9.68 9.91 10.66L14.09 10.66Q12.86 9.72 12.00 8.61Z"
-            ),
-            pathFillType = PathFillType.EvenOdd,
-            fill = SolidColor(Color.Black),
-        )
+        .group(translationY = -0.6f) {
+            addPath(
+                pathData = addPathNodes(
+                    "M7.36 15.55L11.23 15.55L11.23 14.32L8.18 14.32L8.18 13.01L11.23 13.01" +
+                        "L11.23 11.97L9.25 11.97L9.25 11.17Q8.58 11.65 7.81 12.11Q7.51 11.69 6.90 10.91" +
+                        "Q10.18 9.15 11.34 7.14L13.14 7.14L12.87 7.53Q14.19 9.42 17.10 10.79" +
+                        "Q16.56 11.46 16.18 12.00Q15.41 11.59 14.74 11.13L14.74 11.97L12.76 11.97" +
+                        "L12.76 13.01L15.84 13.01L15.84 14.32L12.76 14.32L12.76 15.55L16.64 15.55" +
+                        "L16.64 16.86L7.36 16.86L7.36 15.55Z" +
+                        "M12.00 8.61Q11.16 9.68 9.91 10.66L14.09 10.66Q12.86 9.72 12.00 8.61Z"
+                ),
+                pathFillType = PathFillType.EvenOdd,
+                fill = SolidColor(Color.Black),
+            )
+        }
         .build()
 }
 

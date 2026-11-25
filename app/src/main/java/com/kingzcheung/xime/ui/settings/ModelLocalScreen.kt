@@ -96,7 +96,7 @@ fun ModelLocalContent(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("模型管理") },
+                title = { Text("模型管理", modifier = Modifier.settingsSearchTitleAnchor("模型管理")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
@@ -116,7 +116,7 @@ fun ModelLocalContent(
     ) { padding ->
         val localModels = uiState.models.filter { it.isDownloaded }
         // 三段都用设置页统一的分组样式：标题 + 一个圆角面板，行样式一致，说明文字只放在所属分组里。
-        val listState = rememberLazyListState()
+        val listState = rememberSettingsSearchListState()
         LazyColumn(
             state = listState,
             modifier = Modifier.settingsGutterScroll(listState)

@@ -48,6 +48,7 @@ import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.disabled
@@ -836,7 +837,7 @@ private fun CandidateRailSymbolKey(
                 Box(
                     modifier = meaning
                         .clip(RoundedCornerShape(5.dp))
-                        .background(pillColor.copy(alpha = 0.2f))
+                        .background(candidateHighlightFill(pillColor, keyBg.luminance() < 0.5f))
                         .padding(horizontal = 3.dp, vertical = 1.dp)
                 ) {
                     FittedRailText(text, pillColor, targetSize, FontWeight.Medium, approximate, fitCap)

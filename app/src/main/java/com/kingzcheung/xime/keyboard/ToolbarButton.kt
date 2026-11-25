@@ -104,6 +104,8 @@ data class ToolbarAction(
     val onLongClick: (() -> Unit)? = null,
     /** 工具栏上长按弹出、滑到一项松手就选它的列表（插件按钮，如「翻译」选目标语言）；null 时没有。 */
     val pressMenu: ToolbarPressMenu? = null,
+    /** 工具栏不可横滑时长按触发的快捷操作（如剪贴板图标长按直达收藏栏）；null 时没有。 */
+    val onToolbarLongClick: (() -> Unit)? = null,
     val onClick: () -> Unit
 )
 

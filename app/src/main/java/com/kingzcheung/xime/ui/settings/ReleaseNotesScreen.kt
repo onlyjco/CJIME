@@ -75,7 +75,7 @@ fun ReleaseNotesContent(onBack: () -> Unit) {
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             TopAppBar(
-                title = { Text("更新内容") },
+                title = { Text("更新内容", modifier = Modifier.settingsSearchTitleAnchor("更新内容")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")

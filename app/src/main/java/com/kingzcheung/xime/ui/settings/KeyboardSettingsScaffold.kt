@@ -205,7 +205,7 @@ internal fun KeyboardSettingsScaffold(
     }
     Box(modifier) {
     Scaffold(modifier = Modifier.fillMaxSize(), containerColor = MaterialTheme.colorScheme.surface, topBar = {
-        TopAppBar(title = { Text(title) }, navigationIcon = {
+        TopAppBar(title = { Text(title, modifier = Modifier.settingsSearchTitleAnchor(title)) }, navigationIcon = {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
         }, actions = {
             actions()

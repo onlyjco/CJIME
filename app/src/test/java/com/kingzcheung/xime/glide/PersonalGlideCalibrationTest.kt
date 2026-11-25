@@ -333,4 +333,19 @@ class PersonalGlideCalibrationTest {
         assertEquals(0, PersonalGlideCalibration.stats(tempDir).confusionCount)
         assertEquals(null, PersonalGlideCalibration.phraseTextOf(tempDir, flypy.id, "tj"))
     }
+
+    @Test
+    fun sampleMismatchGuardDropsTruncatedCodeForLongSentence() {
+        assertFalse(PersonalGlideCalibration.isPlausibleSampleCodeForText("double_pinyin_shoudao", "jkru", "下个版本加入"))
+        assertFalse(PersonalGlideCalibration.isPlausibleSampleCodeForText("double_pinyin_shoudao", "hvfuma", "你有邮件回复吗"))
+        assertTrue(PersonalGlideCalibration.isPlausibleSampleCodeForText("double_pinyin_shoudao", "soyinim", "所以你们"))
+        assertTrue(PersonalGlideCalibration.isPlausibleSampleCodeForText("double_pinyin_shoudao", "nieivizkmezfq", "你是指怎么增强"))
+        assertTrue(PersonalGlideCalibration.isPlausibleSampleCodeForText("double_pinyin_shoudao", "bjbk", "版本"))
+        assertTrue(PersonalGlideCalibration.isPlausibleSampleCodeForText("double_pinyin_shoudao", "ultra", "ultra"))
+
+        val (xs, ys, ts) = trace("jkru")
+        PersonalGlideCalibration.noteDispatched(401L, flypy.id, "p", keyboard, xs, ys, ts, "jkru")
+        PersonalGlideCalibration.onCommitted(tempDir, 401L, flypy.id, "jkru", "下个版本加入")
+        assertEquals(0, PersonalGlideCalibration.stats(tempDir).sampleCount)
+    }
 }

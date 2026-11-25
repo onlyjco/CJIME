@@ -834,6 +834,19 @@ object PersonalGlideCalibration {
         saveConfusions(File(dir, CONFUSIONS_FILE))
     }
 
+    /**
+     * 过滤编码长度与中文词长严重失配的脏样本（例如只重打了尾词 jkru，却把整句「下个版本加入」记成样本词）。
+     * 任何拼音/双拼方案至少需要每字 1 码；双拼上限不超过每字 2 码（留少量容错）。
+     */
+    internal fun isPlausibleSampleCodeForText(schemaKey: String, code: String, text: String): Boolean {
+        val hanCount = text.count { it in '\u4e00'..'\u9fff' }
+        if (hanCount == 0) return true
+        val codeLen = code.count { it in 'a'..'z' || it in 'A'..'Z' }
+        if (codeLen < hanCount) return false
+        if (schemaKey.startsWith("double_pinyin") && hanCount == text.length && codeLen > hanCount * 2 + 2) return false
+        return true
+    }
+
     private fun recordSampleLocked(
         dir: File,
         schemaKey: String,
@@ -848,6 +861,7 @@ object PersonalGlideCalibration {
         source: String = "confirm",
     ) {
         if (xs.size < 2 || ys.size != xs.size || '\t' in text || '\n' in text) return
+        if (!isPlausibleSampleCodeForText(schemaKey, code, text)) return
         val unit = keyboard.keyUnit
         val minCenterX = keyboard.centers.values.minOfOrNull { it.first } ?: return
         val minCenterY = keyboard.centers.values.minOfOrNull { it.second } ?: return

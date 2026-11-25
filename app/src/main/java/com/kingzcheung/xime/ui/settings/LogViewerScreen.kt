@@ -99,7 +99,7 @@ fun LogViewerScreen(
         snackbarHost = { SnackbarHost(snackbarHostState) },
         topBar = {
             TopAppBar(
-                title = { Text("日志查看器") },
+                title = { Text("日志查看器", modifier = Modifier.settingsSearchTitleAnchor("日志查看器")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(

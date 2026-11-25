@@ -234,7 +234,7 @@ fun SpaceKeyButton(
                         if (endsLock) return@launch
                         delay(settings.spaceHoldDelayMs)
                         held = true
-                        view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+                        view.performKeyboardHaptic(android.view.HapticFeedbackConstants.LONG_PRESS)
                         when (holdAction) {
                             SpaceHoldAction.CURSOR -> {
                                 cursorActive = true
@@ -295,7 +295,7 @@ fun SpaceKeyButton(
                                 voiceLock.finger = inRoot
                                 if (lockArmed != voiceLock.armed) {
                                     voiceLock.armed = lockArmed
-                                    if (lockArmed && voiceLock.holding) view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+                                    if (lockArmed && voiceLock.holding) view.performKeyboardHaptic(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
                                 }
                             }
                             // 上滑取消：手指高过空格顶边一个键高（或在中间的取消按钮上）才算，左右挪不管；滑回来就恢复松手上屏。
@@ -304,7 +304,7 @@ fun SpaceKeyButton(
                                 val armed = spaceVoiceCancelArmed(lockArmed, change.position.y, size.height.toFloat(), onCancelButton)
                                 if (armed != voiceCancelArmed) {
                                     voiceCancelArmed = armed
-                                    if (armed) view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+                                    if (armed) view.performKeyboardHaptic(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
                                 }
                             }
                             // 拇指点空格常带几毫米横移：在约 4 mm 内仍算一次点击（三星、Gboard 偏移 3.6 mm 仍上屏）；
@@ -397,7 +397,7 @@ fun SpaceKeyButton(
                                 lockNow -> {
                                     voiceLock?.lockedSide = voiceLock?.side?.takeIf { it != 0 } ?: -1
                                     voiceLock?.locked = true
-                                    view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+                                    view.performKeyboardHaptic(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
                                 }
                                 voiceHolding && voiceCancelArmed -> onVoiceHoldCancel?.invoke()
                                 else -> onVoiceHoldEnd?.invoke()

@@ -55,9 +55,11 @@ import androidx.compose.ui.graphics.Outline
 import androidx.compose.ui.graphics.RectangleShape
 import androidx.compose.ui.graphics.Shape
 import androidx.compose.ui.graphics.lerp
+import androidx.compose.ui.graphics.luminance
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.CompositingStrategy
 import androidx.compose.ui.graphics.graphicsLayer
+import com.kingzcheung.xime.ui.theme.floatingFooterSeamlessBackground
 import androidx.compose.ui.composed
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
@@ -378,13 +380,10 @@ internal fun FloatingKeyboardContainer(
         val liveCornerRectState = remember(geometryLocked) { mutableStateOf<ResizeRect?>(null) }
         var cornerResizing by remember(geometryLocked) { mutableStateOf(false) }
         var cornerPauseTick by remember(geometryLocked) { mutableIntStateOf(0) }
-        var cornerPaused by remember(geometryLocked) { mutableStateOf(false) }
         LaunchedEffect(cornerResizing, cornerPauseTick) {
-            cornerPaused = false
             if (cornerResizing && cornerPauseTick > 0) {
                 kotlinx.coroutines.delay(100L)
                 liveCornerRectState.value?.let { settledCornerRect = it }
-                cornerPaused = true
             }
         }
         val cardRect = previewRect ?: settledCornerRect ?: baseRect
@@ -402,15 +401,6 @@ internal fun FloatingKeyboardContainer(
         val safeOffsetX = (baseRect.centerX / density.density - maxWidth.value / 2f)
         val dockGesture = remember(maxWidth, cardTotalHeight, screenHeightDp, minOffsetY, geometryLocked) { FloatingDockGesture() }
         var isDragging by remember(dockGesture) { mutableStateOf(false) }
-        var dragMotionTick by remember(dockGesture) { mutableIntStateOf(0) }
-        var dragPaused by remember(dockGesture) { mutableStateOf(false) }
-        LaunchedEffect(isDragging, dragMotionTick) {
-            dragPaused = false
-            if (isDragging) {
-                kotlinx.coroutines.delay(120L)
-                dragPaused = true
-            }
-        }
         var dragX by remember(dockGesture) { mutableFloatStateOf(safeOffsetX) }
         var dragY by remember(dockGesture) { mutableFloatStateOf(safeOffsetY) }
         var rawDragY by remember(dockGesture) { mutableFloatStateOf(safeOffsetY) }
@@ -439,7 +429,8 @@ internal fun FloatingKeyboardContainer(
         val currentOnDragStateChange by rememberUpdatedState(onDragStateChange)
         val currentExternalDragging by rememberUpdatedState(externalDragging)
         LaunchedEffect(dockGesture, undockFollow, geometryLocked) {
-            snapshotFlow { (isDragging && !dragPaused) || (cornerResizing && !cornerPaused) || currentExternalDragging || undockFollow?.finger != null }
+            // 拖动或拖角期间持续保持拖拽态，手停时不反复刷新玻璃背景，只在松手后统一刷新。
+            snapshotFlow { isDragging || cornerResizing || currentExternalDragging || undockFollow?.finger != null }
                 .distinctUntilChanged()
                 .collect { currentOnDragStateChange(it) }
         }
@@ -462,7 +453,7 @@ internal fun FloatingKeyboardContainer(
         val hostView = androidx.compose.ui.platform.LocalView.current
         val dockReady = isDragging && dockGesture.armed && destination != null && dockGesture.progress >= 1f
         LaunchedEffect(dockGesture.epoch, dockReady) {
-            if (dockReady) hostView.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+            if (dockReady) hostView.performKeyboardHaptic(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
         }
         if (dockReady) {
             // 取消渐变缩放动画，仅保留最终停靠定位框。
@@ -505,16 +496,10 @@ internal fun FloatingKeyboardContainer(
             rawDragY = safeOffsetY
             dragStartX = safeOffsetX
             dragStartY = safeOffsetY
-            dragPaused = false
-            dragMotionTick++
             indicatorActivityTick++
             isDragging = true
         }
         val moveFloatingDrag: (Offset) -> Unit = move@{ dragAmount ->
-            if (dragAmount != Offset.Zero) {
-                dragPaused = false
-                dragMotionTick++
-            }
             if (rotatedRect != null) {
                 // 拖动量来自转过的卡片自身坐标，转回屏幕方向再移动。
                 val radians = Math.toRadians(restingRotation.toDouble())
@@ -661,10 +646,17 @@ internal fun FloatingKeyboardContainer(
             // 键区背景往下画到拖动条底，整张卡片一张背景（见 FloatingBackgroundBleed）。
             val footerPx = with(density) { footerDp.dp.roundToPx() }
             val backgroundBleed = remember(footerPx) { FloatingBackgroundBleed(footerPx) }
+            val contentCardRect = remember { mutableStateOf<androidx.compose.ui.geometry.Rect?>(null) }
             Column {
                 val dragSpace = remember { KeyDragSpace() }
                 Box(modifier = Modifier.weight(1f).fillMaxWidth()
                     .then(if (clipboardExpansion != null) Modifier.clipToBounds() else Modifier)
+                    .onGloballyPositioned { coords ->
+                        val p = coords.positionInWindow()
+                        contentCardRect.value = androidx.compose.ui.geometry.Rect(
+                            p.x, p.y, p.x + coords.size.width, p.y + coords.size.height
+                        )
+                    }
                     .onPlaced { dragSpace.card = it }) {
                     Box(Modifier.fillMaxSize().then(if (clipboardExpansion == null) Modifier
                         else Modifier.offset { IntOffset(0, clipboardDropPx().roundToInt()) })) {
@@ -672,7 +664,7 @@ internal fun FloatingKeyboardContainer(
                         LocalDensity provides Density(density = density.density * contentScale,
                             fontScale = density.fontScale * fontScaleFactor),
                         LocalFloatingContentScale provides contentScale,
-                        // 剪贴板展开时上层容器加了 clipToBounds 会截断向下延伸的背景，禁用 bleed 让拖动条自己铺底色，避免丢失下沿显示。
+                        // 剪贴板展开时上层容器加了 clipToBounds 会截断向下延伸的背景，禁用 bleed 让拖动条自己接续底色，避免丢失下沿显示。
                         LocalFloatingBackgroundBleed provides if (clipboardExpansion == null) backgroundBleed else null,
                         LocalFloatingKeyboardRotation provides restingRotation,
                         LocalKeyDragSpace provides dragSpace,
@@ -687,11 +679,27 @@ internal fun FloatingKeyboardContainer(
                 }
                 Spacer(Modifier.height(footerDp.dp))
             }
-            // 底色只铺键区下面那段（拖动条）：键区已经把背景延伸到拖动条底时不再重复铺一层。
+            // 底色只铺键区下面那段（拖动条）：键区已经把背景延伸到拖动条底时不再重复铺一层；
+            // 剪贴板展开时沿上方卡片底边同步接续渐变/底色，避免挂载独立异步玻璃背景导致首帧闪白。
+            val footerThemeBg = com.kingzcheung.xime.ui.theme.KeyboardThemes.getRenderingScheme(
+                SettingsPreferences.getKeyboardTheme(context)
+            ).keyboardBackground
+            val footerGlass = LocalKeyboardInputPreferences.current.frostedGlass
+            val footerDark = backgroundColor.luminance() < 0.5f
+            val needsFooterBg = !(clipboardExpansion == null && backgroundBleed.consumed)
             Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                 .height(footerDp.dp.coerceAtMost(cardTotalHeight))
                 .testTag("floating-footer-background")
-                .then(if (clipboardExpansion == null && backgroundBleed.consumed) Modifier else Modifier.keyboardPanelBackground(backgroundColor)))
+                .then(
+                    if (!needsFooterBg) Modifier
+                    else Modifier.floatingFooterSeamlessBackground(
+                        background = footerThemeBg,
+                        isDark = footerDark,
+                        fallbackColor = backgroundColor,
+                        card = { contentCardRect.value },
+                        frostedGlass = footerGlass,
+                    )
+                ))
             // 拖动区从最下一排的键帽下沿算起，小横条在这一段里居中；键帽下沿以下仍接按键触摸。
             Box(Modifier.align(Alignment.BottomCenter).fillMaxWidth()
                 .height((dragAreaHeight + capInset.floatValue.dp).coerceAtMost(cardTotalHeight))
@@ -891,7 +899,7 @@ private fun Modifier.undockPull(state: UndockPullState, onUndock: () -> Unit): M
                     val before = state.progress
                     state.progress = modeSwitchPullProgress(up / 1.dp.toPx(), (change.position.x - down.position.x) / 1.dp.toPx())
                     if (state.progress >= 1f && before < 1f) {
-                        view.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+                        view.performKeyboardHaptic(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
                         // 拉满就变悬浮，悬浮键盘接着跟这根手指走，松手停在那里；没有外层跟手时照旧松手才变。
                         // 拿不到卡片位置时手指位置由外层在同一个事件里补上。
                         if (follow != null) {

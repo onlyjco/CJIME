@@ -196,7 +196,8 @@ internal fun sentenceMagnifierCenter(
 internal const val CANDIDATE_LONG_PRESS_TIMEOUT_MS = 1000L
 
 internal fun sentenceCandidateText(text: String, index: Int, drag: IntRange?,
-                                   active: SentenceCandidateHighlight?, color: Color): AnnotatedString =
+                                   active: SentenceCandidateHighlight?, color: Color,
+                                   isDarkTheme: Boolean = false): AnnotatedString =
     androidx.compose.ui.text.buildAnnotatedString {
         append(text)
         val selected = drag ?: active?.takeIf { index == 0 && text.endsWith(it.sentence) }
@@ -205,7 +206,7 @@ internal fun sentenceCandidateText(text: String, index: Int, drag: IntRange?,
                 (prefix + item.start) until (prefix + item.end)
             }
         selected?.takeIf { !it.isEmpty() && it.first >= 0 && it.last < text.length }?.let {
-            addStyle(androidx.compose.ui.text.SpanStyle(background = color.copy(alpha = 0.3f)), it.first, it.last + 1)
+            addStyle(androidx.compose.ui.text.SpanStyle(background = candidateSentenceSelectionFill(color, isDarkTheme)), it.first, it.last + 1)
         }
     }
 
@@ -521,7 +522,7 @@ fun CandidateBar(
                 barTopInWindow = barOrigin.y
                 barDragOrigin = dragSpace.point(it)
             }
-            .shiftDragOverlay({ barDragOrigin }, protectedVisuals.accentColor)
+            .shiftDragOverlay({ barDragOrigin }, protectedVisuals.accentColor, protectedVisuals.isDarkTheme)
             .clipSplitGapColumn(splitGapX, splitGap) { barOrigin }
             .background(if (glassEnabled) Color.Transparent else protectedVisuals.backgroundColor)
             .then(if (stripBoost > 0f) Modifier.glassStripBoost(stripBoost) else Modifier)
@@ -569,7 +570,8 @@ fun CandidateBar(
                 if (showPreedit) Text(
                     // 首选是纠错来的：这一行显示纠正后的读音，改动的字母标红（候选旁不再另标）。
                     if (corrected.isNotEmpty()) correctionAnnotatedString(corrected, lineColor, LocalCorrectionFullScheme.current)
-                        else sentenceSelectionText(preeditText, LocalSentenceSelection.current.value, protectedVisuals.accentColor),
+                        else sentenceSelectionText(preeditText, LocalSentenceSelection.current.value, protectedVisuals.accentColor,
+                            isDarkTheme = protectedVisuals.isDarkTheme),
                     color = lineColor, fontSize = lineSize, lineHeight = lineSize, maxLines = 1,
                     // 长句只露出正在打的结尾。
                     overflow = TextOverflow.StartEllipsis, softWrap = false,
@@ -673,7 +675,8 @@ fun CandidateBar(
                         onClick = { onEditPreedit(inlineTap.lettersBefore(inlineSlop)) },
                     ))
                     .padding(horizontal = 4.dp).testTag("inline-preedit"), contentAlignment = Alignment.CenterStart) {
-                    Text(sentenceSelectionText(preeditText, LocalSentenceSelection.current.value, protectedVisuals.accentColor),
+                    Text(sentenceSelectionText(preeditText, LocalSentenceSelection.current.value, protectedVisuals.accentColor,
+                        isDarkTheme = protectedVisuals.isDarkTheme),
                         color = protectedVisuals.textColor, fontSize = 14.sp, maxLines = 1, overflow = TextOverflow.Ellipsis,
                         onTextLayout = inlineTap::layout, modifier = inlineTap.textModifier())
                 }
@@ -806,6 +809,7 @@ fun CandidateBar(
                             isSelected = index == 0,
                             accentColor = protectedVisuals.accentColor,
                             selectedTextColor = protectedVisuals.selectedTextColor,
+                            isDarkTheme = protectedVisuals.isDarkTheme,
                             opaqueComment = protectedVisuals.opaqueComments,
                             textShadow = protectedVisuals.textShadow,
                             fontSize = candidateTextSize.sp,
@@ -846,6 +850,7 @@ fun CandidateBar(
                             isSelected = assocState?.highlightIndex == index,
                             accentColor = protectedVisuals.accentColor,
                             selectedTextColor = protectedVisuals.selectedTextColor,
+                            isDarkTheme = protectedVisuals.isDarkTheme,
                             opaqueComment = protectedVisuals.opaqueComments,
                             textShadow = protectedVisuals.textShadow,
                             fontSize = candidateTextSize.sp,
@@ -886,6 +891,7 @@ fun CandidateBar(
                             },
                             onScrollableChange = { toolbarScrollable = it }) { action ->
                             ToolbarActionButton(action, protectedVisuals, iconButtonTint, voiceAmplitude, voiceRecognitionState,
+                                allowLongClick = !toolbarScrollable,
                                 modifier = Modifier.fillMaxWidth())
                         }
                     }
@@ -904,7 +910,9 @@ fun CandidateBar(
                         callbacks.onEditQuickActions != null) {
                         Spacer(modifier = Modifier.width(4.dp))
                         KeyboardToolbarButton(callbacks.onEditQuickActions, iconButtonContainer,
-                            modifier = Modifier.testTag("toolbar-edit"), slotWidth = toolbarSlot) {
+                            modifier = Modifier.testTag("toolbar-edit").onGloballyPositioned {
+                                editor?.editBounds = it.boundsInRoot()
+                            }, slotWidth = toolbarSlot) {
                             Icon(Icons.Default.Edit, contentDescription = "编辑排列", tint = protectedVisuals.textColor,
                                 modifier = Modifier.size(22.dp))
                         }
@@ -1003,6 +1011,7 @@ internal fun ToolbarActionButton(
     action: ToolbarAction, visuals: CandidateBarVisuals, tint: Color,
     amplitude: Float, voiceState: RecognitionState,
     source: MutableInteractionSource = remember { MutableInteractionSource() },
+    allowLongClick: Boolean = true,
     modifier: Modifier = Modifier,
 ) {
     val inlineEditor = LocalInlineQuickActionEditor.current
@@ -1011,12 +1020,7 @@ internal fun ToolbarActionButton(
     val voiceLevel by animateFloatAsState(
         if (voiceActive && voiceState == RecognitionState.LISTENING) microphoneLevel(amplitude) else 0f,
         animationSpec = tween(100), label = "microphoneLevel")
-    val pressed by source.collectIsPressedAsState()
-    // Hover/focus events must not cancel a release fade and leave a permanent glow.
-    val pressAlpha by animateFloatAsState(if (pressed) 1f else 0f,
-        animationSpec = tween(if (pressed) 0 else 300), label = "toolbar-press")
-    // The disc appears only while pressed or on (no resting disc, glass or not). Under glass
-    // the active tool is filled solidly with an inverted glyph; voice keeps its pulsing glow.
+    // 去掉按下亮底与 300ms 渐隐，仅保留开启态（面板打开 / 语音激活）的底色指示。
     val iconStateToggle = (action.item as? com.kingzcheung.xime.keyboard.ToolbarButtonItem.Builtin)?.button in
         com.kingzcheung.xime.keyboard.ToolbarButton.ICON_STATE_TOGGLES
     val showActiveFill = action.active && !iconStateToggle
@@ -1037,8 +1041,11 @@ internal fun ToolbarActionButton(
     val pressMenuState = remember { ToolbarPressMenuState() }
     val pressMenuScope = rememberCoroutineScope()
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
+    val hapticContext = androidx.compose.ui.platform.LocalContext.current
     val currentPressMenu by rememberUpdatedState(pressMenu)
     val currentClick by rememberUpdatedState(action.onClick)
+    val toolbarLongClick = action.onToolbarLongClick?.takeIf { allowLongClick }
+    val currentToolbarLongClick by rememberUpdatedState(toolbarLongClick)
     BoxWithConstraints(
         modifier.widthIn(min = 36.dp).height(40.dp).inlineQuickActionTarget(action.item.id)
             .graphicsLayer { alpha = if (inlineEditor?.dragging == action.item.id) 0f else 1f }
@@ -1048,10 +1055,20 @@ internal fun ToolbarActionButton(
                 selected = action.active
                 if (voiceActive) stateDescription = if (voiceState == RecognitionState.PROCESSING) "正在转录" else "正在聆听，点击结束"
             }
-            .then(if (inlineEditor?.active == true) Modifier else if (pressMenu != null) Modifier.toolbarPressMenu({ currentPressMenu }, pressMenuState, source, pressMenuScope,
-                onLongPress = { haptic.performHapticFeedback(androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress) },
-                onClick = { currentClick() })
-            else Modifier.clickable(interactionSource = source, indication = null, onClick = action.onClick)),
+            .then(when {
+                inlineEditor?.active == true -> Modifier
+                pressMenu != null -> Modifier.toolbarPressMenu({ currentPressMenu }, pressMenuState, source, pressMenuScope,
+                    onLongPress = { haptic.performKeyboardHaptic(hapticContext, androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress) },
+                    onClick = { currentClick() })
+                toolbarLongClick != null -> Modifier.tolerantClick(
+                    showRipple = false,
+                    interactionSource = source,
+                    longPressTimeoutMillis = 260L,
+                    onLongClick = { currentToolbarLongClick?.invoke() },
+                    onClick = { currentClick() },
+                )
+                else -> Modifier.clickable(interactionSource = source, indication = null, onClick = action.onClick)
+            }),
         contentAlignment = Alignment.Center,
     ) {
     if (pressMenu != null) ToolbarPressMenuPopup(pressMenuState)
@@ -1061,11 +1078,10 @@ internal fun ToolbarActionButton(
             .clip(CircleShape)
             .background(if (listening) Color.Transparent else glassActiveFill ?: visuals.glassControlBackground?.let { fill ->
                 if (showActiveFill) androidx.compose.ui.graphics.lerp(fill, visuals.accentColor, 0.18f).copy(alpha = fill.alpha)
-                else fill.copy(alpha = fill.alpha * pressAlpha)
+                else Color.Transparent
             } ?: if (showActiveFill) visuals.accentColor.copy(alpha = 0.28f)
-                else if (visuals.isDarkTheme) Color.White.copy(alpha = 0.25f * pressAlpha)
-                else Color(0xFFE0E0E0).copy(alpha = pressAlpha))
-            .then(if (liquidEdge) Modifier.liquidGlassEdge(CAPSULE_RADIUS) { if (showActiveFill) 1f else pressAlpha }
+                else Color.Transparent)
+            .then(if (liquidEdge && showActiveFill) Modifier.liquidGlassEdge(CAPSULE_RADIUS) { 1f }
                 else Modifier),
         contentAlignment = Alignment.Center,
     ) {
@@ -1254,6 +1270,7 @@ fun CandidateItem(
     isSelected: Boolean = false,
     accentColor: Color = Color(0xFF1A73E8),
     selectedTextColor: Color = Color(0xFF1A73E8),
+    isDarkTheme: Boolean = false,
     @SuppressLint("ModifierParameter") modifier: Modifier = Modifier,
     fontSize: androidx.compose.ui.unit.TextUnit = 19.sp,
     candidateFontFamily: androidx.compose.ui.text.font.FontFamily = androidx.compose.ui.text.font.FontFamily.Default,
@@ -1290,6 +1307,10 @@ fun CandidateItem(
     var magnifierPosition by remember(text) { mutableStateOf(androidx.compose.ui.geometry.Offset.Unspecified) }
     DisposableEffect(dropId) { onDispose { CandidateDropTargets.shared.remove(dropId) } }
     if (!interactive) SideEffect { CandidateDropTargets.shared.remove(dropId) }
+    val sentenceHighlight = LocalSentenceCandidateHighlight.current
+    val hasSentenceSelection = dragSelection != null || (index == 0 && sentenceHighlight != null)
+    val pressInteractionSource = remember { MutableInteractionSource() }
+    val isPressed by pressInteractionSource.collectIsPressedAsState()
     Row(
         modifier = modifier
             .then(if (interactive) Modifier.onGloballyPositioned {
@@ -1298,8 +1319,11 @@ fun CandidateItem(
                 else candidateItemHeight(fontSize))
             .clip(RoundedCornerShape(5.dp))
             .background(
-                if (isSelected && selectionFill) accentColor.copy(alpha = 0.2f)
-                else Color.Transparent
+                when {
+                    isSelected && selectionFill && !hasSentenceSelection -> candidateHighlightFill(accentColor, isDarkTheme)
+                    isPressed && !hasSentenceSelection -> candidatePressFill(accentColor, isDarkTheme)
+                    else -> Color.Transparent
+                }
             )
             .semantics {
                 selected = isSelected
@@ -1311,6 +1335,8 @@ fun CandidateItem(
                 }
             }
             .then(if (interactive) Modifier.tolerantClick(
+                showRipple = false,
+                interactionSource = pressInteractionSource,
                 longPressTimeoutMillis = CANDIDATE_LONG_PRESS_TIMEOUT_MS,
                 onLongClick = if (onSentenceSelection == null) onLongClick else null,
                 onClick = onClick,
@@ -1327,7 +1353,7 @@ fun CandidateItem(
             if (twoLineWidth != null) candidateTwoLineTextStyle(it, textSize) else it
         }.copy(shadow = textShadow).withInputTextLocale()
         Text(
-            text = sentenceCandidateText(text, index, dragSelection, LocalSentenceCandidateHighlight.current, accentColor),
+            text = sentenceCandidateText(text, index, dragSelection, sentenceHighlight, accentColor, isDarkTheme),
             modifier = (if (twoLineWidth != null) Modifier.width(with(LocalDensity.current) { twoLineWidth.toDp() })
                 else Modifier.candidateBaseline(textSize)).then(if (interactive && onSentenceSelection != null && text.isNotEmpty()) Modifier
                 .onGloballyPositioned { textTopInWindow = it.positionInWindow().y }
@@ -1897,7 +1923,8 @@ internal fun PreeditLabel(text: String, visuals: CandidateBarVisuals, onEdit: ((
         }
         val caretColor = (if (colorsClose(visuals.accentColor, textColor)) visuals.selectedTextColor else visuals.accentColor)
             .let { it.copy(alpha = it.alpha * caretAlpha) }
-        val annotated = sentenceSelectionText(cleanDisplayText, LocalSentenceSelection.current.value, visuals.accentColor)
+        val annotated = sentenceSelectionText(cleanDisplayText, LocalSentenceSelection.current.value, visuals.accentColor,
+            isDarkTheme = visuals.isDarkTheme)
         var layout by remember { mutableStateOf<androidx.compose.ui.text.TextLayoutResult?>(null) }
         val drawCaret = if (caretOffset == null) Modifier else Modifier.drawBehind {
             layout?.takeIf { it.layoutInput.text.text == cleanDisplayText }
@@ -2035,15 +2062,32 @@ internal fun FixedCandidateStrip(
             } else { highlightBox.snapTo(target); highlightShown = true }
         }
     }
-    val highlightAccent = visuals.accentColor
-    val highlightVisible = candidates.isNotEmpty()
+    val highlightFill = candidateHighlightFill(visuals.accentColor, visuals.isDarkTheme)
+    val sentenceSelectionState = LocalSentenceSelection.current
+    val sentenceCandidateHighlight = LocalSentenceCandidateHighlight.current
+    var localSentenceDragging by remember(candidates) { mutableStateOf(false) }
+    val stripCallbacks = remember(callbacks) {
+        callbacks.copy(
+            onSentenceSelectionChange = callbacks.onSentenceSelectionChange?.let { cb ->
+                { start, end -> localSentenceDragging = true; cb(start, end) }
+            },
+            onSentenceSelectionEnd = callbacks.onSentenceSelectionEnd?.let { cb ->
+                { localSentenceDragging = false; cb() }
+            },
+        )
+    }
+    val focusedIndexForHighlight = highlightIndex.takeIf { it in candidates.indices } ?: 0
+    val highlightVisible = candidates.getOrNull(focusedIndexForHighlight)?.isNotEmpty() == true
     // 候选栏里这条铺满栏高（见 candidateGapTaps），候选照旧上下居中。
     BoxWithConstraints(modifier.clipToBounds().testTag("candidate-fixed-strip")
         .onGloballyPositioned { stripOriginX = it.positionInWindow().x; stripRootOrigin = it.boundsInRoot().topLeft }
         .drawBehind {
             val rect = highlightBox.value
-            if (highlightShown && highlightVisible && focusedOnScreen && CandidateDropTargets.shared.hoveredBounds == null && rect.width > 0f)
-                drawRoundRect(highlightAccent.copy(alpha = 0.2f), rect.topLeft - stripRootOrigin, rect.size,
+            if (highlightShown && highlightVisible && focusedOnScreen &&
+                CandidateDropTargets.shared.hoveredBounds == null &&
+                !localSentenceDragging && sentenceSelectionState.value == null && sentenceCandidateHighlight == null &&
+                rect.width > 0f)
+                drawRoundRect(highlightFill, rect.topLeft - stripRootOrigin, rect.size,
                     androidx.compose.ui.geometry.CornerRadius(5.dp.toPx()))
         }, contentAlignment = Alignment.CenterStart) {
         // 中缝在本条内的位置（像素）；未测到位置前按整条排。
@@ -2175,7 +2219,7 @@ internal fun FixedCandidateStrip(
         // Shift 拖动指着候选时，选中底色改由候选栏画在手指指着的那个上，原来的先不画。
         val shiftDragFree = CandidateDropTargets.shared.hoveredBounds == null
         if (scrollable && localGap == null) {
-            ScrollableCandidateRow(candidates, all, shownComments, visuals, callbacks, fontSize, focused, showNumberLabels,
+            ScrollableCandidateRow(candidates, all, shownComments, visuals, stripCallbacks, fontSize, focused, showNumberLabels,
                 itemSpacing, itemPadding, visibleIndices, window.tailPadding, window.glossBodyWidthAt, window.fits, scrollKey, onUserScroll, onNearEnd,
                 corrections = correctedCandidates,
                 selectionFill = shiftDragFree && !highlightShown,
@@ -2199,6 +2243,7 @@ internal fun FixedCandidateStrip(
                 }, visuals.textColor,
                     comment = shownComments.getOrElse(index) { "" }, isSelected = index == focused,
                     accentColor = visuals.accentColor, selectedTextColor = visuals.selectedTextColor,
+                    isDarkTheme = visuals.isDarkTheme,
                     opaqueComment = visuals.opaqueComments,
                     textShadow = visuals.textShadow,
                     fontSize = fontSize, candidateFontFamily = AppFonts.candidateFontFamily,
@@ -2209,9 +2254,9 @@ internal fun FixedCandidateStrip(
                             itemSpacing, fontSize) else Modifier)
                         .then(if (index == focused) Modifier.onGloballyPositioned { focusedBounds = it.boundsInRoot(); focusedOnScreen = true } else Modifier),
                     onLongClick = if (index < candidates.size) callbacks.onCandidateLongPress?.let { action -> { action(index) } } else null,
-                    onSentenceSelection = callbacks.onSentenceSelection.takeIf { index == 0 && !showNumberLabels },
-                    onSentenceSelectionChange = callbacks.onSentenceSelectionChange.takeIf { index == 0 && !showNumberLabels },
-                    onSentenceSelectionEnd = callbacks.onSentenceSelectionEnd.takeIf { index == 0 && !showNumberLabels },
+                    onSentenceSelection = stripCallbacks.onSentenceSelection.takeIf { index == 0 && !showNumberLabels },
+                    onSentenceSelectionChange = stripCallbacks.onSentenceSelectionChange.takeIf { index == 0 && !showNumberLabels },
+                    onSentenceSelectionEnd = stripCallbacks.onSentenceSelectionEnd.takeIf { index == 0 && !showNumberLabels },
                     learned = index < candidates.size && all[index] in learnedCandidates,
                     correction = if (index < candidates.size) correctedCandidates[all[index]].orEmpty() else "",
                     selectionFill = shiftDragFree && !highlightShown, horizontalPadding = itemPadding, fit = window.fits[index])
@@ -2334,6 +2379,7 @@ private fun ScrollableCandidateRow(
             }, visuals.textColor,
                 comment = comments.getOrElse(index) { "" }, isSelected = index == focused,
                 accentColor = visuals.accentColor, selectedTextColor = visuals.selectedTextColor,
+                isDarkTheme = visuals.isDarkTheme,
                 opaqueComment = visuals.opaqueComments,
                 textShadow = visuals.textShadow,
                 fontSize = fontSize, candidateFontFamily = AppFonts.candidateFontFamily,
@@ -2402,11 +2448,30 @@ private const val CANDIDATE_SLIDE_MS = 120
  * 并把选中底色挪到手指指着的候选上（与平时选中候选同一样式，任何时候只亮一个）；换候选时底色滑过去（120ms）。
  * 只在绘制时读取拖动状态，不让候选栏重组。
  */
+/** 候选栏选中底框色：浅色用强调色 20%，深色提亮为灰白色半透明以对齐浅色模式的明暗层次，并避开黑光晕触发阈值。 */
+internal fun candidateHighlightFill(accent: Color, isDarkTheme: Boolean): Color =
+    if (isDarkTheme) androidx.compose.ui.graphics.lerp(accent, Color.White, 0.45f).copy(alpha = 0.28f)
+    else accent.copy(alpha = 0.2f)
+
+/** 候选词按压/拖动触摸底框色：与第一候选同色系但更淡（深色灰白 14%、浅色强调色 12%），且避开黑光晕触发阈值。 */
+internal fun candidatePressFill(accent: Color, isDarkTheme: Boolean): Color =
+    if (isDarkTheme) androidx.compose.ui.graphics.lerp(accent, Color.White, 0.45f).copy(alpha = 0.14f)
+    else accent.copy(alpha = 0.12f)
+
+/** 候选词拖动选字 / 局部修改高亮底色：浅色沿用强调色 30%，深色采用与第一候选同色系但更淡的灰白色半透明，并避开黑光晕触发阈值。 */
+internal fun candidateSentenceSelectionFill(accent: Color, isDarkTheme: Boolean): Color =
+    if (isDarkTheme) androidx.compose.ui.graphics.lerp(accent, Color.White, 0.45f).copy(alpha = 0.20f)
+    else accent.copy(alpha = 0.3f)
+
 @Composable
-private fun Modifier.shiftDragOverlay(rootOrigin: () -> androidx.compose.ui.geometry.Offset, accent: Color): Modifier {
+private fun Modifier.shiftDragOverlay(
+    rootOrigin: () -> androidx.compose.ui.geometry.Offset,
+    accent: Color,
+    isDarkTheme: Boolean = false,
+): Modifier {
     val drops = CandidateDropTargets.shared
     val hovered = drops.hoveredBounds
-    // 底色和选中候选一样（强调色两成、5dp 圆角），不加边框；第一次指到候选时直接出现，之后换候选时滑过去。
+    // 底色和选中候选一样，不加边框；第一次指到候选时直接出现，之后换候选时滑过去。
     val box = remember { androidx.compose.animation.core.Animatable(androidx.compose.ui.geometry.Rect.Zero,
         androidx.compose.ui.geometry.Rect.VectorConverter) }
     var hadTarget by remember { mutableStateOf(false) }
@@ -2415,12 +2480,13 @@ private fun Modifier.shiftDragOverlay(rootOrigin: () -> androidx.compose.ui.geom
         if (!hadTarget) { box.snapTo(hovered); hadTarget = true }
         else box.animateTo(hovered, androidx.compose.animation.core.tween(CANDIDATE_SLIDE_MS))
     }
+    val highlightFill = candidateHighlightFill(accent, isDarkTheme)
     return drawWithContent {
         drawContent()
         val origin = rootOrigin()
         val rect = box.value
         if (drops.hoveredBounds != null && rect.width > 0f) {
-            drawRoundRect(accent.copy(alpha = 0.2f), rect.topLeft - origin, rect.size,
+            drawRoundRect(highlightFill, rect.topLeft - origin, rect.size,
                 androidx.compose.ui.geometry.CornerRadius(5.dp.toPx()))
         }
         drops.dragLine?.let { (from, to) ->
@@ -2446,7 +2512,7 @@ private val TOOLBAR_SLOT_BLEND_FULL = 840.dp
  * [alpha] 是闪烁的当前亮度。
  */
 internal fun sentenceSelectionText(text: String, owner: com.kingzcheung.xime.service.SentenceEditSession?,
-    accent: Color, base: AnnotatedString = AnnotatedString(text)): AnnotatedString {
+    accent: Color, base: AnnotatedString = AnnotatedString(text), isDarkTheme: Boolean = false): AnnotatedString {
     val plain = text.replace("\u200B", "")
     val range = owner?.displaySelection(plain) ?: return base
     fun displayOffset(offset: Int): Int {
@@ -2461,7 +2527,7 @@ internal fun sentenceSelectionText(text: String, owner: com.kingzcheung.xime.ser
     val end = displayOffset(range.last + 1)
     return androidx.compose.ui.text.buildAnnotatedString {
         append(base)
-        addStyle(androidx.compose.ui.text.SpanStyle(background = accent.copy(alpha = 0.3f)), start, end)
+        addStyle(androidx.compose.ui.text.SpanStyle(background = candidateSentenceSelectionFill(accent, isDarkTheme)), start, end)
     }
 }
 

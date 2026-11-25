@@ -163,7 +163,7 @@ internal fun KeyboardResizeOverlay(
     val density = LocalDensity.current
     val hostView = LocalView.current
     val currentSnapFeedback by rememberUpdatedState(onSnapFeedback ?: {
-        hostView.performHapticFeedback(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
+        hostView.performKeyboardHaptic(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
     })
     val roundedBottom = rememberRoundedKeyboardBottom()
     val roundedTop = rememberRoundedKeyboardTop()

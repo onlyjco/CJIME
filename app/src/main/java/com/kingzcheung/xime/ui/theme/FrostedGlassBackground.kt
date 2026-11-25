@@ -104,23 +104,40 @@ internal fun Modifier.frostedGlassBackground(
                     }
                 }
             })
-            imageSlot.update(image, frame, draw)
+            imageSlot.update(image, frame, draw, glass = true)
         }
+        val sharedFallbackGradient = background?.takeIf { it.type == "gradient" }?.let { bg ->
+            (if (isDark) bg.colorsDark ?: bg.colors else bg.colors)
+                ?.takeIf { it.size >= 2 }
+                ?.map { Color(0xFF000000L or it) }
+        }
+        val sharedFallbackSolid = background?.takeIf { it.type == "solid" }?.let { resolveSolidColor(it, isDark) } ?: shared.fallback
         return onGloballyPositioned {
             origin = it.positionInWindow()
             report(surfaceKey, origin.y)
         }.then(motionRedrawIsolation(shared.motion.takeIf { imageSlot == null })).drawWithContent {
             if (shared.opacity > 0f) drawUnderTopFeather(feather?.top?.value?.minus(origin.y), feather?.heightPx ?: 0f) {
                 val image = shared.image?.takeIf { shared.frame.size.width > 0 && shared.frame.size.height > 0 }
-                if (image == null) drawRect(shared.fallback, alpha = shared.opacity)
-                else {
+                if (image == null) {
+                    if (sharedFallbackGradient != null && background != null) {
+                        val (start, end) = gradientLine(background, androidx.compose.ui.geometry.Rect(Offset.Zero, size))
+                        drawRect(androidx.compose.ui.graphics.Brush.linearGradient(sharedFallbackGradient, start, end), alpha = shared.opacity)
+                    } else {
+                        drawRect(sharedFallbackSolid, alpha = shared.opacity)
+                    }
+                } else {
                     val rawOffset = shared.frame.offsetIn(origin)
-                    // 过渡帧若 frame 顶部滞后于表面顶部（rawOffset.y > 0），把图向上延伸覆盖顶部，避免工具栏区域露出纯灰 fallback 断层。
-                    val offset = if (rawOffset.y > 0f) Offset(rawOffset.x, 0f) else rawOffset
-                    val drawSize = if (rawOffset.y > 0f) IntSize(
-                        shared.frame.size.width,
-                        (shared.frame.size.height + rawOffset.y.roundToInt()).coerceAtLeast(size.height.roundToInt()),
-                    ) else shared.frame.size
+                    // 过渡帧（如锁屏解锁、Insets 切换）若 frame 任意一边滞后于当前表面，将共享图延伸覆盖四边，
+                    // 避免顶部工具栏或底部留白露出纯灰 fallback 断层。
+                    val drawLeft = minOf(rawOffset.x, 0f)
+                    val drawTop = minOf(rawOffset.y, 0f)
+                    val drawRight = maxOf(rawOffset.x + shared.frame.size.width.toFloat(), size.width)
+                    val drawBottom = maxOf(rawOffset.y + shared.frame.size.height.toFloat(), size.height)
+                    val offset = Offset(drawLeft, drawTop)
+                    val drawSize = IntSize(
+                        (drawRight - drawLeft).roundToInt().coerceAtLeast(1),
+                        (drawBottom - drawTop).roundToInt().coerceAtLeast(1),
+                    )
                     clipRect(offset.x, offset.y, offset.x + drawSize.width,
                         offset.y + drawSize.height, androidx.compose.ui.graphics.ClipOp.Difference) {
                         drawRect(shared.fallback, alpha = shared.opacity)
@@ -157,21 +174,34 @@ internal fun Modifier.frostedGlassBackground(
             else drawImage(image, dstOffset = IntOffset.Zero, dstSize = IntSize(size.width.roundToInt(), size.height.roundToInt()),
                 alpha = normalized.backgroundOpacity, filterQuality = FilterQuality.Medium)
         })
-        imageSlot.update(image, { null }, draw)
+        imageSlot.update(image, { null }, draw, glass = true)
     }
 
     // 底部圆角时没有共用背景，各层自己画；柔化上沿要知道自己在窗口里的位置。
     var featherOrigin by remember { mutableStateOf(0f) }
     val positioned = if (feather == null) this else onGloballyPositioned { featherOrigin = it.positionInWindow().y }
+    val fallbackGradient = background?.takeIf { it.type == "gradient" }?.let { bg ->
+        (if (isDark) bg.colorsDark ?: bg.colors else bg.colors)
+            ?.takeIf { it.size >= 2 }
+            ?.map { Color(0xFF000000L or it) }
+    }
+    val fallbackSolid = background?.takeIf { it.type == "solid" }?.let { resolveSolidColor(it, isDark) } ?: fallbackColor
     return positioned.onSizeChanged { targetSize = it }.drawWithContent {
         // The cached theme bitmap is opaque. Draw exactly one source with material alpha,
-        // or its fallback while loading; labels and keycaps remain outside this operation.
+        // or its synchronous gradient/solid fallback while loading; labels and keycaps remain outside this operation.
         val opacity = normalized.backgroundOpacity
         if (opacity > 0f) drawUnderTopFeather(feather?.top?.value?.minus(featherOrigin), feather?.heightPx ?: 0f) {
             val image = blurredImage
             val layer = pixels.layer(IntSize(size.width.roundToInt(), size.height.roundToInt()))
             if (layer != null) { if (imageSlot == null) drawBackdropLayer(layer, opacity) }
-            else if (image == null) drawRect(fallbackColor, alpha = opacity)
+            else if (image == null) {
+                if (fallbackGradient != null && background != null) {
+                    val (start, end) = gradientLine(background, androidx.compose.ui.geometry.Rect(Offset.Zero, size))
+                    drawRect(androidx.compose.ui.graphics.Brush.linearGradient(fallbackGradient, start, end), alpha = opacity)
+                } else {
+                    drawRect(fallbackSolid, alpha = opacity)
+                }
+            }
             else if (imageSlot == null && coverImage) drawBackdropLayer(BackdropLayer(image,
                 coverRect(IntSize(image.width, image.height), IntSize(size.width.roundToInt(), size.height.roundToInt())),
                 null), opacity)

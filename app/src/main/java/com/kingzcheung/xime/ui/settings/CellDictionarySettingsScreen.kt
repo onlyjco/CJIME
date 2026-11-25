@@ -123,7 +123,7 @@ fun CellDictionarySettingsPanel(
     val totalLevel = CellDictionaryCost.level(total)
     val large = totalLevel == CellDictionaryCost.Level.HEAVY
     Scaffold(topBar = {
-        if (!embedded) TopAppBar(title = { Text("导入的词库") }, navigationIcon = {
+        if (!embedded) TopAppBar(title = { Text("导入的词库", modifier = Modifier.settingsSearchTitleAnchor("导入的词库")) }, navigationIcon = {
             IconButton(onClick = onBack) { Icon(Icons.AutoMirrored.Filled.ArrowBack, "返回") }
         })
     }, bottomBar = {

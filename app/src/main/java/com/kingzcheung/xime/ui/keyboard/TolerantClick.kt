@@ -46,7 +46,7 @@ fun Modifier.tolerantClick(
     val currentOnLongClick by rememberUpdatedState(onLongClick)
     val currentEnabled by rememberUpdatedState(enabled)
     val source = interactionSource ?: remember { MutableInteractionSource() }
-    val resolvedIndication = if (showRipple) LocalIndication.current else null
+    val resolvedIndication = if (showRipple) LocalIndication.current.takeUnless { it === NoKeyboardIndication } else null
 
     val indicationModifier = if (resolvedIndication != null) {
         Modifier.indication(source, resolvedIndication)

@@ -105,7 +105,7 @@ internal class PopupSelectableEditText(context: Context) : EditText(context) {
         }
         requestFocus()
         callOnClick()
-        performHapticFeedback(HapticFeedbackConstants.LONG_PRESS)
+        performKeyboardHaptic(HapticFeedbackConstants.LONG_PRESS)
         parent?.requestDisallowInterceptTouchEvent(true)
         val offset = getOffsetForPosition(downX, downY)
         val word = wordAt(offset)

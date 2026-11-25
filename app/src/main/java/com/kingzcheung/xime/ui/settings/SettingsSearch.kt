@@ -23,8 +23,11 @@ import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
+import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.layout.onSizeChanged
+import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.platform.LocalDensity
+import androidx.compose.ui.platform.LocalView
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.IntSize
 import kotlinx.coroutines.delay
@@ -35,7 +38,9 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.WindowInsets
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.ime
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.width
@@ -130,8 +135,8 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
     val layoutIndex = SettingsRoutes.LayoutDisplay
     val gesturePage = layoutPage("gestures")
     val candidatePage = layoutPage("candidates")
-    fun page(title: String, path: String, target: String, keywords: String) =
-        SettingsSearchEntry(title, path, target, keywords, anchor = null)
+    fun page(title: String, path: String, target: String, keywords: String, anchor: String? = title) =
+        SettingsSearchEntry(title, path, target, keywords, anchor = anchor)
     listOf(
         // 首页入口（整页）
         page("语言与方案", input, "languages", "语言 输入方案 键盘布局 切换方式 双拼 五笔 形码 笔画 仓颉 速成 注音 大千 粤语 英语 九键 26键 14键 语言管理 中文 英文 拼音 导入方案的语言 未标注语言 方案语言"),
@@ -150,7 +155,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         page("扩展", system, SettingsRoutes.Market, "下载 输入方案 模型 插件 商店 扩展商店"),
         page("其他设置", system, SettingsRoutes.Other, "其他 更多 备份 界面语言 显示语言 Language"),
         page("备份与恢复", other, SettingsRoutes.Backup, "备份 恢复 导出 导入 本地备份 换机 迁移"),
-        page("关于 CJIME", system, SettingsRoutes.About, "版本 开发者 联系 许可 检查更新 最新版本 源代码 更新内容"),
+        page("关于 CJIME", system, SettingsRoutes.About, "版本 开发者 联系 许可 检查更新 最新版本 源代码 更新内容", anchor = "关于"),
         // 输入 › 语言与方案
         SettingsSearchEntry("语言键切换方式", languages, "languages", "语言键 切换语言 中英切换 循环切换 指定语言 英文 地球键 点按语言键"),
         SettingsSearchEntry("繁体输出", chinesePath, chinese, "繁体 繁體 正体 简繁 简繁切换 简体 台湾 转换 注音简体 注音繁体 注音转简体 大千 ㄅㄆㄇ"),
@@ -199,7 +204,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("数字键盘左栏符号", layouts, layoutIndex, "数字键盘 左栏 侧栏 符号 运算符 加减乘除 + - * / 冒号 自定义 顺序 上下滑 数字侧栏"),
         SettingsSearchEntry("数字行", layouts, layoutIndex, "数字行 数字栏 一排数字 顶部数字 第五行 平板 1234567890 数字顺序 数字位置 自定义数字 数字行一样高 数字键太小 数字行太矮"),
         page("键盘尺寸与位置", layouts, SettingsRoutes.KeyboardResize, "尺寸 大小 高度 宽度 调整尺寸 键盘调节 悬浮 浮动 分体 透明度 底部留白 单手 单手模式 位置 旋转"),
-        page("锁定悬浮键盘位置和大小", layouts, SettingsRoutes.KeyboardResize, "固定悬浮键盘 防误拖 锁住 解锁 底部短横条 底部小锁 长按 宽高 四角"),
+        SettingsSearchEntry("锁定悬浮键盘位置和大小", layouts, SettingsRoutes.KeyboardResize, "固定悬浮键盘 防误拖 锁住 解锁 底部短横条 底部小锁 长按 宽高 四角"),
         SettingsSearchEntry("底部诊断", layouts, layoutPage("bottom_gap"), "诊断 机型 导航方式 反馈 底部 被挡 有缝 复制"),
         SettingsSearchEntry("底部留白快捷按钮", layouts, layoutPage("bottom_gap"), "底部留白 快捷按钮 切换中英文 剪贴板 开关 左右按钮 底部按钮"),
         SettingsSearchEntry("合并符号数字并隐藏切换键", layouts, layoutPage("bottom_gap"), "合并 符号 数字 123 拖拽 隐藏 切换中英文 空格 居中 回车 精简底排"),
@@ -257,6 +262,8 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("移动光标时振动", gestures, gesturePage, "光标 振动 震动 触感", section = "光标与空格"),
         SettingsSearchEntry("移动光标时播放按键音", gestures, gesturePage, "光标 声音 按键音", section = "光标与空格"),
         SettingsSearchEntry("长按空格", gestures, gesturePage, "空格 长按 移动光标 连续空格 语音 语音开关 按住说话 麦克风 上滑取消 松手取消 取消语音", section = "光标与空格"),
+        SettingsSearchEntry("空格键笔画筛选", gestures, gesturePage, "空格 笔画 笔画筛选 筛选候选 偏旁 部首 划笔画 手写笔画", section = "光标与空格"),
+        SettingsSearchEntry("按键区笔画筛选", gestures, gesturePage, "按键区 键盘区 笔画 笔画筛选 筛选候选 偏旁 部首 划笔画 手写笔画", section = "光标与空格"),
         // 输入 › 物理键盘
         SettingsSearchEntry("Ctrl + 空格", hardware, SettingsRoutes.HardwareKeyboard, "ctrl 空格 语言切换 快捷键 循环切换"),
         SettingsSearchEntry("单独轻按 Shift", hardware, SettingsRoutes.HardwareKeyboard, "shift 中英切换 快捷键 语言切换"),
@@ -330,9 +337,9 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("键缝动效", effect, SettingsRoutes.KeyEffect, "键缝 动效 动画 光线 线路 流光 扩散 特效"),
         // 智能 › 词库
         page("导入的词库", dictionary, SettingsRoutes.CellDictionaries, "分类词库 细胞词库 搜狗 scel txt json 导入词库 下载词库 本地导入 删除词库 自动更新词库 词库更新 在线词库 新词 导出词库 导出 QQ 百度 Gboard 微软拼音 dctx 电脑版"),
-        SettingsSearchEntry("我的短语", dictionary, SettingsRoutes.Dictionary, "自定义短语 短语 快捷短语 常用语 编码", anchor = null),
-        SettingsSearchEntry("查词", dictionary, SettingsRoutes.Dictionary, "方案词库 词库 词条 编码 查找", anchor = null),
-        SettingsSearchEntry("删掉的候选", dictionary, SettingsRoutes.Dictionary, "屏蔽的候选 屏蔽 恢复 候选 九键 删词 忘记", anchor = null),
+        SettingsSearchEntry("我的短语", dictionary, SettingsRoutes.Dictionary, "自定义短语 短语 快捷短语 常用语 编码"),
+        SettingsSearchEntry("查词", dictionary, SettingsRoutes.Dictionary, "方案词库 词库 词条 编码 查找"),
+        SettingsSearchEntry("删掉的候选", dictionary, SettingsRoutes.Dictionary, "屏蔽的候选 屏蔽 恢复 候选 九键 删词 忘记"),
         // 智能 › 智能联想
         SettingsSearchEntry("启用智能联想", prediction, SettingsRoutes.SmartPrediction, "联想 开关 预测 基础联想"),
         SettingsSearchEntry("空格上屏联想候选", prediction, SettingsRoutes.SmartPrediction, "空格 联想 上屏", section = "功能开关"),
@@ -388,6 +395,7 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
         SettingsSearchEntry("验证码发到其他设备", clipboard, SettingsRoutes.ClipboardPanel, "验证码 短信 电脑 平板 同步 发送 code"),
         SettingsSearchEntry("记录密码等敏感内容", clipboard, SettingsRoutes.ClipboardPanel, "密码 敏感 银行卡 密码管理器 剪贴板 password"),
         SettingsSearchEntry("上屏后自动关闭剪贴板", clipboard, SettingsRoutes.ClipboardPanel, "剪贴板 关闭 粘贴 连续贴"),
+        SettingsSearchEntry("粘贴后移到最前", clipboard, SettingsRoutes.ClipboardPanel, "剪贴板 粘贴 置顶 移到最前 排序 最前面 排位"),
         SettingsSearchEntry("候选栏显示刚复制的内容", clipboard, SettingsRoutes.ClipboardPanel,
             "剪贴板 候选栏 最新复制 刚复制 最近复制 自动显示 弹出 不显示 隐私 关掉"),
         SettingsSearchEntry("卡片显示行数", clipboard, SettingsRoutes.ClipboardPanel,
@@ -408,9 +416,9 @@ internal val SettingsSearchIndex: List<SettingsSearchEntry> = run {
             "剪贴板 定期清理 自动清理 自动删除 过期 天数 保留 历史记录", anchor = "保留时间", section = "历史记录"),
         SettingsSearchEntry("导出剪贴板", clipboard, SettingsRoutes.ClipboardPanel, "导出 剪贴板 记录 固定内容 备份"),
         SettingsSearchEntry("导入剪贴板", clipboard, SettingsRoutes.ClipboardPanel, "导入 剪贴板 记录 固定内容 恢复 换机"),
-        page("插件市场", "$system › 扩展 › 插件", SettingsRoutes.MarketPlugins, "插件商店 下载 安装 API AI 翻译 帮写 回复 改写 润色 在线语音"),
-        page("已安装的插件", "$system › 扩展 › 插件", SettingsRoutes.Plugins, "插件 已安装 插件管理 文件导入 xipk"),
-        page("已安装的模型", "$system › 扩展 › 模型", SettingsRoutes.ModelLocal, "模型 识字 语音 手写 本地 下载 模型管理"),
+        page("插件市场", "$system › 扩展 › 插件", SettingsRoutes.MarketPlugins, "插件商店 下载 安装 API AI 翻译 帮写 回复 改写 润色 在线语音", anchor = "扩展"),
+        page("已安装的插件", "$system › 扩展 › 插件", SettingsRoutes.Plugins, "插件 已安装 插件管理 文件导入 xipk", anchor = "插件管理"),
+        page("已安装的模型", "$system › 扩展 › 模型", SettingsRoutes.ModelLocal, "模型 识字 语音 手写 本地 下载 模型管理", anchor = "模型管理"),
         SettingsSearchEntry("自动更新模型", "$system › 扩展 › 模型", SettingsRoutes.ModelLocal,
             "模型 自动更新 新版本 升级 更新 Wi-Fi 手写 九键 词组模型 语音", section = "自动更新"),
         // 系统 › 备份与恢复
@@ -655,10 +663,22 @@ internal fun SettingsSearchResults(query: String, onOpen: (SettingsSearchEntry) 
             color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(16.dp))
         return
     }
+    val keyboardController = androidx.compose.ui.platform.LocalSoftwareKeyboardController.current
+    val focusManager = androidx.compose.ui.platform.LocalFocusManager.current
+    val view = androidx.compose.ui.platform.LocalView.current
     SettingsSection(title = "搜索结果", content = {
         results.take(30).forEachIndexed { index, entry ->
             if (index > 0) HorizontalDivider(Modifier.padding(horizontal = 16.dp))
-            Column(Modifier.fillMaxWidth().clickable { SettingsSearchFocus.open(entry); onOpen(entry) }.testTag("settings-search-result:${entry.title}")
+            Column(Modifier.fillMaxWidth().clickable {
+                // 必须先收起软键盘再清焦点：先 clearFocus 会提前断开文本输入会话，导致 keyboardController.hide() 失效、
+                // 键盘拖到切页动画结束才开始收起，进而与目标页滚动定位竞态并把列表弹回顶部。
+                keyboardController?.hide()
+                context.getSystemService(android.view.inputmethod.InputMethodManager::class.java)
+                    ?.hideSoftInputFromWindow(view.windowToken, 0)
+                focusManager.clearFocus(force = true)
+                SettingsSearchFocus.open(entry)
+                onOpen(entry)
+            }.testTag("settings-search-result:${entry.title}")
                 .padding(horizontal = 16.dp, vertical = 12.dp)) {
                 Text(entry.title, style = MaterialTheme.typography.bodyLarge)
                 Text(entry.path, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -680,15 +700,20 @@ private const val SEARCH_EXPIRE_MS = 8_000L
  * 按请求里的先后（先具体那一行，再它所在的组）选一个滚到可见处并渐变高亮一次，然后清掉请求。
  */
 internal object SettingsSearchFocus {
-    internal class Request(val keys: List<String>, val at: Long)
+    internal class Request(val keys: List<String>, val at: Long) {
+        var hasAutoScroller by mutableStateOf(false)
+        var autoScrollDone by mutableStateOf(false)
+        var autoScrollAligned by mutableStateOf(false)
+    }
 
     var request by mutableStateOf<Request?>(null)
         private set
 
     private val shown = mutableMapOf<String, Int>()
+    private val placed = mutableMapOf<String, androidx.compose.ui.layout.LayoutCoordinates>()
 
     fun open(entry: SettingsSearchEntry) {
-        val keys = listOfNotNull(entry.anchor, entry.section)
+        val keys = listOfNotNull(entry.anchor, entry.section).distinct()
         request = if (keys.isEmpty()) null else Request(keys, nowMs())
     }
 
@@ -699,16 +724,38 @@ internal object SettingsSearchFocus {
         if (n > 0) shown[key] = n else shown.remove(key)
     }
 
+    internal fun updatePlaced(key: String, coords: androidx.compose.ui.layout.LayoutCoordinates) {
+        if (coords.isAttached && coords.size.height > 0) placed[key] = coords
+        else if (placed[key] === coords) placed.remove(key)
+    }
+
+    internal fun clearPlaced(key: String, coords: androidx.compose.ui.layout.LayoutCoordinates? = null) {
+        if (coords == null || placed[key] === coords) placed.remove(key)
+    }
+
+    /** 已完成布局放置的坐标（排除 LazyColumn 预取期间仅组合未放置的节点）。 */
+    internal fun placedCoords(key: String): androidx.compose.ui.layout.LayoutCoordinates? =
+        placed[key]?.takeIf { it.isAttached && it.size.height > 0 }
+
+    /** 锚点已真正完成布局放置（排除 LazyColumn 预取期间仅组合未放置的节点）。 */
+    internal fun isPlaced(key: String): Boolean = placedCoords(key) != null
+
     internal fun isLive(r: Request) = request === r && nowMs() - r.at < SEARCH_EXPIRE_MS
 
-    /** 请求里有一项已经出现在页面上（懒加载列表据此停止往下翻）。 */
+    /** 请求里最精确的那一项（rank 0）已经出现在页面上。 */
+    internal fun primaryShown(r: Request) = r.keys.firstOrNull()?.let { it in shown } == true
+
+    /** 请求里最精确的那一项（rank 0）已完成布局放置并挂入窗口。 */
+    internal fun primaryPlaced(r: Request) = r.keys.firstOrNull()?.let(::isPlaced) == true
+
+    /** 请求里有一项已经出现在页面上。 */
     internal fun anyShown(r: Request) = r.keys.any { it in shown }
 
     /** [key] 是不是该亮的那一项：排在它前面的项已在页面上就让给那一项。认领后清掉请求，只亮一次。 */
     internal fun claim(key: String, r: Request): Boolean {
         if (!isLive(r)) return false
         val rank = r.keys.indexOf(key)
-        if (rank < 0 || r.keys.take(rank).any { it in shown }) return false
+        if (rank < 0 || r.keys.take(rank).any { isPlaced(it) || it in shown }) return false
         request = null
         return true
     }
@@ -728,23 +775,69 @@ internal fun Modifier.settingsSearchAnchor(key: String, bleed: Dp = 0.dp, bleedV
     val glow = remember { Animatable(0f) }
     val scope = rememberCoroutineScope()
     var size by remember { mutableStateOf(IntSize.Zero) }
+    var anchorCoords by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
     val density = LocalDensity.current
     DisposableEffect(key) {
         SettingsSearchFocus.register(key)
-        onDispose { SettingsSearchFocus.unregister(key) }
+        onDispose {
+            SettingsSearchFocus.clearPlaced(key, anchorCoords)
+            SettingsSearchFocus.unregister(key)
+        }
     }
     val request = SettingsSearchFocus.request
+    val imeBottomNow by androidx.compose.runtime.rememberUpdatedState(
+        androidx.compose.foundation.layout.WindowInsets.ime.getBottom(density)
+    )
     LaunchedEffect(request, key) {
         val r = request ?: return@LaunchedEffect
-        if (key !in r.keys) return@LaunchedEffect
+        val rank = r.keys.indexOf(key)
+        if (rank < 0) return@LaunchedEffect
         val wait = r.at + SEARCH_SETTLE_MS - nowMs()
         if (wait > 0) delay(wait)
-        withFrameNanos { }
+        // 等搜索框收起键盘的 IME 动画完全结束（最多等到 r.at + 950ms），避免 imePadding 收缩期间触发定位造成回弹。
+        val imeDeadline = r.at + 950L
+        var stableZero = 0
+        while (SettingsSearchFocus.isLive(r) && nowMs() < imeDeadline) {
+            if (imeBottomNow == 0) {
+                if (++stableZero >= 2) break
+            } else {
+                stableZero = 0
+            }
+            withFrameNanos { }
+        }
+        // 等 SettingsSearchAutoScroll 结束本次滚动循环后再执行 bringIntoView，避免两个滚动协程在 LazyListState 上互相取消。
+        if (r.hasAutoScroller && !r.autoScrollDone) {
+            val scanDeadline = nowMs() + 1200L
+            while (SettingsSearchFocus.isLive(r) && !r.autoScrollDone && nowMs() < scanDeadline) {
+                withFrameNanos { }
+            }
+        }
+        if (rank > 0) {
+            repeat(2) { withFrameNanos { } }
+        } else if (anchorCoords?.let { it.isAttached && size.height > 0 } != true) {
+            // 精确锚点等待完成布局放置与尺寸测量后再触发滚入视口；
+            // LazyColumn 预取（prefetch）只会组合/测量而不放置，未放置节点调 bringIntoView 会把列表滚回顶部。
+            repeat(8) {
+                withFrameNanos { }
+                val c = anchorCoords
+                if (c != null && c.isAttached && size.height > 0) return@repeat
+            }
+        }
+        val placedNow = anchorCoords?.let { it.isAttached && it.size.height > 0 } == true
+        if (!placedNow) return@LaunchedEffect
         if (!SettingsSearchFocus.claim(key, r)) return@LaunchedEffect
         // 认领后请求清空会让本 effect 重启，动画放到不随它取消的作用域里。
+        val alreadyAligned = r.autoScrollAligned
         scope.launch {
-            val margin = with(density) { 96.dp.toPx() }
-            requester.bringIntoView(Rect(0f, -margin, size.width.toFloat(), size.height + margin))
+            if (!alreadyAligned) {
+                val c = anchorCoords
+                if (c != null && c.isAttached && size.height > 0) {
+                    val margin = with(density) { 56.dp.toPx() }
+                    val w = size.width.toFloat().coerceAtLeast(1f)
+                    val h = size.height.toFloat().coerceAtLeast(1f)
+                    requester.bringIntoView(Rect(0f, -margin, w, h + margin))
+                }
+            }
             glow.animateTo(1f, tween(220))
             delay(650)
             glow.animateTo(0f, tween(1400, easing = LinearOutSlowInEasing))
@@ -753,6 +846,10 @@ internal fun Modifier.settingsSearchAnchor(key: String, bleed: Dp = 0.dp, bleedV
     val color = MaterialTheme.colorScheme.primary
     Modifier
         .bringIntoViewRequester(requester)
+        .onGloballyPositioned { coords ->
+            anchorCoords = coords
+            SettingsSearchFocus.updatePlaced(key, coords)
+        }
         .onSizeChanged { size = it }
         .drawWithContent {
             drawContent()
@@ -763,6 +860,78 @@ internal fun Modifier.settingsSearchAnchor(key: String, bleed: Dp = 0.dp, bleedV
                 drawRoundRect(color.copy(alpha = 0.2f * a), topLeft = Offset(-bx, -by),
                     size = Size(this.size.width + 2 * bx, this.size.height + 2 * by),
                     cornerRadius = CornerRadius(12.dp.toPx()))
+            }
+        }
+        .testTag("settings-search-anchor:$key")
+}
+
+/**
+ * 顶部标题栏或固定标签页标题的搜索定位高亮：点开整页大选项时在标题上亮起同一套定位动画，
+ * 不触发列表滚动或 bringIntoView。
+ */
+internal fun Modifier.settingsSearchTitleAnchor(
+    key: String,
+    bleed: Dp = 10.dp,
+    bleedVertical: Dp = 4.dp,
+): Modifier = composed {
+    if (!LocalSettingsSearchAnchors.current) return@composed Modifier
+    val glow = remember { Animatable(0f) }
+    val scope = rememberCoroutineScope()
+    var anchorCoords by remember { mutableStateOf<androidx.compose.ui.layout.LayoutCoordinates?>(null) }
+    val density = LocalDensity.current
+    DisposableEffect(key) {
+        SettingsSearchFocus.register(key)
+        onDispose {
+            SettingsSearchFocus.clearPlaced(key, anchorCoords)
+            SettingsSearchFocus.unregister(key)
+        }
+    }
+    val request = SettingsSearchFocus.request
+    val imeBottomNow by androidx.compose.runtime.rememberUpdatedState(
+        androidx.compose.foundation.layout.WindowInsets.ime.getBottom(density)
+    )
+    LaunchedEffect(request, key) {
+        val r = request ?: return@LaunchedEffect
+        val rank = r.keys.indexOf(key)
+        if (rank < 0) return@LaunchedEffect
+        val wait = r.at + SEARCH_SETTLE_MS - nowMs()
+        if (wait > 0) delay(wait)
+        val imeDeadline = r.at + 950L
+        var stableZero = 0
+        while (SettingsSearchFocus.isLive(r) && nowMs() < imeDeadline) {
+            if (imeBottomNow == 0) {
+                if (++stableZero >= 2) break
+            } else {
+                stableZero = 0
+            }
+            withFrameNanos { }
+        }
+        if (rank > 0) repeat(2) { withFrameNanos { } }
+        if (!SettingsSearchFocus.claim(key, r)) return@LaunchedEffect
+        scope.launch {
+            glow.animateTo(1f, tween(220))
+            delay(650)
+            glow.animateTo(0f, tween(1400, easing = LinearOutSlowInEasing))
+        }
+    }
+    val color = MaterialTheme.colorScheme.primary
+    Modifier
+        .onGloballyPositioned { coords ->
+            anchorCoords = coords
+            SettingsSearchFocus.updatePlaced(key, coords)
+        }
+        .drawWithContent {
+            drawContent()
+            val a = glow.value
+            if (a > 0f) {
+                val bx = bleed.toPx()
+                val by = bleedVertical.toPx()
+                drawRoundRect(
+                    color.copy(alpha = 0.2f * a),
+                    topLeft = Offset(-bx, -by),
+                    size = Size(this.size.width + 2 * bx, this.size.height + 2 * by),
+                    cornerRadius = CornerRadius(10.dp.toPx()),
+                )
             }
         }
         .testTag("settings-search-anchor:$key")
@@ -780,13 +949,80 @@ internal fun rememberSettingsSearchListState(): LazyListState = rememberLazyList
 internal fun SettingsSearchAutoScroll(state: LazyListState) {
     TypingTrialKeepsPosition(state)
     val request = SettingsSearchFocus.request
+    val density = LocalDensity.current
+    val view = LocalView.current
+    val imeBottomNow by androidx.compose.runtime.rememberUpdatedState(
+        androidx.compose.foundation.layout.WindowInsets.ime.getBottom(density)
+    )
     LaunchedEffect(request) {
         val r = request ?: return@LaunchedEffect
-        withFrameNanos { }
-        while (SettingsSearchFocus.isLive(r) && !SettingsSearchFocus.anyShown(r) && state.canScrollForward) {
-            state.scrollBy(state.layoutInfo.viewportSize.height * 0.8f)
+        r.hasAutoScroller = true
+        // 等切页动画与软键盘收起完全稳定（WindowInsets.ime 归零两帧）后再扫描滚动，防止中途被 imePadding 收缩打断。
+        val wait = r.at + SEARCH_SETTLE_MS - nowMs()
+        if (wait > 0) delay(wait)
+        val imeDeadline = r.at + 950L
+        var stableZero = 0
+        while (SettingsSearchFocus.isLive(r) && nowMs() < imeDeadline) {
+            if (imeBottomNow == 0) {
+                if (++stableZero >= 2) break
+            } else {
+                stableZero = 0
+            }
             withFrameNanos { }
         }
+        val targetKey = r.keys.firstOrNull()
+        val marginPx = with(density) { 56.dp.toPx() }
+        val bottomReservePx = with(density) { 80.dp.toPx() }
+        val topReservePx = with(density) { 96.dp.toPx() }
+        fun desiredRemaining(coords: androidx.compose.ui.layout.LayoutCoordinates): Float {
+            // 必须使用未裁剪的 positionInWindow + size.height，避免刚进入大卡片但仍在视口下方时被 boundsInWindow 裁成 Rect.Zero 误判为已到位。
+            val top = coords.positionInWindow().y
+            val bottom = top + coords.size.height.toFloat()
+            val rootHeight = view.height.toFloat().takeIf { it > 0f }
+                ?: (state.layoutInfo.viewportSize.height.toFloat() + topReservePx)
+            val safeBottom = (rootHeight - bottomReservePx).coerceAtLeast(topReservePx + marginPx)
+            val neededBottom = (bottom + marginPx) - safeBottom
+            val maxKeepingTop = (top - topReservePx).coerceAtLeast(0f)
+            return minOf(neededBottom, maxKeepingTop)
+        }
+        // 已在首屏或顶栏标题上：无需滚动，直接交给锚点高亮。
+        val initialCoords = targetKey?.let { SettingsSearchFocus.placedCoords(it) }
+        if (initialCoords != null && desiredRemaining(initialCoords) <= 1f) {
+            r.autoScrollDone = true
+            return@LaunchedEffect
+        }
+        // 单段平滑滚动到底位：按帧间隔推进，锚点出现后无缝减速停稳，避免「先翻页→顿一下→bringIntoView」两段卡顿。
+        var lastNanos = withFrameNanos { it }
+        while (SettingsSearchFocus.isLive(r) && state.canScrollForward) {
+            val nowNanos = withFrameNanos { it }
+            val dtSec = ((nowNanos - lastNanos) / 1_000_000_000f).coerceIn(0.004f, 0.05f)
+            lastNanos = nowNanos
+            val viewport = state.layoutInfo.viewportSize.height.toFloat().coerceAtLeast(1f)
+            val maxStep = (viewport * 5.0f * dtSec).coerceIn(viewport * 0.08f, viewport * 0.35f)
+            val coords = targetKey?.let { SettingsSearchFocus.placedCoords(it) }
+            if (coords == null) {
+                val moved = state.scrollBy(maxStep)
+                if (moved < 0.5f) break
+            } else {
+                val desired = desiredRemaining(coords)
+                if (desired <= 1f) {
+                    r.autoScrollAligned = true
+                    break
+                }
+                val eased = maxOf(desired * (14f * dtSec).coerceIn(0.22f, 0.72f), 2f)
+                val step = minOf(desired, eased, maxStep)
+                val moved = state.scrollBy(step)
+                if (moved < 0.5f) {
+                    r.autoScrollAligned = true
+                    break
+                }
+            }
+        }
+        val finalCoords = targetKey?.let { SettingsSearchFocus.placedCoords(it) }
+        if (finalCoords != null && desiredRemaining(finalCoords) <= 1f) {
+            r.autoScrollAligned = true
+        }
+        r.autoScrollDone = true
     }
 }
 

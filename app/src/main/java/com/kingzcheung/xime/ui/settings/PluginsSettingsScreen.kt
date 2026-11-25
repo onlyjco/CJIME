@@ -109,7 +109,7 @@ fun PluginsSettingsContent(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             TopAppBar(
-                title = { Text("插件管理") },
+                title = { Text("插件管理", modifier = Modifier.settingsSearchTitleAnchor("插件管理")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(

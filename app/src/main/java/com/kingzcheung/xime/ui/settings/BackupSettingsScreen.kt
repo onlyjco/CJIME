@@ -125,7 +125,7 @@ fun BackupSettingsContent(onBack: () -> Unit) {
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             TopAppBar(
-                title = { Text("备份与恢复") },
+                title = { Text("备份与恢复", modifier = Modifier.settingsSearchTitleAnchor("备份与恢复")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(

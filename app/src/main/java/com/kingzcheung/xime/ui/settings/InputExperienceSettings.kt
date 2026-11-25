@@ -47,11 +47,14 @@ internal fun InputExperienceSettings(
     val context = LocalContext.current
     val saved = rememberKeyboardInputPreferences()
     var settings by remember(saved) { mutableStateOf(saved) }
-    var expanded by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(collapsedSummary == null) }
     val searchRequest = SettingsSearchFocus.request
-    LaunchedEffect(searchRequest) {
-        if (searchRequest != null && searchRequest.keys.any { it in TIMING_SEARCH_KEYS } &&
-            InputExperiencePart.TIMING in parts) expanded = true
+    val searchWantsTiming = InputExperiencePart.TIMING in parts &&
+        searchRequest?.keys?.any { it in TIMING_SEARCH_KEYS } == true
+    var expanded by androidx.compose.runtime.saveable.rememberSaveable {
+        mutableStateOf(collapsedSummary == null || searchWantsTiming)
+    }
+    LaunchedEffect(searchWantsTiming) {
+        if (searchWantsTiming) expanded = true
     }
     SettingsSection(title = title, content = {
         if (collapsedSummary != null) {
@@ -389,6 +392,35 @@ internal fun InputExperienceSettings(
                     "光标每移一字震一下", settings.cursorStepHaptic, "cursor-step-haptic") { settings.copy(cursorStepHaptic = it) }
                 if (SettingsPreferences.isSoundEnabled(context)) cursorStepSwitch("移动光标时播放按键音",
                     "光标每移一字响一下", settings.cursorStepSound, "cursor-step-sound") { settings.copy(cursorStepSound = it) }
+            }
+            HorizontalDivider()
+            Row(Modifier.settingsSearchAnchor("空格键笔画筛选", bleed = 16.dp, bleedVertical = 6.dp).fillMaxWidth(),
+                verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text("空格键笔画筛选", style = MaterialTheme.typography.titleSmall)
+                    Text("有候选时从空格键起笔滑动，按笔画筛选候选", style = MaterialTheme.typography.bodySmall)
+                }
+                Switch(checked = settings.spaceStrokeFilter, colors = settingsSwitchColors(),
+                    modifier = Modifier.testTag("space-stroke-filter-switch"), onCheckedChange = {
+                        settings = settings.copy(spaceStrokeFilter = it); settings.save(context)
+                    })
+            }
+            run {
+                val strokeLock = InputGestureLocks.lockFor(settings, InputGestureLock.Option.KEYBOARD_STROKE_FILTER, true)
+                    ?.takeIf { !settings.keyboardStrokeFilter }
+                Row(Modifier.settingsSearchAnchor("按键区笔画筛选", bleed = 16.dp, bleedVertical = 6.dp).fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically) {
+                    Column(Modifier.weight(1f)) {
+                        Text("按键区笔画筛选", style = MaterialTheme.typography.titleSmall)
+                        Text("有候选时在按键区直接画笔画筛选候选", style = MaterialTheme.typography.bodySmall)
+                        strokeLock?.let { SettingsLockNote(it.message) }
+                    }
+                    Switch(checked = settings.keyboardStrokeFilter, enabled = strokeLock == null,
+                        colors = settingsSwitchColors(), modifier = Modifier.testTag("keyboard-stroke-filter-switch"),
+                        onCheckedChange = {
+                            settings = settings.copy(keyboardStrokeFilter = it); settings.save(context)
+                        })
+                }
             }
             HorizontalDivider()
             // 从「时长与距离」折叠块提出来放到明面，方便开启，并同时作用于键盘语言键与底部留白语言键。

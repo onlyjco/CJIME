@@ -107,7 +107,7 @@ fun ClipboardSyncSettingsContent(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             TopAppBar(
-                title = { Text("剪贴板同步") },
+                title = { Text("剪贴板同步", modifier = Modifier.settingsSearchTitleAnchor("剪贴板同步")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(

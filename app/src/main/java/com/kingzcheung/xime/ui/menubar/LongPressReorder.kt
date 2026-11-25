@@ -8,7 +8,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.hapticfeedback.HapticFeedbackType
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalHapticFeedback
+import com.kingzcheung.xime.ui.keyboard.performKeyboardHaptic
 
 /** The same whole-card reorder gesture is used in settings and on the keyboard. */
 @Composable
@@ -23,9 +25,10 @@ internal fun Modifier.reorderOnLongPress(
     val end by rememberUpdatedState(onEnd)
     val cancel by rememberUpdatedState(onCancel)
     val haptic = LocalHapticFeedback.current
+    val hapticContext = LocalContext.current
     return pointerInput(Unit) {
         detectDragGesturesAfterLongPress(
-            onDragStart = { haptic.performHapticFeedback(HapticFeedbackType.LongPress); start(it) },
+            onDragStart = { haptic.performKeyboardHaptic(hapticContext, HapticFeedbackType.LongPress); start(it) },
             onDrag = { change, amount -> change.consume(); drag(amount.y) },
             onDragEnd = { end() },
             onDragCancel = { cancel() },

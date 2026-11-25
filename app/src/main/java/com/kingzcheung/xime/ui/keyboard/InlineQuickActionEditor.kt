@@ -67,6 +67,7 @@ internal class InlineQuickActionEditor(private val motionScope: CoroutineScope? 
     var dragBounds by mutableStateOf(Rect.Zero)
         private set
     var saveBounds by mutableStateOf(Rect.Zero)
+    var editBounds by mutableStateOf(Rect.Zero)
     var dragFromToolbar by mutableStateOf(false)
         private set
     private var grabOffset = Offset.Zero
@@ -277,6 +278,27 @@ internal fun Modifier.inlineQuickActionGestures(editor: InlineQuickActionEditor)
             }
         }
 
+@Composable
+private fun BoxScope.QuickActionHintPill(
+    text: String,
+    anchorBounds: Rect,
+    tag: String,
+    editor: InlineQuickActionEditor,
+    textColor: Color,
+) {
+    val density = LocalDensity.current
+    val anchor = editor.toLocal(anchorBounds.bottomRight)
+    val rootWidth = editor.rootCoordinates?.size?.width ?: 0
+    Text(text, color = if (textColor.luminance() > .5f) Color.Black else Color.White,
+        fontSize = 12.sp, modifier = Modifier
+            .align(AbsoluteAlignment.TopRight)
+            .absoluteOffset { IntOffset((anchor.x - rootWidth).roundToInt().coerceAtMost(-4),
+                (anchor.y + with(density) { 4.dp.toPx() }).roundToInt()) }
+            .zIndex(20f).shadow(4.dp, RoundedCornerShape(8.dp))
+            .clip(RoundedCornerShape(8.dp)).background(textColor.copy(alpha = .95f))
+            .padding(horizontal = 10.dp, vertical = 5.dp).testTag(tag))
+}
+
 /** A single overlay follows the pointer across the toolbar, pager and their clipping boundaries. */
 @Composable
 internal fun BoxScope.InlineQuickActionOverlay(
@@ -286,19 +308,13 @@ internal fun BoxScope.InlineQuickActionOverlay(
     keyColor: Color,
     textColor: Color,
     accentColor: Color,
+    showEditHint: Boolean = false,
 ) {
     val density = LocalDensity.current
     if (editor.active && showSaveHint && editor.saveBounds != Rect.Zero && editor.dragging == null) {
-        val anchor = editor.toLocal(editor.saveBounds.bottomRight)
-        val rootWidth = editor.rootCoordinates?.size?.width ?: 0
-        Text("点此保存", color = if (textColor.luminance() > .5f) Color.Black else Color.White,
-            fontSize = 12.sp, modifier = Modifier
-                .align(AbsoluteAlignment.TopRight)
-                .absoluteOffset { IntOffset((anchor.x - rootWidth).roundToInt().coerceAtMost(-4),
-                    (anchor.y + with(density) { 4.dp.toPx() }).roundToInt()) }
-                .zIndex(20f).shadow(4.dp, RoundedCornerShape(8.dp))
-                .clip(RoundedCornerShape(8.dp)).background(textColor.copy(alpha = .95f))
-                .padding(horizontal = 10.dp, vertical = 5.dp).testTag("quick-actions-save-hint"))
+        QuickActionHintPill("点此保存", editor.saveBounds, "quick-actions-save-hint", editor, textColor)
+    } else if (!editor.active && showEditHint && editor.editBounds != Rect.Zero) {
+        QuickActionHintPill("点此编辑", editor.editBounds, "quick-actions-edit-hint", editor, textColor)
     }
     val id = editor.dragging ?: return
     val action = actions.firstOrNull { it.item.id == id } ?: return

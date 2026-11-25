@@ -26,9 +26,6 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
-import androidx.compose.ui.graphics.Path
-import androidx.compose.ui.graphics.PathOperation
-import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.Stroke
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.lerp
@@ -213,34 +210,9 @@ internal fun SpaceVoiceLockLayer(state: SpaceVoiceLockState?, accent: Color, sur
         val visible = if (flashing) 1f else shown
         val alpha = visible.coerceIn(0f, 1f)
         val armed = if (flashing) 1f else leftAnim
-        val zone = layout.zone
-        // 区域和弧线（锁上后闪的那半秒不画，只留锁按钮）。
-        if (!flashing) clipRect {
-            val c = layout.left - origin
-            val lockAreas = Path().apply {
-                addOval(Rect(c, zone))
-                addRect(Rect(-zone, -zone, c.x, c.y + zone))
-            }
-            drawPath(lockAreas, accent.copy(alpha = (0.07f + 0.22f * armed) * alpha))
-            // 弧线：左上角锁定区朝中间的半圈，底下接一段横线到键区左边。
-            val stroke = Stroke((1.5f + 0.5f * armed).dp.toPx())
-            val line = accent.copy(alpha = (0.55f + 0.4f * armed) * alpha)
-            drawArc(line, -90f, 180f, false, c - Offset(zone, zone), Size(zone * 2f, zone * 2f), style = stroke)
-            drawLine(line, Offset(c.x, c.y + zone), Offset(0f, c.y + zone), stroke.width)
-            if (state.cancelShown) {
-                // 取消区：空格顶边以上一个键高往上，扣掉左上角锁定区。
-                val lineY = state.space.top - state.space.height - origin.y
-                if (lineY > 0f) {
-                    val band = Path().apply { addRect(Rect(0f, 0f, size.width, lineY)) }
-                    val cancelArea = Path().apply { op(band, lockAreas, PathOperation.Difference) }
-                    drawPath(cancelArea, SPACE_VOICE_CANCEL_RED.copy(alpha = (0.05f + 0.17f * cancelAnim) * alpha))
-                }
-            }
-        }
         if (state.cancelShown && !flashing) {
             val r = metrics.radius * (0.6f + 0.4f * visible) * (1f + 0.12f * cancelAnim)
             val center = layout.cancel - origin + Offset(0f, (1f - alpha) * 8.dp.toPx())
-            drawShadowed(center, r, alpha)
             if (cancelAnim > 0f) drawCircle(SPACE_VOICE_CANCEL_RED.copy(alpha = 0.22f * cancelAnim * alpha), r * 1.25f, center)
             drawCircle(lerp(cancelIdle, SPACE_VOICE_CANCEL_RED, cancelAnim).copy(alpha = alpha), r, center)
             drawCircle(SPACE_VOICE_CANCEL_RED.copy(alpha = 0.6f * (1f - cancelAnim) * alpha), r, center, style = Stroke(1.5f.dp.toPx()))
@@ -258,7 +230,6 @@ internal fun SpaceVoiceLockLayer(state: SpaceVoiceLockState?, accent: Color, sur
             val glow = r * 1.25f
             val raw = c0 - origin + pull + Offset(0f, (1f - alpha) * 8.dp.toPx())
             val center = Offset(raw.x.coerceIn(glow, maxOf(glow, size.width - glow)), raw.y.coerceIn(glow, maxOf(glow, size.height - glow)))
-            drawShadowed(center, r, alpha)
             if (armed > 0f) drawCircle(accent.copy(alpha = 0.22f * armed * alpha), glow, center)
             drawCircle(lerp(idleFill, accent, armed).copy(alpha = alpha), r, center)
             drawCircle(accent.copy(alpha = 0.55f * (1f - armed) * alpha), r, center, style = Stroke(1.5f.dp.toPx()))
@@ -284,12 +255,6 @@ internal fun SpaceVoiceLockLayer(state: SpaceVoiceLockState?, accent: Color, sur
         if (state.holding && state.cancelShown) Box(Modifier.testTag("space-voice-cancel-button"))
         if (flashing) Box(Modifier.testTag("space-voice-lock-flash"))
     }
-}
-
-/** 柔和的投影：两层淡黑圆往下错开一点。 */
-private fun androidx.compose.ui.graphics.drawscope.DrawScope.drawShadowed(center: Offset, r: Float, alpha: Float) {
-    drawCircle(Color.Black.copy(alpha = 0.10f * alpha), r + 3.dp.toPx(), center + Offset(0f, 2.5f.dp.toPx()))
-    drawCircle(Color.Black.copy(alpha = 0.16f * alpha), r + 1.dp.toPx(), center + Offset(0f, 1.dp.toPx()))
 }
 
 private const val SPACE_VOICE_LOCK_FLASH_IN_MS = 110

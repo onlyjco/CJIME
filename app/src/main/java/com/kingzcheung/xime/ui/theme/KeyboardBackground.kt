@@ -174,7 +174,7 @@ fun Modifier.keyboardBackground(
                     drawImageBackground(bitmap, background, fallbackColor)
                     drawImageOverlay(background, isDark)
                 })
-                imageSlot.update(bitmap, { null }, draw)
+                imageSlot.update(bitmap, { null }, draw, glass = false)
             }
             if (bitmap != null && imageSlot != null) return this
             if (bitmap != null) {
@@ -263,16 +263,17 @@ fun Modifier.keyboardBackgroundBelowCard(
     filledSides: Boolean = false,
 ): Modifier {
     @Suppress("NAME_SHADOWING") val background = background.withCurrentSlide()
+    var origin by remember { mutableStateOf<Offset?>(null) }
+    val tracked = onGloballyPositioned { origin = it.positionInWindow() }
     val continued = background != null && !frostedGlass.enabled && when (background.type) {
         "gradient" -> gradientColors(background, isDark) != null
         "image" -> !themeImageSource(background, isDark).isNullOrBlank()
         else -> false
     }
-    if (!continued || background == null) return keyboardBackground(background, isDark, fallbackColor, frostedGlass)
+    if (!continued || background == null) return tracked.keyboardBackground(background, isDark, fallbackColor, frostedGlass)
     val bitmap = if (background.type == "image") rememberThemeImage(themeImageSource(background, isDark)!!) else null
     val motion = LocalKeyboardBackgroundMotion.current
-    var origin by remember { mutableStateOf<Offset?>(null) }
-    return onGloballyPositioned { origin = it.positionInWindow() }.drawWithContent {
+    return tracked.drawWithContent {
         val frame = origin?.let { o -> card()?.takeIf { it.width > 0f && it.height > 0f }?.translate(-o.x, -o.y) }
         if (background.type == "gradient") {
             val colors = gradientColors(background, isDark)!!
@@ -371,6 +372,42 @@ fun Modifier.keyboardBackgroundBesideCard(
     }
     return if (gradient != null || image) band
         else band.keyboardBackground(background, isDark, fallbackColor, frostedGlass)
+}
+
+/**
+ * 悬浮键盘剪贴板展开时拖动条的无缝背景：同步承接上方卡片底边（渐变直接沿同一条线性渐变续画，
+ * 纯色直接铺底色），玻璃开启时按同一 `backgroundOpacity` 透明叠加，彻底避免新挂载异步玻璃图导致的单帧闪烁。
+ */
+@Composable
+internal fun Modifier.floatingFooterSeamlessBackground(
+    background: BackgroundConfig?,
+    isDark: Boolean,
+    fallbackColor: Color,
+    card: () -> Rect?,
+    frostedGlass: FrostedGlassConfig,
+): Modifier {
+    @Suppress("NAME_SHADOWING") val background = background.withCurrentSlide()
+    val effectiveGlass = frostedGlass.forBackground(background).normalized()
+    val alpha = if (frostedGlass.enabled) effectiveGlass.backgroundOpacity else 1f
+    if (background?.type == "image") {
+        return if (frostedGlass.enabled) keyboardBackground(background, isDark, fallbackColor, frostedGlass)
+        else keyboardBackgroundBelowCard(background, isDark, fallbackColor, card, frostedGlass)
+    }
+    var origin by remember { mutableStateOf<Offset?>(null) }
+    val colors = background?.takeIf { it.type == "gradient" }?.let { gradientColors(it, isDark) }
+    val solid = background?.takeIf { it.type == "solid" }?.let { resolveSolidColor(it, isDark) } ?: fallbackColor
+    return onGloballyPositioned { origin = it.positionInWindow() }.drawWithContent {
+        if (alpha > 0f) {
+            if (colors != null && background != null) {
+                val frame = origin?.let { o -> card()?.takeIf { it.width > 0f && it.height > 0f }?.translate(-o.x, -o.y) }
+                val (start, end) = gradientLine(background, frame ?: Rect(Offset.Zero, size))
+                drawRect(Brush.linearGradient(colors, start, end), size = size, alpha = alpha)
+            } else {
+                drawRect(solid, size = size, alpha = alpha)
+            }
+        }
+        drawContent()
+    }
 }
 
 private fun gradientColors(background: BackgroundConfig, isDark: Boolean): List<Color>? =

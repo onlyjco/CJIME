@@ -178,7 +178,7 @@ fun AboutContent(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             TopAppBar(
-                title = { Text("关于") },
+                title = { Text("关于", modifier = Modifier.settingsSearchTitleAnchor("关于")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -457,7 +457,7 @@ fun PrivacyPolicyContent(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             TopAppBar(
-                title = { Text("隐私策略") },
+                title = { Text("隐私策略", modifier = Modifier.settingsSearchTitleAnchor("隐私策略")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(
@@ -572,7 +572,7 @@ fun LicensesContent(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
             TopAppBar(
-                title = { Text("开源许可证") },
+                title = { Text("开源许可证", modifier = Modifier.settingsSearchTitleAnchor("开源许可证")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(

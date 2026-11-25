@@ -195,7 +195,10 @@ fun DoublePinyinSettingsContent(onBack: () -> Unit) {
                             // 和「Shift 键分词」互锁：打字时都要占 Shift 键（InputGestureLocks）。
                             val ingLock = com.kingzcheung.xime.ui.keyboard.InputGestureLocks.lockFor(keyboardPrefs, com.kingzcheung.xime.ui.keyboard.InputGestureLock.Option.SEMICOLON_ON_SHIFT, true)
                                 ?.takeIf { !keyboardPrefs.doublePinyinSemicolonOnShift }
-                            if (scheme.usesSemicolon) Row(verticalAlignment = Alignment.CenterVertically) {
+                            if (scheme.usesSemicolon) Row(
+                                modifier = Modifier.settingsSearchAnchor("ing 放在 Shift 键上", bleed = 8.dp, bleedVertical = 4.dp),
+                                verticalAlignment = Alignment.CenterVertically,
+                            ) {
                                 Column(Modifier.weight(1f)) {
                                     Text("ing 放在 Shift 键上", style = MaterialTheme.typography.bodyLarge)
                                     Text("打了声母后 Shift 键变成 ing",

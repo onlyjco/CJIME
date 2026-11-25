@@ -131,7 +131,7 @@ fun MarketHubContent(
     Scaffold(
         topBar = {
             TopAppBar(
-                title = { Text("扩展") },
+                title = { Text("扩展", modifier = Modifier.settingsSearchTitleAnchor("扩展")) },
                 navigationIcon = {
                     IconButton(onClick = onBack) {
                         Icon(Icons.AutoMirrored.Filled.ArrowBack, contentDescription = "返回")
