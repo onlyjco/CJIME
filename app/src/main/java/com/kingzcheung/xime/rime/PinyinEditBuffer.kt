@@ -259,6 +259,37 @@ internal fun merged14Preedit(raw: String, preedit: String, spelling: String, gro
     return PinyinEditDisplay(raw, reading, groups = groups).text
 }
 
+/**
+ * 「双拼编码显示全拼」开着时合并键（14 键、自建布局）上的双拼：打的键和首选读音换成的双拼键 [keysReading] 逐个对得上，
+ * 就显示首选的全拼 [spelling]（shuang'pin），和 26 键双拼一样；首选只盖住前面几个键时，后面没对上的键照打的显示。
+ * 一个键都对不上时返回 null，照原来显示双拼键。
+ */
+internal fun mergedDoublePinyinFullPreedit(raw: String, keysReading: String, spelling: String, groups: List<String>): String? {
+    val input = PinyinEditBuffer.normalized(raw).replace("'", "")
+    val keys = PinyinEditBuffer.normalized(keysReading).replace("'", "")
+    val syllables = spelling.trim().split(' ', '\'').filter { it.isNotEmpty() }
+    if (keys.isEmpty() || keys.length > input.length || syllables.isEmpty()) return null
+    if (syllables.any { syllable -> syllable.any { it !in 'a'..'z' && it != 'ü' } }) return null
+    if (keys.indices.any { groupRepresentative(input[it], groups) != groupRepresentative(keys[it], groups) }) return null
+    val rest = input.drop(keys.length)
+    return syllables.joinToString("'") + if (rest.isEmpty()) "" else "'$rest"
+}
+
+/** 14 键编码条找读音时，除了首选再往后看几个候选。 */
+internal const val MERGED14_READING_LOOKAHEAD = 8
+
+/**
+ * 依次用 [readings] 里的读音换合并键编码，用第一个把每个键都对上的；都对不上照旧返回 [preedit]（Rime 的原码）。
+ * 首选是英文词、混合词或没有读音的短语时，它的注释对不上，后面候选的读音常能对上，不用再显示大写原码。
+ */
+internal fun merged14PreeditFrom(raw: String, preedit: String, readings: List<String>, groups: List<String> = merged14Groups): String {
+    for (reading in readings) {
+        if (reading.isBlank()) continue
+        val shown = merged14Preedit(raw, preedit, reading, groups)
+        if (shown != preedit) return shown
+    }
+    return preedit
+}
 /** Multi-tap exists only in the explicit pinyin editor, never in ordinary composition. */
 internal class PinyinMultiTap {
     private var group = ""

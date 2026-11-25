@@ -354,7 +354,7 @@ class RimeEngine {
         val candidates = values.drop(3).chunked(2).mapNotNull { pair ->
             if (pair.size == 2) RimeCandidate(pair[0], pair[1]) else null
         }.toTypedArray()
-        RimeProcessResult(true, "", values[0], displayPreedit(values[0], values[1], candidates.firstOrNull()),
+        RimeProcessResult(true, "", values[0], displayPreedit(values[0], values[1], candidates),
             candidates, false, values[2] == "1", false, engineRevision = revision)
     }
     private external fun nativeGlidePreview(code: String): Array<String>
@@ -571,7 +571,8 @@ class RimeEngine {
     private var phraseReadings: Map<Pair<String, String>, String>? = null
     private var mergedEditReading: Pair<String, String>? = null
 
-    private fun displayPreedit(input: String, preedit: String, top: RimeCandidate?): String {
+    private fun displayPreedit(input: String, preedit: String, candidates: Array<RimeCandidate>?): String {
+        val top = candidates?.firstOrNull()
         val spelling = top?.comment.orEmpty()
         val schema = nativeGetCurrentSchema().orEmpty()
         val profile = com.kingzcheung.xime.settings.InputProfiles.describe(schema)
@@ -608,12 +609,27 @@ class RimeEngine {
         val confirmed = snapshot.getOrNull(2)?.toIntOrNull()?.coerceIn(0, input.length) ?: 0
         val prefix = snapshot.getOrNull(3).orEmpty()
         // 14 键双拼的首选读音是全拼，换成这个方案的双拼键才能和合并编码一一对上。
-        val reading = if (profile.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN) doublePinyinReading(spelling, schema) else spelling
+        fun readingOf(comment: String) =
+            if (profile.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN) doublePinyinReading(comment, schema) else comment
+        val reading = readingOf(spelling)
         val caret = snapshot.getOrNull(1)?.toIntOrNull() ?: input.length
         // At an interior caret Rime translates the prefix and echoes its physical keys for the tail.
         if (mergedEditReading?.first != input || caret !in confirmed until input.length) mergedEditReading = null
         val editReading = mergedEditReading?.second
-        return prefix + merged14Preedit(input.drop(confirmed), preedit.removePrefix(prefix), editReading ?: reading, groups)
+        // 「双拼编码显示全拼」开着（11-21 他报：开了还是双拼字母）：合并键上的双拼也显示全拼；光标在编码中间改键时仍显示键。
+        if (profile.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN && !doublePinyinKeysPreedit &&
+            editReading == null && caret >= input.length) {
+            mergedDoublePinyinFullPreedit(input.drop(confirmed), reading, spelling, groups)?.let { return prefix + it }
+        }
+        if (editReading != null) return prefix + merged14Preedit(input.drop(confirmed), preedit.removePrefix(prefix), editReading, groups)
+        // 首选是英文词、混合词（B站）或没有读音的短语时，它的注释对不上合并键，以前就显示 Rime 的大写原码。
+        // 依次试首选的读音、首选本身的英文字母、后面候选的读音，用第一个把每个键都对上的（用户 11-13「1.15.68 修的十四键又回来了」）。
+        val readings = buildList {
+            add(reading)
+            top?.text?.takeIf { t -> t.isNotEmpty() && t.all { it in 'a'..'z' || it in 'A'..'Z' } }?.let { add(it.lowercase()) }
+            candidates?.drop(1)?.take(MERGED14_READING_LOOKAHEAD)?.forEach { add(readingOf(it.comment)) }
+        }
+        return prefix + merged14PreeditFrom(input.drop(confirmed), preedit.removePrefix(prefix), readings, groups)
     }
 
     /**
@@ -640,7 +656,7 @@ class RimeEngine {
     }
 
     private fun withDisplayPreedit(result: RimeProcessResult): RimeProcessResult = result.copy(
-        preeditText = displayPreedit(result.inputText, result.preeditText, result.candidates.firstOrNull()),
+        preeditText = displayPreedit(result.inputText, result.preeditText, result.candidates),
         engineRevision = candidateRevision.get()).also { noteCommit(it.committedText) }
 
     /** For destructive routing: null means busy/unavailable, never an empty composition. */
@@ -668,7 +684,7 @@ class RimeEngine {
     fun getComposition(): RimeComposition {
         return tryLocked(RimeComposition("", "", "", emptyArray(), false, false, false)) {
             nativeGetComposition().let { result -> result.copy(preedit = displayPreedit(
-                result.input, result.preedit, result.candidates.firstOrNull()), engineRevision = candidateRevision.get()) }
+                result.input, result.preedit, result.candidates), engineRevision = candidateRevision.get()) }
                 .also { noteCommit(it.committedText) }
         }
     }
@@ -820,7 +836,8 @@ class RimeEngine {
     internal fun readPinyinEditSnapshot(): Array<String> = locked {
         if (nativeHasSession()) nativePinyinEditSnapshot().also { snapshot ->
             if (snapshot.size > 4) snapshot[4] = displayPreedit(snapshot[0], snapshot[4],
-                nativeGetCandidatesWithComments()?.firstOrNull()?.let { RimeCandidate(it.getOrElse(0) { "" }, it.getOrElse(1) { "" }) })
+                nativeGetCandidatesWithComments()?.take(MERGED14_READING_LOOKAHEAD + 1)
+                    ?.map { RimeCandidate(it.getOrElse(0) { "" }, it.getOrElse(1) { "" }) }?.toTypedArray())
         } else emptyArray()
     }
 
@@ -992,7 +1009,7 @@ class RimeEngine {
         }.toTypedArray()
         RimeProcessResult(
             processed = true, committedText = "", inputText = snapshot.getOrNull(0).orEmpty(),
-            preeditText = displayPreedit(snapshot.getOrNull(0).orEmpty(), snapshot.getOrNull(4).orEmpty(), candidates.firstOrNull()), candidates = candidates,
+            preeditText = displayPreedit(snapshot.getOrNull(0).orEmpty(), snapshot.getOrNull(4).orEmpty(), candidates), candidates = candidates,
             isAsciiMode = nativeIsAsciiMode(), hasNextPage = nativeHasNextPage(), hasPrevPage = nativeHasPrevPage(),
             engineRevision = candidateRevision.get(),
         )
@@ -1899,7 +1916,7 @@ class RimeEngine {
         if (!isInitialized || !nativeHasSession() || nativeIsMaintaining()) return@locked null
         val result = nativeGetComposition()
         noteCommit(result.committedText)
-        result.copy(preedit = displayPreedit(result.input, result.preedit, result.candidates.firstOrNull()),
+        result.copy(preedit = displayPreedit(result.input, result.preedit, result.candidates),
             engineRevision = candidateRevision.get())
     }
 
