@@ -176,6 +176,7 @@ private fun BottomLiftActionIcon(
             role = Role.Button,
             interactionSource = interactionSource,
             indication = null,
+            hapticFeedbackEnabled = false,
             onLongClick = onLongClick,
             onClick = onClick,
         )

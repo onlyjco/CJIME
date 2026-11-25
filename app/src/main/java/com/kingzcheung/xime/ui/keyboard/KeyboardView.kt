@@ -603,6 +603,7 @@ fun KeyboardView(
             viewModel.toggleOverlay(OverlayRoute.Clipboard(0))
         }
         val bottomLiftOpenFavorites: () -> Unit = {
+            onHapticFeedback?.invoke()
             val hasFavorites = com.kingzcheung.xime.clipboard.ClipboardFavoriteStore
                 .getInstance(keyboardContext).items.value.isNotEmpty()
             if (!hasFavorites) {
