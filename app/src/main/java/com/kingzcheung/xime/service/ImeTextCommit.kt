@@ -304,7 +304,7 @@ internal class ImeTextCommit(private val service: XimeInputMethodService) {
         return submit
     }
 
-    /** 数字后的句号、逗号先半角再看下一个字（[DigitSeparatorGuess]）：只在中文、应用的输入框里。 */
+    /** 数字或英文后的标点自动转半角（[SmartPunctuation]）：只在中文、应用的输入框里。 */
     internal fun digitSeparatorAllowed(): Boolean {
         val ui = service.uiState.value
         return !ui.isAsciiMode && ui.inputProfile.language == com.kingzcheung.xime.settings.InputLanguage.CHINESE &&

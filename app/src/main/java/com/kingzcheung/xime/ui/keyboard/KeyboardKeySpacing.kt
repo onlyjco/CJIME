@@ -172,7 +172,7 @@ internal fun scaledKeyVisualPadding(padding: PaddingValues = LocalKeyVisualPaddi
     }
 }
 
-private fun resolvedKeyInset(declared: Dp, policyInset: Float?): Dp = when {
+internal fun resolvedKeyInset(declared: Dp, policyInset: Float?): Dp = when {
     policyInset == null -> declared
     declared.value == KeyVisualPolicy.DeclaredDefaultGap -> policyInset.dp
     else -> (declared.value / 2f).dp

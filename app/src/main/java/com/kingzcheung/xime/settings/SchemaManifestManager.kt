@@ -152,7 +152,9 @@ object SchemaManifestManager {
         val conflicts = mutableListOf<FileConflictInfo>()
         for (fileName in targetFiles) {
             val target = safeTarget(SchemaManager.getRimeDir(context), fileName)
-            if (!target.isFile || (isUserDataFile(fileName) && !(overwriteUserConfig && isImportableUserConfig(fileName)))) continue
+            val isSchemaCustomPatch = fileName.endsWith(".custom.yaml") &&
+                fileName != "default.custom.yaml" && fileName != "xime.custom.yaml"
+            if (!target.isFile || (isUserDataFile(fileName) && !(overwriteUserConfig && isSchemaCustomPatch))) continue
             val existingHash = fileSha256(target) ?: error("无法校验 $fileName")
             val newHash = newFileSha256[fileName] ?: continue
             val entry = files.optJSONObject(fileName)

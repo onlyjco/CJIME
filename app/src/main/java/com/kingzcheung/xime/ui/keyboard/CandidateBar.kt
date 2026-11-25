@@ -572,17 +572,23 @@ fun CandidateBar(
             }
         }
 
-        // 把 toolbarRowWidth 保持在 ClipboardDisplay 提前返回之前，避免切回空闲工具栏第一帧 width=0dp 导致图标缩放闪跳。
-        val rowDensity = LocalDensity.current
-        var toolbarRowWidth by remember { mutableStateOf(0.dp) }
         if (state is CandidateBarState.ClipboardDisplay) {
-            Box(Modifier.fillMaxWidth().onSizeChanged { toolbarRowWidth = with(rowDensity) { it.width.toDp() } }) {
+            Box(Modifier.fillMaxWidth()) {
                 ClipboardPreviewBar(state.candidates, protectedVisuals, callbacks, iconButtonContainer, state.image,
                     extractedCount = state.extractedCount)
             }
             return@Column
         }
 
+        val rowDensity = LocalDensity.current
+        BoxWithConstraints(
+            modifier = Modifier
+                .fillMaxWidth()
+                .then(if (topLineMode) Modifier.height(candidateRowHeight) else Modifier),
+            contentAlignment = Alignment.CenterStart,
+        ) {
+        // 用 BoxWithConstraints 同步拿到当前宽度，消除悬浮切回全键盘、进入键盘调节时首帧 width=0dp 导致的左侧图标左右抖动。
+        val toolbarRowWidth = maxWidth
         // 空闲工具栏：菜单、收起与中间各图标同为等宽一格，胶囊同尺寸（分体时扣除中缝）。
         // 联想态不放收起键盘按钮，最右只有展开按钮（用户 11-02）。
         val idleToolbarCell = if (inlineSuggestions.isEmpty() && toolbarRowWidth > 0.dp) {
@@ -621,8 +627,7 @@ fun CandidateBar(
         Row(
             modifier = Modifier
                 .fillMaxWidth()
-                .then(if (topLineMode) Modifier.height(candidateRowHeight) else Modifier)
-                .onSizeChanged { toolbarRowWidth = with(rowDensity) { it.width.toDp() } },
+                .then(if (topLineMode) Modifier.height(candidateRowHeight) else Modifier),
             verticalAlignment = Alignment.CenterVertically
         ) {
             if (showCompositionCancel && strokeFilterLabel.isNotEmpty()) {
@@ -955,6 +960,7 @@ fun CandidateBar(
             }
         }
         }
+        }
     }
 }
 
@@ -1004,13 +1010,16 @@ internal fun ToolbarActionButton(
         animationSpec = tween(if (pressed) 0 else 300), label = "toolbar-press")
     // The disc appears only while pressed or on (no resting disc, glass or not). Under glass
     // the active tool is filled solidly with an inverted glyph; voice keeps its pulsing glow.
-    val glassActiveFill = visuals.glassControlBackground?.takeIf { action.active && !voiceActive }?.let { fill ->
+    val iconStateToggle = (action.item as? com.kingzcheung.xime.keyboard.ToolbarButtonItem.Builtin)?.button in
+        com.kingzcheung.xime.keyboard.ToolbarButton.ICON_STATE_TOGGLES
+    val showActiveFill = action.active && !iconStateToggle
+    val glassActiveFill = visuals.glassControlBackground?.takeIf { showActiveFill && !voiceActive }?.let { fill ->
         val surface = fill.copy(alpha = 1f)
         if (textContrast(visuals.accentColor, surface) >= 3f) visuals.accentColor.copy(alpha = 1f) else tint.copy(alpha = 1f)
     }
     val iconTint = when {
         glassActiveFill != null -> if (glassActiveFill.luminance() > 0.5f) Color.Black else Color.White
-        action.active -> visuals.accentColor
+        showActiveFill -> visuals.accentColor
         else -> tint
     }
     // 大屏参照 Gboard：整格都可点，按下/开启的底色是随格宽向两边拉长的胶囊；窄格仍是圆形。
@@ -1044,19 +1053,20 @@ internal fun ToolbarActionButton(
             .size(if (listening) androidx.compose.ui.unit.DpSize(36.dp, 36.dp) else toolbarPillSize(maxWidth))
             .clip(CircleShape)
             .background(if (listening) Color.Transparent else glassActiveFill ?: visuals.glassControlBackground?.let { fill ->
-                if (action.active) androidx.compose.ui.graphics.lerp(fill, visuals.accentColor, 0.18f).copy(alpha = fill.alpha)
+                if (showActiveFill) androidx.compose.ui.graphics.lerp(fill, visuals.accentColor, 0.18f).copy(alpha = fill.alpha)
                 else fill.copy(alpha = fill.alpha * pressAlpha)
-            } ?: if (action.active) visuals.accentColor.copy(alpha = 0.28f)
+            } ?: if (showActiveFill) visuals.accentColor.copy(alpha = 0.28f)
                 else if (visuals.isDarkTheme) Color.White.copy(alpha = 0.25f * pressAlpha)
                 else Color(0xFFE0E0E0).copy(alpha = pressAlpha))
-            .then(if (liquidEdge) Modifier.liquidGlassEdge(CAPSULE_RADIUS) { if (action.active) 1f else pressAlpha }
+            .then(if (liquidEdge) Modifier.liquidGlassEdge(CAPSULE_RADIUS) { if (showActiveFill) 1f else pressAlpha }
                 else Modifier),
         contentAlignment = Alignment.Center,
     ) {
         if (voiceActive && voiceState == RecognitionState.PROCESSING) {
             androidx.compose.material3.CircularProgressIndicator(Modifier.size(36.dp), color = visuals.accentColor, strokeWidth = 2.dp)
         }
-        ToolbarButtonIcon(action.item, tint = iconTint, modifier = Modifier.size(22.dp * LocalCandidateSizeFactor.current), active = action.active)
+        ToolbarButtonIcon(action.item, tint = iconTint, modifier = Modifier.size(22.dp * LocalCandidateSizeFactor.current),
+            active = action.active, inToolbar = true)
     }
     }
 }

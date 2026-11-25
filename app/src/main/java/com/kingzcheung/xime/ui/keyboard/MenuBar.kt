@@ -152,15 +152,16 @@ fun MenuItemButton(
 ) {
     val inlineEditor = LocalInlineQuickActionEditor.current
     val on = item.selected == true
-    // 开了玻璃，格子和按键是同一种玻璃键帽（同一个透明度，透出后面）；原来一直是不透明的键色，
-    // 玻璃键盘上一整块实心格子（用户 11-09）。
-    // 开启的开关用文字色作底、取反色作字，任何主题下都能一眼看出；玻璃上也留一点透。
+    val iconStateToggle = (item.toolbarItem as? ToolbarButtonItem.Builtin)?.button in ToolbarButton.ICON_STATE_TOGGLES
+    val showSelectedBox = on && !iconStateToggle
+    // 开了玻璃，格子和按键是同一种玻璃键帽（同一个透明度，透出后面）。
+    // 用图标形态本身区分状态的开关（全角、声音、无痕、简繁、滑行、玻璃）不显示选框反色底。
     val glass = LocalKeyboardInputPreferences.current.frostedGlass
     val fill = when {
-        on -> if (glass.enabled) textColor.copy(alpha = MENU_ON_GLASS_ALPHA) else textColor
+        showSelectedBox -> if (glass.enabled) textColor.copy(alpha = MENU_ON_GLASS_ALPHA) else textColor
         else -> frostedKeyColor(bgColor, textColor, glass)
     }
-    val content = if (on) (if (textColor.luminance() > .5f) Color.Black else Color.White) else textColor
+    val content = if (showSelectedBox) (if (textColor.luminance() > .5f) Color.Black else Color.White) else textColor
     Box(modifier.onGloballyPositioned { inlineEditor?.registerMenuSize(it.boundsInRoot()) }
         .then(if (item.toolbarItem != null && !item.hidden) Modifier.inlineQuickActionTarget(item.id) else Modifier)
         .combinedClickable(enabled = inlineEditor?.active != true, onLongClick = item.onLongClick) { item.action() }
@@ -183,8 +184,8 @@ fun MenuItemButton(
         verticalArrangement = Arrangement.Center
     ) {
         if (item.toolbarItem != null) {
-            ToolbarButtonIcon(item = item.toolbarItem, tint = content.copy(alpha = if (on) 1f else 0.7f),
-                modifier = Modifier.size(26.dp), active = on)
+            ToolbarButtonIcon(item = item.toolbarItem, tint = content.copy(alpha = if (showSelectedBox) 1f else 0.78f),
+                modifier = Modifier.size(26.dp), active = on, inToolbar = false)
         } else if (item.textIcon != null) {
             Text(
                 text = item.textIcon,

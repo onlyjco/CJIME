@@ -5,6 +5,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.AutoFixHigh
 import androidx.compose.material.icons.outlined.Quickreply
 import androidx.compose.material.icons.outlined.Translate
+import androidx.compose.material.icons.outlined.Visibility
+import androidx.compose.material.icons.outlined.VisibilityOff
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
@@ -33,12 +35,14 @@ fun ToolbarButtonIcon(
     modifier: Modifier = Modifier,
     contentDescription: String? = null,
     fontSize: TextUnit = 16.sp,
-    /** 开关按钮当前是否开启；全角/半角、简繁按状态换图标。 */
+    /** 开关按钮当前是否开启；全角/半角、简繁、声音、无痕、滑行、玻璃均按状态换图标。 */
     active: Boolean = false,
+    /** 是否位于顶部任务栏：全角开启时任务栏圆圈内带「全」字，菜单卡片圆圈内不带字。 */
+    inToolbar: Boolean = true,
 ) {
     val ownPluginIcon = (item as? ToolbarButtonItem.Plugin)?.let { ownPluginButtonIcon(it.id) }
     when {
-        // 简繁：图标是当前输出的字「简」或「繁」（用户 2026-11-11），画成矢量图标，和旁边图标一样高（11-17）。
+        // 简繁：图标是当前输出的字「简」或「繁」，画成矢量图标，和旁边图标一样高。
         item is ToolbarButtonItem.Builtin && item.button == com.kingzcheung.xime.keyboard.ToolbarButton.TRADITIONAL -> Icon(
             imageVector = if (active) com.kingzcheung.xime.keyboard.TraditionalGlyphIcon
                 else com.kingzcheung.xime.keyboard.SimplifiedGlyphIcon,
@@ -46,13 +50,30 @@ fun ToolbarButtonIcon(
             tint = tint,
             modifier = modifier,
         )
-        item is ToolbarButtonItem.Builtin -> Icon(
-            imageVector = if (item.button == com.kingzcheung.xime.keyboard.ToolbarButton.FULL_SHAPE && active)
-                com.kingzcheung.xime.keyboard.FullWidthIcon else item.button.icon,
-            contentDescription = contentDescription ?: item.stateLabel(active),
-            tint = tint,
-            modifier = modifier,
-        )
+        item is ToolbarButtonItem.Builtin -> {
+            val vector = when (item.button) {
+                com.kingzcheung.xime.keyboard.ToolbarButton.FULL_SHAPE -> when {
+                    !active -> com.kingzcheung.xime.keyboard.HalfWidthIcon
+                    inToolbar -> com.kingzcheung.xime.keyboard.FullWidthToolbarIcon
+                    else -> com.kingzcheung.xime.keyboard.FullWidthIcon
+                }
+                com.kingzcheung.xime.keyboard.ToolbarButton.SOUND ->
+                    if (active) item.button.icon else com.kingzcheung.xime.keyboard.SoundOffXIcon
+                com.kingzcheung.xime.keyboard.ToolbarButton.INCOGNITO ->
+                    if (active) Icons.Outlined.VisibilityOff else Icons.Outlined.Visibility
+                com.kingzcheung.xime.keyboard.ToolbarButton.GLIDE ->
+                    if (active) item.button.icon else com.kingzcheung.xime.keyboard.GlideOffIcon
+                com.kingzcheung.xime.keyboard.ToolbarButton.GLASS ->
+                    if (active) item.button.icon else com.kingzcheung.xime.keyboard.GlassOffIcon
+                else -> item.button.icon
+            }
+            Icon(
+                imageVector = vector,
+                contentDescription = contentDescription ?: item.stateLabel(active),
+                tint = tint,
+                modifier = modifier,
+            )
+        }
         ownPluginIcon != null -> Icon(
             imageVector = ownPluginIcon,
             contentDescription = contentDescription ?: item.label,

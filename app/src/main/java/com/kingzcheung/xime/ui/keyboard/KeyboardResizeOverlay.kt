@@ -39,6 +39,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.platform.LocalView
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.Remove
 import androidx.compose.material.icons.filled.SwapVert
@@ -915,7 +916,7 @@ internal fun KeyboardResizeOverlay(
         val sliderSlack = ((opacityHeight - maxOf(18.dp * controlScale, labelHeight)) / 2).coerceAtLeast(0.dp)
         val controlIconSize = 18.dp * controlScale
         val showButtonLabels = panelWidth - panelInset * 2 >=
-            (140f + 120f * density.fontScale).dp * controlScale
+            (155f + 135f * density.fontScale).dp * controlScale
         // 按钮和键盘上的键同一个圆角；面板圆角 = 按键圆角 + 边距，和按钮同心；直角按键时面板也是直角。
         val panelRadius = if (keyRadius > 0.dp) keyRadius + panelInset else 0.dp
         val toolShape = RoundedCornerShape(panelRadius)
@@ -1074,11 +1075,11 @@ internal fun KeyboardResizeOverlay(
                             disabledContainerColor = lerp(panelColor, functionColor, 0.5f),
                             disabledContentColor = functionTextColor.copy(alpha = 0.45f),
                         ),
-                        contentPadding = PaddingValues(horizontal = 4.dp * controlScale, vertical = 0.dp),
+                        contentPadding = PaddingValues(horizontal = 2.dp * controlScale, vertical = 0.dp),
                     ) {
                         icon()
                         if (text != null && showButtonLabels) {
-                            Spacer(Modifier.width(3.dp * controlScale))
+                            Spacer(Modifier.width(2.dp * controlScale))
                             // 文字只占剩余宽度：放不下时被裁掉，而不是把整组图标和文字挤出中心。
                             Text(text, modifier = Modifier.weight(1f, fill = false), fontSize = 13.sp * controlScale,
                                 fontWeight = if (emphasized) FontWeight.SemiBold else FontWeight.Medium,
@@ -1188,6 +1189,14 @@ internal fun KeyboardResizeOverlay(
                             rectBeforeSplit = null
                         }
                     }
+
+                    EqualActionButton(
+                        modifier = Modifier.weight(1f).testTag("keyboard-resize-cancel-button"),
+                        text = "取消",
+                        description = "取消",
+                        icon = { Icon(Icons.Default.Close, contentDescription = null, modifier = Modifier.size(controlIconSize)) },
+                        onClick = onCancel,
+                    )
 
                     EqualActionButton(
                         modifier = Modifier.weight(1f),

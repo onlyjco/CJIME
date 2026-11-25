@@ -923,7 +923,7 @@ internal fun ClipboardBoardView(
             }
             CompactActionMenu(moreAnchor.bounds, actions, onDismiss = { menu = false },
                 occupiedBounds = emptyList(), preferSide = false, tag = "clipboard-more-menu",
-                surfaceTag = "clipboard-board-action-card")
+                surfaceTag = "clipboard-board-action-card", animate = false, shadowElevation = 0.dp)
         }
         deleting?.let { records ->
             val imageCount = records.count { it is ClipboardCard.Image }

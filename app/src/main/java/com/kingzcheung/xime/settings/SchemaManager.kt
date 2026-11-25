@@ -1162,7 +1162,12 @@ object SchemaManager {
 
     /** 两个卸载入口使用同一个结果，失败时不改启用列表、下载文件或市场标记。 */
     suspend fun uninstallPackage(context: Context, packageId: String): UninstallResult {
-        val beforeSchemas = discoverSchemas(context).map { it.schemaId }.toSet()
+        val beforeSchemas = getRimeDir(context).listFiles()
+            ?.asSequence()
+            ?.filter { it.isFile && it.name.endsWith(".schema.yaml") }
+            ?.map { it.name.removeSuffix(".schema.yaml") }
+            ?.toSet()
+            .orEmpty()
         val result = SchemaManifestManager.uninstallWithManifest(context, packageId)
         if (!result.success) return result
         invalidateRecognizerLeadsCache()
@@ -1171,17 +1176,19 @@ object SchemaManager {
         val removedIds = (beforeSchemas - available) + packageId
         if (removedIds.isNotEmpty()) {
             removedIds.forEach { SchemaLanguageChoice.remove(context, it) }
-            val prefs = SettingsPreferences.getPrefsPublic(context)
-            val oldMap = com.kingzcheung.xime.glide.ExternalGlideEncodings.parse(
-                prefs.getString(com.kingzcheung.xime.glide.ExternalGlideEncodings.KEY, null)
-            )
-            val newMap = oldMap - removedIds
-            if (newMap.size != oldMap.size) {
-                prefs.edit().putString(
-                    com.kingzcheung.xime.glide.ExternalGlideEncodings.KEY,
-                    com.kingzcheung.xime.glide.ExternalGlideEncodings.format(newMap)
-                ).apply()
-                InputProfiles.updateExternalGlideEncodings(newMap.keys)
+            val prefs = runCatching { SettingsPreferences.getPrefsPublic(context) }.getOrNull()
+            if (prefs != null) {
+                val oldMap = com.kingzcheung.xime.glide.ExternalGlideEncodings.parse(
+                    prefs.getString(com.kingzcheung.xime.glide.ExternalGlideEncodings.KEY, null)
+                )
+                val newMap = oldMap - removedIds
+                if (newMap.size != oldMap.size) {
+                    prefs.edit().putString(
+                        com.kingzcheung.xime.glide.ExternalGlideEncodings.KEY,
+                        com.kingzcheung.xime.glide.ExternalGlideEncodings.format(newMap)
+                    ).apply()
+                    InputProfiles.updateExternalGlideEncodings(newMap.keys)
+                }
             }
         }
         val previous = getEnabledSchemas(context)

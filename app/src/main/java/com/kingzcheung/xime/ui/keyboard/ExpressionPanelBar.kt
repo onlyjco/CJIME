@@ -41,7 +41,6 @@ internal fun ExpressionPanelBar(
         Box(Modifier.width(1.dp).height(16.dp).background(textColor.copy(alpha = .16f)))
         categories()
         Box(Modifier.size(PanelCategoryHeight).testTag("expression-delete").clip(RoundedCornerShape(8.dp))
-            .background(textColor.copy(alpha = .12f))
             .combinedClickable(role = Role.Button, onClick = onDelete, onLongClick = onDeleteFace,
                 onLongClickLabel = if (onDeleteFace != null) "删除整个颜文字" else null),
             contentAlignment = Alignment.Center) {

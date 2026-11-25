@@ -81,17 +81,36 @@ fun EditKeyboardLayout(
         LocalEditorKeyShadow provides EditorKeyShadow(shadowEnabled, shadowElevation, shadowShapeRadius),
     ) {
         Column(bodyModifier.fillMaxSize()
-            .keyboardPanelBackground(backgroundColor)
-            .padding(horizontal = 2.dp)) {
+            .keyboardPanelBackground(backgroundColor)) {
             BoxWithConstraints(Modifier.weight(1f).fillMaxWidth(), contentAlignment = Alignment.Center) {
-                val cellWidth = maxWidth / 5
-                val cellHeight = maxHeight / 3
-                // Fill the space between the outer action columns, or the panel height.
-                // In near-square panels the corner labels can become the tighter limit.
-                val availableDiameter = minOf(cellWidth * 3, maxHeight)
-                fun metricsFor(diameter: Dp) = keyVisualMetrics(
+                val inputPrefs = LocalKeyboardInputPreferences.current
+                val typingWidened = inputPrefs.wideKeys
+                val typingPolicy = (if (typingWidened) KeyVisualPolicy.Qwerty.widened() else KeyVisualPolicy.Qwerty).let {
+                    if (LocalKeyboardExplicitWidth.current) it.copy(maxKeyWidth = Float.MAX_VALUE) else it
+                }
+                val typingInsetFloor = if (typingWidened) minOf(8f, KeyVisualPolicy.WideKeysGutter) else 8f
+                val typingGrowthSpacing = remember { com.kingzcheung.xime.settings.KeysConfigHelper.getKeyboardKeyConfig().spacingFor("qwerty") }
+                val typingMetrics = keyboardGridMetrics(
+                    policy = typingPolicy,
+                    availableWidthDp = maxWidth.value,
+                    availableHeightDp = maxHeight.value,
+                    columns = 10f,
+                    rows = 4f,
+                    verticalInsetDp = bottomPaddingDp.toFloat(),
+                    allowShrink = false,
+                    horizontalInsetDp = typingInsetFloor,
+                    applyGutter = true,
+                    growthSpacing = typingGrowthSpacing,
+                )
+                val typingKeyInset = resolvedKeyInset(
+                    (typingGrowthSpacing.first ?: KeyVisualPolicy.DeclaredDefaultGap).dp,
+                    typingMetrics.insetX,
+                ).value
+                val targetOuterEdgeDp = typingMetrics.gutterX + typingKeyInset
+
+                fun metricsFor(gridWidthDp: Float, diameter: Dp) = keyVisualMetrics(
                     policy = KeyVisualPolicy.Qwerty.copy(maxKeyWidth = Float.MAX_VALUE, minGutter = 0f),
-                    availableWidthDp = cellWidth.value * 5f,
+                    availableWidthDp = gridWidthDp,
                     availableHeightDp = diameter.value,
                     columns = 5f,
                     rows = 3f,
@@ -102,7 +121,15 @@ fun EditKeyboardLayout(
                     metrics.copy(insetX = metrics.insetX?.let { maxOf(it, proportional) },
                         insetY = metrics.insetY?.let { maxOf(it, proportional) })
                 }
-                val cornerInset = metricsFor(availableDiameter).insetX ?: 2f
+                val preliminaryInset = metricsFor(maxWidth.value, minOf(maxWidth * 3 / 5, maxHeight)).insetX ?: 2f
+                val outerPadDp = (targetOuterEdgeDp - preliminaryInset).coerceAtLeast(0f).dp
+                val gridWidth = (maxWidth - outerPadDp * 2).coerceAtLeast(1.dp)
+                val cellWidth = gridWidth / 5
+                val cellHeight = maxHeight / 3
+                // Fill the space between the outer action columns, or the panel height.
+                // In near-square panels the corner labels can become the tighter limit.
+                val availableDiameter = minOf(cellWidth * 3, maxHeight)
+                val cornerInset = metricsFor(gridWidth.value, availableDiameter).insetX ?: 2f
                 val cornerScale = KeyboardKeyMetrics.contentScale(
                     cellWidth.value * .92f, availableDiameter.value / 3 * .92f)
                 val fontScale = LocalDensity.current.fontScale
@@ -120,14 +147,18 @@ fun EditKeyboardLayout(
                 val cornerSafeDiameter = (2 * (hypot(clearX, clearY) - cornerInset)).coerceAtLeast(0f).dp
                 val padDiameter = minOf(availableDiameter, cornerSafeDiameter)
                 // 编辑盘自成一格：按 pad 自己的格尺寸算度量（不套主体键宽上限/gutter）
-                val padMetrics = metricsFor(padDiameter)
+                val padMetrics = metricsFor(gridWidth.value, padDiameter)
                 val inset = (padMetrics.insetX ?: 2f).dp
+                // 外列最外侧边缘与主输入键盘按键外沿精确对齐。
+                val finalOuterPad = (targetOuterEdgeDp - inset.value).coerceAtLeast(0f).dp
+                val outerEdgeInsetOverride = if (targetOuterEdgeDp < inset.value) targetOuterEdgeDp.dp else null
                 val glyphScale = KeyboardKeyMetrics.contentScale(cellWidth.value * .92f, padDiameter.value / 3 * .92f)
                 val padColor = frostedKeyColor(keyBgColor, textColor,
-                    LocalKeyboardInputPreferences.current.frostedGlass)
+                    inputPrefs.frostedGlass)
                 @Composable
                 fun key(command: String, keyModifier: Modifier, cutout: Shape? = null,
-                    offsetX: Dp = 0.dp, offsetY: Dp = 0.dp, compact: Boolean = false) {
+                    offsetX: Dp = 0.dp, offsetY: Dp = 0.dp, compact: Boolean = false,
+                    startInsetOverride: Dp? = null, endInsetOverride: Dp? = null) {
                     val (icon, label) = when (command) {
                         "undo" -> Icons.AutoMirrored.Filled.Undo to "撤销"
                         "redo" -> Icons.AutoMirrored.Filled.Redo to "重做"
@@ -174,6 +205,7 @@ fun EditKeyboardLayout(
                         plain = arrow, visualShape = cutout, compact = compact,
                         glowSize = if (arrow) androidx.compose.ui.unit.DpSize(padDiameter / 3, padDiameter / 3) else null,
                         contentOffsetX = offsetX, contentOffsetY = offsetY,
+                        startInsetOverride = startInsetOverride, endInsetOverride = endInsetOverride,
                         onPastePlain = if (command == "paste") ({ onAction("paste_plain") }) else null)
                 }
                 CompositionLocalProvider(LocalKeyboardKeyVisualMetrics provides padMetrics,
@@ -188,13 +220,14 @@ fun EditKeyboardLayout(
                         listOf("undo", "home", "", "end", "delete"),
                         listOf("redo", "line_start", "", "line_end", "select_all"),
                         listOf("cut", "copy", "", "paste", "enter"))
-                    Column(Modifier.fillMaxSize().testTag("editor-grid")) {
+                    Column(Modifier.fillMaxSize().padding(horizontal = finalOuterPad).testTag("editor-grid")) {
                         rows.forEachIndexed { rowIndex, row ->
                             Row(Modifier.weight(1f).fillMaxWidth()) {
                                 row.forEachIndexed { columnIndex, command ->
                                     val cellModifier = Modifier.weight(1f).fillMaxHeight()
                                     if (command.isEmpty()) Spacer(cellModifier)
-                                    else if (columnIndex == 0 || columnIndex == 4) key(command, cellModifier)
+                                    else if (columnIndex == 0) key(command, cellModifier, startInsetOverride = outerEdgeInsetOverride)
+                                    else if (columnIndex == 4) key(command, cellModifier, endInsetOverride = outerEdgeInsetOverride)
                                     else if (rowIndex == 1 && sideWidth < sideNeeded) Spacer(cellModifier)
                                     else {
                                         val circleX = (2.5f - columnIndex) * cellWidth.value
@@ -312,6 +345,8 @@ internal fun EditorActionKey(
     glowSize: androidx.compose.ui.unit.DpSize? = null,
     contentOffsetX: Dp = 0.dp,
     contentOffsetY: Dp = 0.dp,
+    startInsetOverride: Dp? = null,
+    endInsetOverride: Dp? = null,
     onPastePlain: (() -> Unit)? = null,
 ) {
     val action by rememberUpdatedState(onAction)
@@ -365,7 +400,19 @@ internal fun EditorActionKey(
                 }
             })
         }
-        .padding(if (plain) PaddingValues(0.dp) else scaledKeyVisualPadding(PaddingValues(2.dp)))
+        .padding(if (plain) PaddingValues(0.dp) else {
+            val basePadding = scaledKeyVisualPadding(PaddingValues(2.dp))
+            if (startInsetOverride == null && endInsetOverride == null) basePadding
+            else {
+                val layoutDir = androidx.compose.ui.platform.LocalLayoutDirection.current
+                PaddingValues(
+                    start = startInsetOverride ?: basePadding.calculateStartPadding(layoutDir),
+                    top = basePadding.calculateTopPadding(),
+                    end = endInsetOverride ?: basePadding.calculateEndPadding(layoutDir),
+                    bottom = basePadding.calculateBottomPadding(),
+                )
+            }
+        })
         .keyGlow(Modifier.then(if (visualShape != null) Modifier.clip(visualShape) else Modifier)
         .then(shadowModifier)
         .clip(RoundedCornerShape(LocalKeyCornerRadius.current))

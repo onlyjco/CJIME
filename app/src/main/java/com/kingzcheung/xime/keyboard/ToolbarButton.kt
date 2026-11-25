@@ -65,6 +65,9 @@ enum class ToolbarButton(
         /** 开关类入口：菜单中显示开/关状态，工具栏中开启时高亮。 */
         val TOGGLES = setOf(SOUND, FLOATING, GLASS, INCOGNITO, FULL_SHAPE, TRADITIONAL) + LAYOUT_GESTURES
 
+        /** 通过图标形态本身区分开/关的开关：任务栏与卡片均不显示高亮选框背景。 */
+        val ICON_STATE_TOGGLES = setOf(FULL_SHAPE, SOUND, INCOGNITO, TRADITIONAL, GLIDE, GLASS)
+
         val CUSTOMIZABLE = entries.toList()
 
         /** 已移除的旧版“固定内容”（quick_phrase）并入剪贴板。 */

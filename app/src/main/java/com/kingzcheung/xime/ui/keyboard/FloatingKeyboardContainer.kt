@@ -305,6 +305,14 @@ internal fun FloatingKeyboardContainer(
             BoxWithConstraints(modifier = Modifier.fillMaxSize()) {
                 val touchesLeft = previewRect.left <= 0.5f
                 val touchesRight = previewRect.right >= constraints.maxWidth - 0.5f
+                val cutout = WindowInsets.displayCutout
+                val direction = LocalLayoutDirection.current
+                val cardLeftDp = with(density) { previewRect.left.toDp() }.value
+                val cardRightGapDp = with(density) { (constraints.maxWidth - previewRect.right).coerceAtLeast(0f).toDp() }.value
+                val cutoutStart = fixedCardCutoutOverlapDp(
+                    with(density) { cutout.getLeft(density, direction).toDp() }.value, cardLeftDp).dp
+                val cutoutEnd = fixedCardCutoutOverlapDp(
+                    with(density) { cutout.getRight(density, direction).toDp() }.value, cardRightGapDp).dp
                 Box(
                     modifier = Modifier
                         .align(Alignment.TopStart)
@@ -323,8 +331,11 @@ internal fun FloatingKeyboardContainer(
                             )
                         }
                 ) {
-                    // Resize controls own input; keep the menu host out of the live preview.
-                    CompositionLocalProvider(LocalKeyboardCardTopCorner provides cardTopCorner(touchesLeft, touchesRight)) { keyboardContent() }
+                    if (cutoutStart > 0.dp || cutoutEnd > 0.dp) Box(Modifier.fillMaxSize().keyboardPanelBackground(backgroundColor))
+                    Box(Modifier.fillMaxSize().padding(start = cutoutStart, end = cutoutEnd)) {
+                        // Resize controls own input; keep the menu host out of the live preview.
+                        CompositionLocalProvider(LocalKeyboardCardTopCorner provides cardTopCorner(touchesLeft, touchesRight)) { keyboardContent() }
+                    }
                 }
             }
         }

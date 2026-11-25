@@ -257,7 +257,7 @@ fun SpaceKeyButton(
                     // （以前字母先进了正在打的拼音，空格后到），之后只等手指抬起。
                     var settled = false
                     val press = KeyPressOrder.begin {
-                        if (!settled && !endsLock && !guarded && !held && !movedBeforeHold && !(swipeUp != null && swipeUpArmed)) {
+                        if (!settled && !endsLock && !guarded && !held && !movedBeforeHold) {
                             settled = true
                             timer.cancel()
                             gapLightTrigger.tap()

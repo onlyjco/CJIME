@@ -534,13 +534,16 @@ fun KeyboardView(
             normalFloatingRect.width, normalFloatingRect.height, state.floatingOffsetX.toFloat(),
             state.floatingOffsetY.toFloat(), state.floatingMinOffsetY.coerceAtLeast(0).toFloat(),
             state.floatingRotation, resizeControlDensity.density, footerDp) else null
+        val seedFixedWidthDp = state.keyboardWidthDp.takeIf { it > 0 }
+            ?: resolvedFixedKeyboardWidth(maxWidth.value.roundToInt(), state.fixedWidthDp)
+        val seedFixedWidthPx = if (maxWidth.value - seedFixedWidthDp < 1f) hostWidthPx
+            else seedFixedWidthDp * resizeControlDensity.density
         val seedPreviewRect = if (state.isFloatingMode) rotatedFloatingRect ?: normalFloatingRect else fixedKeyboardRect(
             hostWidthPx, hostHeightPx,
             state.keyboardHeightDp * resizeControlDensity.density,
             state.keyboardBottomPaddingDp.coerceAtLeast(0) * resizeControlDensity.density,
             fixedBottomInsetDp.coerceAtLeast(0) * resizeControlDensity.density,
-            widthPx = (state.keyboardWidthDp.takeIf { it > 0 }
-                ?: resolvedFixedKeyboardWidth(maxWidth.value.roundToInt(), state.fixedWidthDp)) * resizeControlDensity.density,
+            widthPx = seedFixedWidthPx,
             horizontalOffsetPx = state.fixedOffsetX * resizeControlDensity.density,
             density = resizeControlDensity.density,
         )
@@ -692,7 +695,7 @@ fun KeyboardView(
     ) {
         // 候选栏随键盘半速放大：按卡片实际尺寸算，调节尺寸时跟着预览走；剪贴板上拉和搜索时卡片临时变高，不跟。
         val barScaleFrozen = LocalClipboardPanelExpansion.current != null || state.clipboardSearchVisible
-        val candidateBarScaleState = remember {
+        val candidateBarScaleState = remember(state.isFloatingMode, state.keyboardWidthDp, state.keyboardHeightDp, resizeActive) {
             mutableFloatStateOf(candidateBarScale(
                 (if (state.isFloatingMode) cardWidthDp else state.keyboardWidthDp.takeIf { it > 0 }
                     ?: state.fixedWidthDp.takeIf { it > 0 } ?: screenW).toFloat(),

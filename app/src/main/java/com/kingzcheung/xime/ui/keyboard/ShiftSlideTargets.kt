@@ -27,10 +27,10 @@ internal class ShiftSlideTargets(
     var dragging by mutableStateOf(false)
         private set
     /** 大写锁定时从 Shift 滑到字母：临时输入小写字母，松手后仍保持大写锁定。 */
-    var lowercaseSlide by mutableStateOf(false)
-        private set
+    private var lowercaseSlideState by mutableStateOf(false)
+    val lowercaseSlide: Boolean get() = lowercaseSlideState
     fun setLowercaseSlide(enabled: Boolean) {
-        lowercaseSlide = enabled
+        lowercaseSlideState = enabled
     }
     /** 按住符号键当 Ctrl：字母键改显示快捷键，拖到字母上松手发 Ctrl+字母，不选候选（用户 10-24）。 */
     var ctrl by mutableStateOf(false)
@@ -218,7 +218,7 @@ internal class ShiftSlideTargets(
     fun finish() {
         clearDrag()
         dragging = false
-        lowercaseSlide = false
+        lowercaseSlideState = false
         ctrl = false
         ctrlFaces = false
         ctrlShortcut = null

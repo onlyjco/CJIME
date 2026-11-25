@@ -786,12 +786,14 @@ val prepareChineseDictionaries by tasks.registering {
         }
         // The 14-key and 注音 schemas (assets/rime_chinese) repeat these sentence rules; keep them the same list.
         for (schema in listOf("pinyin_14jian", "double_pinyin_flypy_14jian", "cyime_zhuyin")) check(file("src/main/assets/rime_chinese/$schema.schema.yaml").readText()
+            .replace("\r\n", "\n")
             .contains("  sentence_position_final_only: [${particles.joinToString(", ")}]\n")) {
             "$schema.schema.yaml sentence_position_final_only differs from app/data particle lists"
         }
         // The nine-key decoder's sentence-final particles (t9/final_particles) are the same list without measure words.
         val finalOnly = finalParticles.readLines().map { it.trim() }.filter { it.isNotEmpty() && !it.startsWith("#") }
         check(file("src/main/assets/rime_chinese/t9_pinyin.schema.yaml").readText()
+            .replace("\r\n", "\n")
             .contains("  final_particles: [${finalOnly.joinToString(", ")}]\n")) {
             "t9_pinyin.schema.yaml final_particles differs from ${finalParticles.name}"
         }

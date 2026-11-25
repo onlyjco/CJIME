@@ -1004,7 +1004,7 @@ internal fun T9KeySwipes.withLowerAction(action: String?, showKeyLabel: Boolean,
  * - 点按走 [onClick]，长按走 [onLongPressSelect]，上/下滑走 [onSwipeUp]/[onSwipeDown]。
  */
 @Composable
-private fun T9DigitKey(
+internal fun T9DigitKey(
     digit: String,
     letters: String,
     longPressItems: List<String>,

@@ -88,6 +88,8 @@ internal fun CompactActionMenu(
     modifier: Modifier = Modifier, occupiedBounds: List<Rect> = emptyList(),
     title: String? = null, message: String? = null, preferSide: Boolean = true,
     tag: String = "compact-action-menu", surfaceTag: String = "$tag-surface",
+    animate: Boolean = true,
+    shadowElevation: androidx.compose.ui.unit.Dp = CompactMenuStyle.Elevation,
 ) {
     val colors = MaterialTheme.colorScheme
     val density = LocalDensity.current
@@ -130,12 +132,14 @@ internal fun CompactActionMenu(
             val origin = TransformOrigin(
                 ((anchor.center.x - placement.left) / placement.width.coerceAtLeast(1f)).coerceIn(0f, 1f),
                 ((anchor.center.y - placement.top) / placement.height.coerceAtLeast(1f)).coerceIn(0f, 1f))
-            Surface(Modifier.cyPopupEnter(origin).testTag(tag), shape = CompactMenuStyle.Shape,
+            val popupModifier = if (animate) Modifier.cyPopupEnter(origin).testTag(tag) else Modifier.testTag(tag)
+            Surface(popupModifier, shape = CompactMenuStyle.Shape,
                 // This overlay covers existing records, so it is opaque; it uses the keyboard palette so
                 // it matches the keys of every theme instead of a (possibly white) Material surface.
                 color = palette?.key?.copy(alpha = 1f)
                     ?: if (glass.enabled) colors.surface.copy(alpha = 1f) else colors.surfaceContainerHigh,
-                shadowElevation = CompactMenuStyle.Elevation, tonalElevation = 0.dp) {
+                border = if (shadowElevation == 0.dp) androidx.compose.foundation.BorderStroke(0.5.dp, menuText.copy(alpha = 0.14f)) else null,
+                shadowElevation = shadowElevation, tonalElevation = 0.dp) {
                 Column(Modifier.testTag(surfaceTag)
                     .verticalScroll(rememberScrollState()).padding(vertical = CompactMenuStyle.SurfacePadding)) {
                     listOfNotNull(title, message).forEachIndexed { index, text ->
