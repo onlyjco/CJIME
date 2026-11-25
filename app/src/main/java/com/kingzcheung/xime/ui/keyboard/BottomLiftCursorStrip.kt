@@ -4,8 +4,10 @@ import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
+import androidx.compose.foundation.gestures.waitForUpOrCancellation
 import androidx.compose.foundation.indication
 import androidx.compose.foundation.interaction.MutableInteractionSource
+import androidx.compose.foundation.interaction.PressInteraction
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Row
@@ -24,7 +26,6 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.LocalContentColor
 import androidx.compose.material3.ripple
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
@@ -36,8 +37,6 @@ import androidx.compose.ui.graphics.isSpecified
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalView
-import androidx.compose.ui.platform.LocalViewConfiguration
-import androidx.compose.ui.platform.ViewConfiguration
 import androidx.compose.ui.platform.testTag
 import androidx.compose.ui.semantics.Role
 import androidx.compose.ui.unit.Dp
@@ -46,7 +45,7 @@ import com.kingzcheung.xime.keyboard.ToolbarButton
 import kotlin.math.abs
 
 internal const val BOTTOM_LIFT_ACTION_BUTTON_MIN_HEIGHT_DP = 28
-private const val BOTTOM_LIFT_CLIPBOARD_LONG_PRESS_MS = 240L
+private const val BOTTOM_LIFT_CLIPBOARD_LONG_PRESS_MS = 220L
 
 /**
  * 固定键盘的底部留白（「调节键盘」里往上拖出来的那一条）。
@@ -134,29 +133,59 @@ private fun BottomLiftActionIcon(
     onLongClick: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
-    val baseConfig = LocalViewConfiguration.current
-    val effectiveConfig = remember(baseConfig, longPressTimeoutMillis) {
-        if (longPressTimeoutMillis == null) baseConfig
-        else object : ViewConfiguration by baseConfig {
-            override val longPressTimeoutMillis: Long = longPressTimeoutMillis
-        }
-    }
-    CompositionLocalProvider(LocalViewConfiguration provides effectiveConfig) {
     val interactionSource = remember { MutableInteractionSource() }
     val rippleSize = (iconSize.value + 12f).dp
+    val latestOnClick by rememberUpdatedState(onClick)
+    val latestOnLongClick by rememberUpdatedState(onLongClick)
+    val touchModifier = if (longPressTimeoutMillis != null && onLongClick != null) {
+        Modifier.pointerInput(enabled, longPressTimeoutMillis) {
+            if (!enabled) return@pointerInput
+            awaitEachGesture {
+                val down = awaitFirstDown(requireUnconsumed = false)
+                val press = PressInteraction.Press(down.position)
+                interactionSource.tryEmit(press)
+                var longTriggered = false
+                val up = withTimeoutOrNull(longPressTimeoutMillis) {
+                    waitForUpOrCancellation()
+                }
+                if (up != null) {
+                    interactionSource.tryEmit(PressInteraction.Release(press))
+                    latestOnClick()
+                } else {
+                    // 区分是真正超时触发长按，还是手指移出/被滑动移光标取消。
+                    val stillPressed = currentEvent.changes.any { it.id == down.id && it.pressed && !it.isConsumed }
+                    if (stillPressed) {
+                        longTriggered = true
+                        interactionSource.tryEmit(PressInteraction.Release(press))
+                        latestOnLongClick?.invoke()
+                        // 消费剩余抬手事件，避免再触发单击或其他手势。
+                        while (true) {
+                            val event = awaitPointerEvent()
+                            event.changes.forEach { if (it.id == down.id) it.consume() }
+                            if (event.changes.none { it.id == down.id && it.pressed }) break
+                        }
+                    } else if (!longTriggered) {
+                        interactionSource.tryEmit(PressInteraction.Cancel(press))
+                    }
+                }
+            }
+        }
+    } else {
+        Modifier.combinedClickable(
+            enabled = enabled,
+            role = Role.Button,
+            interactionSource = interactionSource,
+            indication = null,
+            onLongClick = onLongClick,
+            onClick = onClick,
+        )
+    }
     Box(
         modifier = Modifier
             .testTag(testTag)
             .width(54.dp)
             .fillMaxHeight()
-            .combinedClickable(
-                enabled = enabled,
-                role = Role.Button,
-                interactionSource = interactionSource,
-                indication = null,
-                onLongClick = onLongClick,
-                onClick = onClick,
-            ),
+            .then(touchModifier),
         contentAlignment = Alignment.Center,
     ) {
         Box(
@@ -173,7 +202,6 @@ private fun BottomLiftActionIcon(
                 modifier = Modifier.size(iconSize),
             )
         }
-    }
     }
 }
 
