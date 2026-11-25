@@ -1045,6 +1045,22 @@ fun KeyboardView(
                 preeditEditSession != null || preeditOpening -> ({ closePreeditEditor() })
                 else -> null
             }
+            callbacks.onSentenceGlideCode = if (sentenceEdit != null) ({ glidedCode ->
+                val owner = sentenceEdit
+                val clean = glidedCode.lowercase().filter { it in 'a'..'z' || it == '\'' }
+                if (owner == null || sentenceApplying || clean.isEmpty()) false
+                else {
+                    val base = if (sentenceReplaceOnType) "" else sentenceCode
+                    val sep = if (base.isNotEmpty() && !base.endsWith('\'') && !clean.startsWith('\'')) "'" else ""
+                    sentenceCode = base + sep + clean
+                    sentenceJustSelected = false
+                    sentenceReplaceOnType = false
+                    sentenceWordCode = ""
+                    previewSentenceCode(owner)
+                    refreshSentenceWords(owner)
+                    true
+                }
+            }) else null
             callbacks.onPreeditKeyInput = if (sentenceEdit != null) ({ key ->
                 val owner = sentenceEdit
                 val typed = sentenceEditKey(key,
@@ -1143,6 +1159,7 @@ fun KeyboardView(
             onDispose {
                 callbacks.onDismissPreeditEditor = null
                 callbacks.onPreeditKeyInput = null
+                callbacks.onSentenceGlideCode = null
                 callbacks.onSentenceHorizontalDelete = null
                 callbacks.onPreeditCursorMove = null
                 preeditRequest++

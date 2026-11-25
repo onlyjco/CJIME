@@ -61,6 +61,7 @@ data class KeyboardCallbacks(
     /** Installed by the visible editor; the IME service consumes Back before hiding. */
     var onDismissPreeditEditor: (() -> Unit)? = null,
     var onPreeditKeyInput: ((String) -> Boolean)? = null,
+    var onSentenceGlideCode: ((String) -> Boolean)? = null,
     var onSentenceHorizontalDelete: (() -> Unit)? = null,
     /** Touch cursor gestures can enter preedit editing; physical arrows never call this. */
     var onPreeditCursorMove: ((String) -> Boolean)? = null,

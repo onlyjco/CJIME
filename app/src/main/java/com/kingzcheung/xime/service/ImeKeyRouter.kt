@@ -1015,7 +1015,8 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 }.getOrNull()
             }
             val winnerCode = reranked.winnerCode.ifEmpty { dispatch.candidates.first().word }
-            if (learn && service.uiState.value.currentSchemaId == schemaId &&
+            val inSentenceEdit = service.keyboardCallbacks?.onSentenceGlideCode != null
+            if (learn && !inSentenceEdit && service.uiState.value.currentSchemaId == schemaId &&
                 service.uiState.value.inputSessionId == sessionId) {
                 com.kingzcheung.xime.glide.PersonalGlideCalibration.noteDispatched(
                     sessionId = sessionId,
@@ -1042,6 +1043,10 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         if (code.isEmpty() || hasPendingCandidateCommit) {
             // 上一次点候选宿主没收、等重试时，这一笔不打；记下来，导出日志能看出是这里丢的。
             if (hasPendingCandidateCommit) service.noteInputDropped("glide_pending_commit")
+            previewToken?.let { service.finishGlidePreview(it, false) }
+            return
+        }
+        if (service.keyboardCallbacks?.onSentenceGlideCode?.invoke(code) == true) {
             previewToken?.let { service.finishGlidePreview(it, false) }
             return
         }
