@@ -1,6 +1,5 @@
 package com.kingzcheung.xime.ui.keyboard
 
-import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.layout.BoxScope
 import androidx.compose.foundation.layout.padding
@@ -62,63 +61,69 @@ internal fun Modifier.ctrlSymbolKeyGesture(
     val haptic = androidx.compose.ui.platform.LocalHapticFeedback.current
     val hapticContext = androidx.compose.ui.platform.LocalContext.current
     onGloballyPositioned { bounds = Rect(dragSpace.point(it), it.size.toSize()) }.pointerInput(targets) {
-        awaitEachGesture {
-            // 先于键帽自己的手势拿到按下（Initial），键帽只负责画。
-            val first = awaitFirstDown(pass = PointerEventPass.Initial)
-            first.consume()
-            pressed(true)
-            down()
-            targets.beginCtrl { shortcut(it) }
-            val hasLongPress = longPress != null
-            val longPressMs = if (hasLongPress) minOf(hold, 400L) else hold
-            var dragged = false
-            var longPressFired = false
-            var tap = false
-            val faces = scope.launch {
-                delay(hold)
-                if (!longPressFired) targets.showCtrlFaces()
-            }
-            val longPressTimer = if (hasLongPress) scope.launch {
-                delay(longPressMs)
-                if (!dragged && !targets.ctrlUsed) {
-                    longPressFired = true
+        // 不使用 awaitEachGesture：长按打开符号覆盖层时主键盘会被 PlaceOnlyWhen 立即摘离，
+        // 手指抬起事件会落到符号层而不会回到本节点；awaitEachGesture 末尾的 awaitAllPointersUp()
+        // 会把返回键盘后的下一次按下吞掉。直接循环 awaitFirstDown 即可在返回后立刻响应新按下。
+        awaitPointerEventScope {
+            while (true) {
+                // 先于键帽自己的手势拿到按下（Initial），键帽只负责画。
+                val first = awaitFirstDown(pass = PointerEventPass.Initial)
+                first.consume()
+                pressed(true)
+                down()
+                targets.beginCtrl { shortcut(it) }
+                val hasLongPress = longPress != null
+                val longPressMs = if (hasLongPress) minOf(hold, 400L) else hold
+                val longPressDeadline = android.os.SystemClock.uptimeMillis() + longPressMs
+                var dragged = false
+                var longPressFired = false
+                var tap = false
+                val faces = scope.launch {
+                    delay(hold)
+                    if (!longPressFired) targets.showCtrlFaces()
+                }
+                try {
+                    while (true) {
+                        val event = if (hasLongPress && !dragged && !targets.ctrlUsed) {
+                            val remaining = (longPressDeadline - android.os.SystemClock.uptimeMillis()).coerceAtLeast(1L)
+                            withTimeoutOrNull(remaining) { awaitPointerEvent(PointerEventPass.Initial) }
+                        } else {
+                            awaitPointerEvent(PointerEventPass.Initial)
+                        }
+                        if (event == null) {
+                            if (!dragged && !targets.ctrlUsed) {
+                                longPressFired = true
+                                break
+                            }
+                            continue
+                        }
+                        val change = event.changes.firstOrNull { it.id == first.id } ?: break
+                        change.consume()
+                        val pointer = bounds.topLeft + change.position
+                        dragged = dragged || !bounds.contains(pointer) ||
+                            (change.position - first.position).getDistance() > viewConfiguration.touchSlop
+                        val target = if (dragged) targets.move(bounds, pointer) else null
+                        if (!change.pressed) {
+                            if (dragged) target?.ctrl?.let(shortcut)
+                            else if (!targets.ctrlUsed) {
+                                val elapsed = change.uptimeMillis - first.uptimeMillis
+                                if (elapsed < hold) tap = true
+                            }
+                            break
+                        }
+                    }
+                } finally {
                     faces.cancel()
                     targets.finish()
                     pressed(false)
+                }
+                if (longPressFired) {
                     haptic.performKeyboardHaptic(hapticContext, androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
                     longPress?.invoke()
+                } else if (tap) {
+                    open()
                 }
-            } else null
-            try {
-                while (true) {
-                    val event = awaitPointerEvent(PointerEventPass.Initial)
-                    val change = event.changes.firstOrNull { it.id == first.id } ?: break
-                    change.consume()
-                    if (longPressFired) {
-                        if (!change.pressed) break
-                        continue
-                    }
-                    val pointer = bounds.topLeft + change.position
-                    dragged = dragged || !bounds.contains(pointer) ||
-                        (change.position - first.position).getDistance() > viewConfiguration.touchSlop
-                    if (dragged) longPressTimer?.cancel()
-                    val target = if (dragged) targets.move(bounds, pointer) else null
-                    if (!change.pressed) {
-                        if (dragged) target?.ctrl?.let(shortcut)
-                        else if (!targets.ctrlUsed) {
-                            val elapsed = change.uptimeMillis - first.uptimeMillis
-                            if (elapsed < hold) tap = true
-                        }
-                        break
-                    }
-                }
-            } finally {
-                longPressTimer?.cancel()
-                faces.cancel()
-                targets.finish()
-                pressed(false)
             }
-            if (!longPressFired && tap) open()
         }
     }
 }

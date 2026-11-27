@@ -95,19 +95,18 @@ internal fun letterKeyboardColumns(rows: List<List<String>>, fourteenKey: Boolea
     letterKeyboardFrame(rows)?.columns ?: if (isHoneycomb(rows)) 7f
     else if (fourteenKey) 10f else rows.firstOrNull()?.size?.toFloat() ?: 10f
 
+/**
+ * 底排一律用 26 键那套比例：符号、数字、标点、地球、回车的宽度和位置都和 26 键一样，「，」「。」照同一个开关，
+ * 只有空格让位。以前第一排不是 10 个键的布局（乱序十七 6/6/5、俄语 11 键、自建的 6 列）还套老比例，
+ * 符号数字键和标点窄、空格长；同时保留个人支线的精简底栏模式。
+ */
+@Suppress("UNUSED_PARAMETER")
 internal fun letterKeyboardBottomRow(
     rows: List<List<String>>,
     fourteenKey: Boolean,
     compact: Boolean = false,
-): QwertyBottomRowWeights {
-    val standard = fourteenKey || letterKeyboardFrame(rows) != null || isHoneycomb(rows) || rows.firstOrNull()?.size == 10
-    return when {
-        compact && standard -> QwertyBottomRowWeights.Compact
-        compact -> QwertyBottomRowWeights.LegacyCompact
-        standard -> QwertyBottomRowWeights.Standard
-        else -> QwertyBottomRowWeights.Legacy
-    }
-}
+): QwertyBottomRowWeights =
+    if (compact) QwertyBottomRowWeights.Compact else QwertyBottomRowWeights.Standard
 
 /**
  * 第一行一格的宽度（dp），给 xime.custom.yaml 的 geometry.middle_row_inset 当单位：

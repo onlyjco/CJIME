@@ -172,7 +172,10 @@ fun KeyboardLayout(
     // 自己排的合并键布局（一个键两个字母）也不显示：合并键写不下两个字母的提示，只有单字母键有会前后不一。
     val dpKeyHints = if (doublePinyin && !isAsciiMode && !fourteenKey && keyRows.all { row -> row.all { it.length <= 1 } } &&
         LocalKeyboardInputPreferences.current.doublePinyinKeyHints) remember(uiState.currentSchemaId, cfgVer) {
-        com.kingzcheung.xime.settings.DoublePinyinSchemes.find(uiState.currentSchemaId)?.let(::doublePinyinKeyHints)
+        com.kingzcheung.xime.settings.DoublePinyinSchemes.find(uiState.currentSchemaId)?.let { scheme ->
+            // 自带键盘的双拼（乱序十七）键帽已经写着声母（Zh、HP），提示只写韵母，不在角上再写一遍 zh。
+            doublePinyinKeyHints(scheme).let { hints -> if (scheme.ownLayout == null) hints else hints.mapValues { it.value.copy(initial = null) } }
+        }
     } else null
     // 「ing 放在 Shift 键上」（默认关）：第二排不补分号键（KeysConfigHelper.setSemicolonOnShift，KeyboardView 交给它），
     // 微软双拼打了声母等韵母时，左下角的 Shift 键换成 ing（SemicolonShiftKey）。

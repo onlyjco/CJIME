@@ -335,7 +335,7 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
                 val spaceWeight = bottomWeights.space + bottomWeights.punctuation * (1 - punctCount)
                 @Composable
                 fun RowScope.DimBottomPlaceholder(label: String, weight: Float) {
-                    Surface(Modifier.weight(weight).height(48.dp), shape = RoundedCornerShape(8.dp),
+                    Surface(Modifier.weight(weight).height(64.dp), shape = RoundedCornerShape(8.dp),
                         color = MaterialTheme.colorScheme.surfaceVariant.copy(alpha = 0.45f)) {
                         Box(contentAlignment = Alignment.Center) {
                             Text(label, style = MaterialTheme.typography.labelMedium, maxLines = 1,
@@ -349,7 +349,7 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
                     val upShown = bottomPunctOverrides["up.$id"] ?: defUp
                     val downShown = bottomPunctOverrides["down.$id"] ?: defDown
                     Surface(
-                        modifier = Modifier.weight(bottomWeights.punctuation).height(48.dp)
+                        modifier = Modifier.weight(bottomWeights.punctuation).height(64.dp)
                             .testTag("symbol-editor-key:$id")
                             .clickable(enabled = loaded && !busy) { editing = null; editingPunct = id; message = "" },
                         shape = RoundedCornerShape(8.dp),

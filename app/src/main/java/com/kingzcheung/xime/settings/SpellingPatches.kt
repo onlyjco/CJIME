@@ -198,7 +198,7 @@ object SpellingPatches {
      * 小鹤方案构建时已带 enable_correction 和 cyime_neighbor_correction，其他双拼由它生成，同样带着；开关关着时键盘
      * 只交出带 "~;" 的键位表（只纠拼不成音节的两个键），开着才整串纠错（KeyboardLayout）。
      */
-    internal fun doublePinyinSchemas(context: Context): List<String> = (DoublePinyinScheme.BUILTINS.map { it.id } +
+    internal fun doublePinyinSchemas(context: Context): List<String> = (DoublePinyinScheme.ALL_BUILTINS.map { it.id } +
         runCatching { DoublePinyinSchemes.load(context).map { it.id } }.getOrDefault(emptyList())).distinct()
 
     /**
@@ -214,7 +214,7 @@ object SpellingPatches {
      * 先派生出近音拼音再换成双拼键、合并键。以前只给 26 键双拼写，14 键双拼开了模糊音、简拼也不生效（11-15 实测）。
      */
     internal fun doublePinyinK14Schemas(context: Context): List<String> =
-        doublePinyinSchemas(context).map { DoublePinyinScheme.k14Id(it) }
+        doublePinyinSchemas(context).filter { DoublePinyinSchemes.find(it)?.ownLayout == null }.map { DoublePinyinScheme.k14Id(it) }
 
     /** 模糊音设置据此提醒双拼用户打开「模糊音也用于双拼」。 */
     fun usingDoublePinyin(context: Context): Boolean {
