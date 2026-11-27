@@ -897,6 +897,8 @@ fun KeyboardView(
         var sentenceCode by remember { mutableStateOf("") }
         var sentenceCodeGlideFlags by remember { mutableStateOf<List<Boolean>>(emptyList()) }
         var sentenceConfirmedGlideFlags by remember { mutableStateOf<List<List<Boolean>>>(emptyList()) }
+        var sentenceCodeGlideSpans by remember { mutableStateOf<List<SentenceGlideSpan>>(emptyList()) }
+        var sentenceConfirmedGlideSpans by remember { mutableStateOf<List<List<SentenceGlideSpan>>>(emptyList()) }
         var sentenceWord by remember { mutableStateOf("") }
         var sentenceWordCode by remember { mutableStateOf("") }
         var sentenceConfirmed by remember { mutableStateOf(emptyList<com.kingzcheung.xime.rime.RimeEngine.SentenceEditCandidate>()) }
@@ -999,6 +1001,8 @@ fun KeyboardView(
             sentenceConfirmed = emptyList()
             sentenceCodeGlideFlags = emptyList()
             sentenceConfirmedGlideFlags = emptyList()
+            sentenceCodeGlideSpans = emptyList()
+            sentenceConfirmedGlideSpans = emptyList()
             sentenceOptions = emptyList()
             sentenceSelected = emptyList()
             sentenceChoicesCode = ""
@@ -1026,7 +1030,7 @@ fun KeyboardView(
             callbacks.onApplySentenceEdit?.invoke(owner, segments, commit) { success ->
                 if (sentenceEdit === owner) {
                     sentenceApplying = false
-                    if (success) { closeSentenceEdit(); viewModel.setCandidatePageExpanded(false) }
+                    if (success) { closeSentenceEdit(restorePreview = false); viewModel.setCandidatePageExpanded(false) }
                     else android.widget.Toast.makeText(sentenceContext, "选词状态已变化，请重试", android.widget.Toast.LENGTH_SHORT).show()
                 }
             } ?: run { sentenceApplying = false }
@@ -1050,11 +1054,16 @@ fun KeyboardView(
                 val remFlags = sentenceCodeGlideFlags.drop(consumed).take(remaining.length).let {
                     if (it.size == remaining.length) it else it + List(remaining.length - it.size) { false }
                 }
+                val takenSpans = sentenceCodeGlideSpans.filter { it.end <= candidate.code.length }
+                val remSpans = sentenceCodeGlideSpans.filter { it.removeStart >= consumed }
+                    .map { SentenceGlideSpan(it.removeStart - consumed, it.end - consumed) }
                 sentenceSelected = remainingSentenceSyllables(sentenceSelected, consumed)
                 sentenceChoicesCode = remaining
                 sentenceConfirmed = segments
                 sentenceConfirmedGlideFlags = sentenceConfirmedGlideFlags + listOf(takenFlags)
                 sentenceCodeGlideFlags = remFlags
+                sentenceConfirmedGlideSpans = sentenceConfirmedGlideSpans + listOf(takenSpans)
+                sentenceCodeGlideSpans = remSpans
                 sentenceJustSelected = true
                 sentenceCode = remaining
                 sentenceWord = if (previousWord.startsWith(candidate.text)) previousWord.drop(candidate.text.length) else originalSuffix
@@ -1202,10 +1211,22 @@ fun KeyboardView(
                 else {
                     val base = if (sentenceReplaceOnType) "" else sentenceCode
                     val baseFlags = if (sentenceReplaceOnType) emptyList() else sentenceCodeGlideFlags
+                    val baseSpans = if (sentenceReplaceOnType) emptyList() else sentenceCodeGlideSpans
                     val sep = if (base.isNotEmpty() && !base.endsWith('\'') && !clean.startsWith('\'')) "'" else ""
                     val sepFlags = if (sep.isNotEmpty()) listOf(false) else emptyList()
+                    val isDoublePinyin = state.inputProfile.scheme == com.kingzcheung.xime.settings.InputScheme.DOUBLE_PINYIN
+                    val entries = runCatching { com.kingzcheung.xime.glide.GlideLexicon.pinyin(sentenceContext) }.getOrDefault(emptyList())
+                    val pieces = splitSentenceGlideSyllables(clean, isDoublePinyin, entries)
+                    val addedSpans = ArrayList<SentenceGlideSpan>(pieces.size)
+                    var cursor = base.length + sep.length
+                    pieces.forEachIndexed { idx, piece ->
+                        val removeStart = if (idx == 0) base.length else cursor
+                        cursor += piece.length
+                        addedSpans.add(SentenceGlideSpan(removeStart, cursor))
+                    }
                     sentenceCode = base + sep + clean
                     sentenceCodeGlideFlags = baseFlags + sepFlags + List(clean.length) { i -> clean[i] != '\'' }
+                    sentenceCodeGlideSpans = baseSpans + addedSpans
                     sentenceJustSelected = false
                     sentenceReplaceOnType = false
                     sentenceWordCode = ""
@@ -1248,6 +1269,8 @@ fun KeyboardView(
                             sentenceConfirmed = emptyList()
                             sentenceCodeGlideFlags = emptyList()
                             sentenceConfirmedGlideFlags = emptyList()
+                            sentenceCodeGlideSpans = emptyList()
+                            sentenceConfirmedGlideSpans = emptyList()
                             sentenceReplaceOnType = false
                             sentenceJustSelected = false
                             if (atSentenceEnd) {
@@ -1269,17 +1292,43 @@ fun KeyboardView(
                                 it.copy(start = it.start + prefixLength, end = it.end + prefixLength)
                             }
                             val prevFlags = sentenceConfirmedGlideFlags.lastOrNull() ?: List(previous.code.length) { false }
+                            val prevSpans = sentenceConfirmedGlideSpans.lastOrNull().orEmpty()
                             sentenceCode = previous.code + sentenceCode
                             sentenceChoicesCode = sentenceCode
                             sentenceConfirmed = sentenceConfirmed.dropLast(1)
                             sentenceConfirmedGlideFlags = sentenceConfirmedGlideFlags.dropLast(1)
                             sentenceCodeGlideFlags = prevFlags + sentenceCodeGlideFlags
+                            sentenceConfirmedGlideSpans = sentenceConfirmedGlideSpans.dropLast(1)
+                            sentenceCodeGlideSpans = prevSpans + sentenceCodeGlideSpans.map {
+                                SentenceGlideSpan(it.removeStart + prefixLength, it.end + prefixLength)
+                            }
                             sentenceWord = previous.text + sentenceWord
                         } else {
-                            val next = if (sentenceReplaceOnType) "" else sentenceCode.dropLast(1)
-                            sentenceCode = if (next.endsWith('\'')) next.dropLast(1) else next
-                            sentenceCodeGlideFlags = if (sentenceReplaceOnType) emptyList() else sentenceCodeGlideFlags.take(sentenceCode.length)
-                            if (sentenceCode.isEmpty()) sentenceWord = ""
+                            // 对齐普通输入的「逐字（按音节）删除中文滑行」开关：开启时遇到滑行音节按整音节删，
+                            // 滑行后又点按字母时先逐字母删，删回到滑行末尾自动衔接按音节删。
+                            val deleteGlideBySyllable = com.kingzcheung.xime.settings.SettingsPreferences
+                                .getPrefsPublic(sentenceContext)
+                                .getBoolean(KeyboardInputPreferences.DELETE_CHINESE_GLIDE_CHARACTER_KEY, false)
+                            val lastSpan = sentenceCodeGlideSpans.lastOrNull()
+                            if (sentenceReplaceOnType) {
+                                sentenceCode = ""
+                                sentenceCodeGlideFlags = emptyList()
+                                sentenceCodeGlideSpans = emptyList()
+                                sentenceWord = ""
+                            } else if (deleteGlideBySyllable && lastSpan != null && lastSpan.end == sentenceCode.length) {
+                                val cut = lastSpan.removeStart.coerceIn(0, sentenceCode.length)
+                                val next = sentenceCode.substring(0, cut).let { if (it.endsWith('\'')) it.dropLast(1) else it }
+                                sentenceCode = next
+                                sentenceCodeGlideFlags = sentenceCodeGlideFlags.take(next.length)
+                                sentenceCodeGlideSpans = sentenceCodeGlideSpans.dropLast(1).filter { it.end <= next.length }
+                                if (sentenceCode.isEmpty()) sentenceWord = ""
+                            } else {
+                                val next = sentenceCode.dropLast(1)
+                                sentenceCode = if (next.endsWith('\'')) next.dropLast(1) else next
+                                sentenceCodeGlideFlags = sentenceCodeGlideFlags.take(sentenceCode.length)
+                                sentenceCodeGlideSpans = sentenceCodeGlideSpans.filter { it.end <= sentenceCode.length }
+                                if (sentenceCode.isEmpty()) sentenceWord = ""
+                            }
                         }
                         sentenceJustSelected = false
                         sentenceReplaceOnType = false
@@ -1297,6 +1346,7 @@ fun KeyboardView(
                     }
                     typed != null -> {
                         val baseFlags = if (sentenceReplaceOnType) emptyList() else sentenceCodeGlideFlags
+                        if (sentenceReplaceOnType) sentenceCodeGlideSpans = emptyList()
                         sentenceCode = (if (sentenceReplaceOnType) "" else sentenceCode) + typed
                         sentenceCodeGlideFlags = baseFlags + List(typed.length) { false }
                         sentenceJustSelected = false
@@ -2156,8 +2206,19 @@ fun KeyboardView(
                                         sentenceWordCode = owner.originalCode
                                         sentenceConfirmed = emptyList()
                                         sentenceConfirmedGlideFlags = emptyList()
+                                        sentenceConfirmedGlideSpans = emptyList()
                                         val initGlideFlags = originalSentenceGlideFlags(owner, cs.shownPreedit(state.inputProfile), cs.glideUnderlineRanges)
                                         sentenceCodeGlideFlags = initGlideFlags
+                                        val baseOffset = owner.snapshot.boundaries[owner.start]
+                                        val initSpans = ArrayList<SentenceGlideSpan>()
+                                        for (idx in owner.start until owner.end) {
+                                            val s = (owner.snapshot.boundaries[idx] - baseOffset).coerceIn(0, owner.originalCode.length)
+                                            val e = (owner.snapshot.boundaries[idx + 1] - baseOffset).coerceIn(s, owner.originalCode.length)
+                                            if (e > s && (s until e).any { i -> initGlideFlags.getOrElse(i) { false } }) {
+                                                initSpans.add(SentenceGlideSpan(s, e))
+                                            }
+                                        }
+                                        sentenceCodeGlideSpans = initSpans
                                         sentenceSelected = emptyList()
                                         sentenceChoicesCode = owner.originalCode
                                         sentenceWords = result.words
@@ -3882,3 +3943,57 @@ private fun keyboardSwipeCursor(onCursorMove: ((Int) -> Unit)?, inputPreferences
 /** 工具栏上这个插件的按钮对应的面板正开着：再点是关，按钮亮着。 */
 internal fun toolPanelOpenFor(visible: Boolean, openPluginId: String, pluginId: String): Boolean =
     visible && openPluginId == pluginId
+
+/** 局部修改中一段滑行音节在 sentenceCode 里的起止范围（removeStart 含该笔首个音节前自动补的隔音符）。 */
+private data class SentenceGlideSpan(val removeStart: Int, val end: Int)
+
+/** 将局部修改中滑行输入的编码按音节拆分，与普通输入 ChineseGlideDeleteHistory 的逐音节删除对齐。 */
+private fun splitSentenceGlideSyllables(
+    code: String,
+    isDoublePinyin: Boolean,
+    entries: List<List<String>>,
+): List<String> {
+    if (code.isEmpty()) return emptyList()
+    com.kingzcheung.xime.glide.chineseCodeSyllables(
+        raw = code,
+        doublePinyin = isDoublePinyin,
+        readings = emptyList(),
+        entries = entries,
+        allowIncomplete = true,
+    )?.takeIf { it.isNotEmpty() && it.joinToString("") == code }?.let { return it }
+    if (isDoublePinyin) {
+        val out = ArrayList<String>()
+        var i = 0
+        while (i < code.length) {
+            val start = i
+            while (i < code.length && code[i] == '\'') i++
+            val end = (i + 2).coerceAtMost(code.length)
+            if (end > start) out += code.substring(start, end)
+            i = end
+        }
+        return out
+    }
+    val syllables = com.kingzcheung.xime.settings.DoublePinyinScheme.SYLLABLES
+    val out = ArrayList<String>()
+    var i = 0
+    while (i < code.length) {
+        val start = i
+        while (i < code.length && code[i] == '\'') i++
+        if (i >= code.length) {
+            if (out.isNotEmpty()) out[out.lastIndex] += code.substring(start)
+            else out += code.substring(start)
+            break
+        }
+        var matchedLen = 0
+        for (len in minOf(6, code.length - i) downTo 1) {
+            if (code.substring(i, i + len) in syllables) {
+                matchedLen = len
+                break
+            }
+        }
+        val step = if (matchedLen > 0) matchedLen else 1
+        out += code.substring(start, i + step)
+        i += step
+    }
+    return out
+}

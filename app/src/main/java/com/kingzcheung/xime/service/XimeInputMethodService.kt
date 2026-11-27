@@ -4487,6 +4487,22 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             !uiState.value.isVoiceMode && !isSecretEditor())
             inlineComposition.restoreLostSpan(currentInputConnection, newSelStart, newSelEnd, candidatesStart, candidatesEnd)
         else null
+        if (restored != null) {
+            val ic = currentInputConnection
+            val code = inlineComposition.text
+            if (ic != null && !code.isNullOrEmpty()) {
+                runCatching {
+                    val styled = sessionController.styledInputBoxComposing(code)
+                    ic.beginBatchEdit()
+                    try {
+                        if (ic.setComposingText(styled, 1) && newSelStart == newSelEnd &&
+                            newSelStart in restored.start..restored.end && newSelStart != restored.end) {
+                            ic.setSelection(newSelStart, newSelStart)
+                        }
+                    } finally { ic.endBatchEdit() }
+                }
+            }
+        }
         schemaController.observeEditorSelection(newSelStart, newSelEnd)
         if (restored == null && caretLeftInlineComposition(newSelStart, newSelEnd, candidatesStart, candidatesEnd))
             keyRouter.finishCompositionAfterCaretLeft()
@@ -5530,9 +5546,18 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             ic.beginBatchEdit()
             try {
                 ic.setComposingRegion(region.start, region.end).also { ok ->
-                    // 宿主把光标放进编码中间（早一个字）时放回拼音光标原处，免得被当成在拼音里移了光标。
-                    val caret = region.start + inlineComposition.caret
-                    if (ok && selStart == selEnd && selStart in region.start..region.end && selStart != caret) ic.setSelection(caret, caret)
+                    if (ok) {
+                        // Android setComposingRegion 会默认给整段组合区套系统下划线；
+                        // 立刻覆写带 StyleSpan(NORMAL) 与滑行区间 UnderlineSpan 的样式文本，确保锁屏解锁后不把点按编码全加上下划线。
+                        val styled = sessionController.styledInputBoxComposing(code)
+                        val restyled = ic.setComposingText(styled, 1)
+                        val caret = (region.start + inlineComposition.caret).coerceIn(region.start, region.start + code.length)
+                        if (restyled) {
+                            if (caret != region.start + code.length) ic.setSelection(caret, caret)
+                        } else if (selStart == selEnd && selStart in region.start..region.end && selStart != caret) {
+                            ic.setSelection(caret, caret)
+                        }
+                    }
                 }
             } finally { ic.endBatchEdit() }
         }.getOrDefault(false)

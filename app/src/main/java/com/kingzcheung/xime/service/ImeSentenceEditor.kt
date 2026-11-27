@@ -52,9 +52,9 @@ private fun remapSentenceUnderlineRanges(
     newLength: Int,
     keepInside: Boolean,
     replacementUnderlines: List<IntRange> = emptyList(),
+    rightDelta: Int = replacementLength - (editEnd - editStart),
 ): List<IntRange> {
     if ((baseRanges.isEmpty() && replacementUnderlines.isEmpty()) || newLength <= 0) return emptyList()
-    val delta = replacementLength - (editEnd - editStart)
     val out = ArrayList<IntRange>(baseRanges.size + replacementUnderlines.size)
     for (r in baseRanges) {
         val rs = r.first
@@ -76,11 +76,11 @@ private fun remapSentenceUnderlineRanges(
                 if (e > s) out.add(s until e)
             }
         }
-        // 右侧未改动段（按长度差平移）
+        // 右侧未改动段（按实际右移偏移平移，避免清空段时折叠分隔符造成 1 字符错位）
         val rightStart = maxOf(rs, editEnd)
         if (re > rightStart) {
-            val s = (rightStart + delta).coerceIn(0, newLength)
-            val e = (re + delta).coerceIn(s, newLength)
+            val s = (rightStart + rightDelta).coerceIn(0, newLength)
+            val e = (re + rightDelta).coerceIn(s, newLength)
             if (e > s) out.add(s until e)
         }
     }
@@ -141,6 +141,10 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
     private var previewBaseUnderlines: List<IntRange> = emptyList()
     private var previewWritten: String? = null
     private var previewCaret = 0
+    /** 记录最近一次局部修改替换段的逐字滑行标记（不依赖输入框模式，供 apply 精准回写下划线）。 */
+    private var lastReplacementOwner: SentenceEditSession? = null
+    private var lastReplacementCode: String = ""
+    private var lastReplacementFlags: List<Boolean> = emptyList()
     private var dragConnection: android.view.inputmethod.InputConnection? = null
     private var dragText: String? = null
     private var dragCaret = 0
@@ -217,6 +221,10 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
 
     /** Only replace our own composing span; never touch surrounding host text. */
     fun preview(owner: SentenceEditSession, code: String, replacementUnderlines: List<IntRange> = emptyList()) {
+        lastReplacementOwner = owner
+        lastReplacementCode = code
+        lastReplacementFlags = if (code.isEmpty() || replacementUnderlines.isEmpty()) List(code.length) { false }
+            else List(code.length) { i -> replacementUnderlines.any { i in it } }
         if (!current(owner) || service.uiState.value.inputTarget.isInternal ||
             TerminalEditor.inputTextLocation(service) != com.kingzcheung.xime.settings.SettingsPreferences.INPUT_TEXT_INPUT_BOX) return
         val ic = service.currentInputConnection ?: return
@@ -251,15 +259,22 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
         val after = base.drop(end)
         // Keep the original syllable separators while the selected code is unchanged.
         val shownCode = if (code == owner.originalCode) base.substring(start, end) else code
+        val leftTrimmed = before.trimEnd(' ', '\'')
+        val rightTrimmed = after.trimStart(' ', '\'')
         val text = if (code.isNotEmpty()) before + shownCode + after else {
-            val left = before.trimEnd(' ', '\'')
-            val right = after.trimStart(' ', '\'')
             val separator = before.lastOrNull()?.takeIf { it == ' ' || it == '\'' }
                 ?: after.firstOrNull()?.takeIf { it == ' ' || it == '\'' }
-            left + (if (left.isNotEmpty() && right.isNotEmpty()) separator?.toString().orEmpty() else "") + right
+            leftTrimmed + (if (leftTrimmed.isNotEmpty() && rightTrimmed.isNotEmpty()) separator?.toString().orEmpty() else "") + rightTrimmed
         }
-        val caret = if (code.isNotEmpty()) start + shownCode.length else before.trimEnd(' ', '\'').length.coerceAtMost(text.length)
+        val caret = if (code.isNotEmpty()) start + shownCode.length else leftTrimmed.length.coerceAtMost(text.length)
         if (code.isEmpty() && text == previewWritten && caret == previewCaret) return
+        val rightDelta = if (code.isNotEmpty()) {
+            shownCode.length - (end - start)
+        } else {
+            val oldRightTrimmedStart = base.length - rightTrimmed.length
+            val newRightTrimmedStart = text.length - rightTrimmed.length
+            newRightTrimmedStart - oldRightTrimmedStart
+        }
         val underlines = remapSentenceUnderlineRanges(
             baseRanges = previewBaseUnderlines,
             editStart = start,
@@ -268,6 +283,7 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
             newLength = text.length,
             keepInside = code == owner.originalCode && replacementUnderlines.isEmpty(),
             replacementUnderlines = replacementUnderlines,
+            rightDelta = rightDelta,
         )
         val styled = if (code.isNotEmpty()) sentenceCodeHighlight(text, start, start + shownCode.length, underlines)
             else if (text.isNotEmpty()) sentenceCodeHighlight(text, 0, 0, underlines) else text
@@ -304,6 +320,9 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
         }
         if (previewOwner === owner) {
             previewOwner = null; previewConnection = null; previewBase = null; previewBaseUnderlines = emptyList(); previewWritten = null; previewCaret = 0
+        }
+        if (lastReplacementOwner === owner) {
+            lastReplacementOwner = null; lastReplacementCode = ""; lastReplacementFlags = emptyList()
         }
     }
 
@@ -357,8 +376,18 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
                         )
                     }
                 }
+                val repFlagsSnapshot = if (lastReplacementOwner === owner && lastReplacementCode == goodCode) lastReplacementFlags else null
                 withContext(Dispatchers.Main) {
-                    if (current(owner)) service.sessionController.updateUIWithResult(result)
+                    if (current(owner)) {
+                        service.sessionController.applyRawGlideEdit(
+                            oldRaw = owner.snapshot.input,
+                            editStart = owner.snapshot.boundaries[owner.start],
+                            editEnd = owner.snapshot.boundaries[owner.end],
+                            replacement = goodCode,
+                            replacementFlags = repFlagsSnapshot,
+                        )
+                        service.sessionController.updateUIWithResult(result)
+                    }
                 }
             }
             if (result != null && commit && result.candidates.isNotEmpty() && current(owner)) service.keyRouter.selectCandidateAsync(0)

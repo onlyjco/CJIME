@@ -1271,6 +1271,17 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         if (before.schema != state.currentSchemaId || before.session != state.inputSessionId) return
         val choice = holder.find(input) ?: return
         if (!service.rimeEngine.applyPinyinEdit(before.input, choice.input, choice.caret, expectedSchema = before.schema)) return
+        // 滑行异码备选替换后保留整段滑行下划线，避免被前缀比对误清成点按样式。
+        if (choice.code.isNotEmpty() && choice.input.endsWith(choice.code)) {
+            val replaceStart = (choice.input.length - choice.code.length).coerceIn(0, before.input.length)
+            service.sessionController.applyRawGlideEdit(
+                oldRaw = before.input,
+                editStart = replaceStart,
+                editEnd = before.input.length,
+                replacement = choice.code,
+                replacementFlags = List(choice.code.length) { i -> choice.code[i].isLetterOrDigit() },
+            )
+        }
         holder.clear()
         val updated = service.rimeEngine.readQueuedResult() ?: return
         val index = updated.candidates.indexOfFirst { it.text == choice.text }

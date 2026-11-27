@@ -317,21 +317,61 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
         currentGlideRanges = emptyList()
     }
 
+    /**
+     * 局部修改或滑行异码替换落地前，直接按 [editStart, editEnd) 拼接更新 [trackedRawInput] 与
+     * [trackedRawFlags]，保留修改点左右两侧原有滑行标记，同时精准写入替换段的滑行/点按来源。
+     */
+    internal fun applyRawGlideEdit(
+        oldRaw: String,
+        editStart: Int,
+        editEnd: Int,
+        replacement: String,
+        replacementFlags: List<Boolean>?,
+    ) {
+        if (trackedRawInput != oldRaw || editStart !in 0..editEnd || editEnd > oldRaw.length) return
+        val nextFlags = ArrayList<Boolean>(oldRaw.length - (editEnd - editStart) + replacement.length)
+        for (i in 0 until editStart) nextFlags.add(trackedRawFlags.getOrElse(i) { false })
+        for (i in replacement.indices) {
+            val ch = replacement[i]
+            val flag = if (ch.isLetterOrDigit()) replacementFlags?.getOrElse(i) { false } ?: false else false
+            nextFlags.add(flag)
+        }
+        for (i in editEnd until oldRaw.length) nextFlags.add(trackedRawFlags.getOrElse(i) { false })
+        trackedRawFlags.clear()
+        trackedRawFlags.addAll(nextFlags)
+        trackedRawInput = oldRaw.substring(0, editStart) + replacement + oldRaw.substring(editEnd)
+        pendingGlideFlags.clear()
+    }
+
     private fun syncGlideUnderlineRanges(rawInput: String, displayText: String, isComposing: Boolean): List<IntRange> {
         if (!isComposing || rawInput.isEmpty() || displayText.isEmpty()) {
             resetGlideTracking()
             return emptyList()
         }
-        var common = 0
+        // 同时匹配公共前缀与公共后缀，确保局部修改或光标居中插删后，修改点之后的滑行下划线不被误清空。
         val minLen = minOf(trackedRawInput.length, rawInput.length)
-        while (common < minLen && trackedRawInput[common] == rawInput[common]) common++
-        while (trackedRawFlags.size > common) trackedRawFlags.removeAt(trackedRawFlags.size - 1)
-        for (i in common until rawInput.length) {
-            val ch = rawInput[i]
-            val flag = if (ch.isLetterOrDigit()) pendingGlideFlags.poll() ?: false else false
-            trackedRawFlags.add(flag)
+        var prefix = 0
+        while (prefix < minLen && trackedRawInput[prefix] == rawInput[prefix]) prefix++
+        var suffix = 0
+        val maxSuffix = minLen - prefix
+        while (suffix < maxSuffix &&
+            trackedRawInput[trackedRawInput.length - 1 - suffix] == rawInput[rawInput.length - 1 - suffix]
+        ) suffix++
+        if (prefix + suffix < trackedRawInput.length || prefix + suffix < rawInput.length) {
+            val oldTailStart = trackedRawInput.length - suffix
+            val newMidEnd = rawInput.length - suffix
+            val nextFlags = ArrayList<Boolean>(rawInput.length)
+            for (i in 0 until prefix) nextFlags.add(trackedRawFlags.getOrElse(i) { false })
+            for (i in prefix until newMidEnd) {
+                val ch = rawInput[i]
+                val flag = if (ch.isLetterOrDigit()) pendingGlideFlags.poll() ?: false else false
+                nextFlags.add(flag)
+            }
+            for (i in oldTailStart until trackedRawInput.length) nextFlags.add(trackedRawFlags.getOrElse(i) { false })
+            trackedRawFlags.clear()
+            trackedRawFlags.addAll(nextFlags)
+            trackedRawInput = rawInput
         }
-        trackedRawInput = rawInput
 
         val alphaFlags = ArrayList<Boolean>(trackedRawFlags.size)
         for (i in rawInput.indices) {
@@ -383,6 +423,9 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
     }
 
     /** 仅滑行片段在输入框组合编码下显示横线；并复用与局部修改一致的逐字底色边界，避免开始/拖动局部修改时字距跳动。 */
+    internal fun styledInputBoxComposing(text: String): CharSequence =
+        styledInputBoxComposing(text, currentGlideRanges)
+
     private fun styledInputBoxComposing(text: String, ranges: List<IntRange>): CharSequence {
         if (text.isEmpty()) return text
         return sentenceCodeHighlight(text, 0, 0, ranges)
