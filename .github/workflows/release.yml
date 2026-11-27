@@ -79,14 +79,11 @@ jobs:
       - name: Grant execute permission for gradlew
         run: chmod +x gradlew
 
-      - name: Build Release APKs (Signed)
+      - name: Build Release APK (Signed, arm64-v8a)
         run: |
           ./gradlew assembleRelease --no-daemon
           mkdir -p app/build/outputs/apk/distribution
-          cp app/build/outputs/apk/release/CJIME-*.apk app/build/outputs/apk/distribution/
-
-      - name: Build Plugin XIPKs (Unsigned)
-        run: bash scripts/build-plugins.sh
+          cp app/build/outputs/apk/release/CJIME-*-arm64-v8a.apk app/build/outputs/apk/distribution/
 
       - name: Verify APK signatures
         run: |
@@ -111,20 +108,16 @@ jobs:
             echo "NOTES_PATH=" >> $GITHUB_OUTPUT
           fi
 
-      - name: Find APKs and plugin XIPKs
+      - name: Find APK
         id: find_apks
         run: |
           MAIN_APKS=$(find app/build/outputs/apk/distribution -name "CJIME-*.apk" -type f | sort | tr '\n' ',' | sed 's/,$//')
-          PLUGIN_XIPKS=$(find build/plugin-release -name "*.xipk" -type f | sort | tr '\n' ',' | sed 's/,$//')
 
           echo "main_apks=$MAIN_APKS" >> $GITHUB_OUTPUT
-          echo "plugin_xipks=$PLUGIN_XIPKS" >> $GITHUB_OUTPUT
 
           if [ -z "$MAIN_APKS" ]; then
-            echo "::warning::No main app APKs found!"
-          fi
-          if [ -z "$PLUGIN_XIPKS" ]; then
-            echo "::warning::No plugin XIPKs found!"
+            echo "::error::No main app APK found!"
+            exit 1
           fi
 
       - name: Create Release
@@ -135,7 +128,6 @@ jobs:
           generate_release_notes: ${{ steps.get_version.outputs.NOTES_PATH == '' }}
           files: |
             ${{ steps.find_apks.outputs.main_apks }}
-            ${{ steps.find_apks.outputs.plugin_xipks }}
           overwrite: true
           draft: false
           prerelease: false

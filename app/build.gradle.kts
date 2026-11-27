@@ -109,9 +109,9 @@ android {
         testInstrumentationRunner = if (providers.gradleProperty("uiRenderingOnly").orNull == "true")
             "com.kingzcheung.xime.ui.UiRenderingTestRunner" else "androidx.test.runner.AndroidJUnitRunner"
 
-        // NDK 配置
+        // NDK 配置（仅保留主流 arm64-v8a，避免 CI 与本地重复编译 4 套原生库）
         ndk {
-            abiFilters += listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
+            abiFilters += listOf("arm64-v8a")
         }
 
         // 构建信息
@@ -255,13 +255,13 @@ android {
         checkDependencies = true
     }
 
-    // 分架构打包
+    // 分架构打包（仅产出 arm64-v8a 单包，关闭多架构与 universal 重复产物）
     splits {
         abi {
             isEnable = true
             reset()
-            include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")
-            isUniversalApk = true
+            include("arm64-v8a")
+            isUniversalApk = false
         }
     }
 }
