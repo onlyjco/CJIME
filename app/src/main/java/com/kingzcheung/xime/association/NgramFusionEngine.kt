@@ -14,6 +14,9 @@ class NgramFusionEngine(private val context: Context, private val userNgramCache
         const val USER_WEIGHT = 0.15f
         /** Typed observations reach full weight after this many events on the same context. */
         const val USER_CONFIDENCE_EVENTS = 8f
+        /** 复用 rime/t9_ngram.lm 的三元残差增益与 3–4 字整词二元补齐权重。 */
+        const val TRIGRAM_RESIDUAL_WEIGHT = 0.042f
+        const val WHOLE_WORD_BIGRAM_WEIGHT = 0.032f
     }
     
     private var lambda = DEFAULT_LAMBDA
@@ -90,9 +93,10 @@ class NgramFusionEngine(private val context: Context, private val userNgramCache
         baseModel?.predict(context, BaseAssociationModel.MAX_PER_CONTEXT, afterWholeWord)?.forEach {
             allCandidates[it.text] = BASE_WEIGHT * it.score
         }
+        val baseCtxLen = baseModel?.contextLength(context) ?: 0
         // The corpus table knows the last one or two characters only. When the context ends with a longer
         // dictionary word (厄尔尼诺), what follows that whole word (现象) joins on the same scale.
-        mergeWordContinuations(allCandidates, baseModel?.contextLength(context) ?: 0, wordTable?.lookup(context), BASE_WEIGHT)
+        mergeWordContinuations(allCandidates, baseCtxLen, wordTable?.lookup(context), BASE_WEIGHT)
         // Imported personal corpora carry their own counts (0.4·share); typed observations are
         // shares over few events, so they earn weight gradually (n/USER_CONFIDENCE_EVENTS).
         userNgramCache.profileCandidates(context).forEach { candidate ->
@@ -100,20 +104,101 @@ class NgramFusionEngine(private val context: Context, private val userNgramCache
         }
         val userCandidates = userNgramCache.getUserCandidates(context, 10)
         val confidence = minOf(1f, userNgramCache.observationCount(context) / USER_CONFIDENCE_EVENTS)
+        val tailCjkLen = context.takeLastWhile { it in '\u4e00'..'\u9fff' }.length
         userCandidates.forEach { (word, userScore) ->
-            allCandidates[word] = (allCandidates[word] ?: 0f) + USER_WEIGHT * confidence * userScore
+            // 整词上屏后，UserNgramCache 的单字预测若不在语料候选中则温和降权，避免半截字抢占整词位。
+            val singleFactor = if (afterWholeWord && tailCjkLen >= 2 && word.length == 1 && word !in allCandidates) 0.55f else 1f
+            allCandidates[word] = (allCandidates[word] ?: 0f) + USER_WEIGHT * confidence * userScore * singleFactor
         }
+
+        val filesDir = (this.context.applicationContext ?: this.context).filesDir
+        // 复用现成内存映射词组 Trigram 模型（rime/t9_ngram.lm）：
+        // 1) 叠加「trigram(h2, h1, w) - bigram(h1, w)」纯三元残差，把 1–2 字眼界扩展到整句前两词；
+        // 2) 对 3–4 字整词（baseModel 只看到末 1–2 字）补齐整词 bigram 提升。
+        applyWordNgramRerank(filesDir, context, baseCtxLen, allCandidates)
 
         if (com.kingzcheung.xime.settings.SettingsPreferences.isPersonalAssociationLearningEnabled(this.context)) {
             runCatching {
-                val dir = (this.context.applicationContext ?: this.context).filesDir
-                PersonalAssociationBooster.applyToCandidates(dir, context, allCandidates)
+                PersonalAssociationBooster.applyToCandidates(filesDir, context, allCandidates, afterWholeWord)
             }
         }
 
-        return allCandidates.map { (word, score) ->
-            AssociationCandidate(word, score)
-        }.sortedByDescending { it.score }
+        return diversifyTopCandidates(
+            allCandidates.map { (word, score) -> AssociationCandidate(word, score) }
+                .sortedByDescending { it.score }
+        )
+    }
+
+    private fun applyWordNgramRerank(
+        filesDir: java.io.File,
+        context: String,
+        baseCtxLen: Int,
+        candidates: MutableMap<String, Float>,
+    ) {
+        if (candidates.size < 2) return
+        val lm = com.kingzcheung.xime.glide.ChineseGlideContext.model(filesDir) ?: return
+        val cjkTail = context.takeLastWhile { it in '\u4e00'..'\u9fff' }.takeLast(12)
+        if (cjkTail.length < 2) return
+        val words = com.kingzcheung.xime.glide.ChineseSentenceGlideScorer.segmentWords(cjkTail, lm)
+        if (words.isEmpty()) return
+        val h1Word = words.last()
+        val h1 = lm.id(h1Word)
+        if (h1 < 0) return
+        val h2Word = words.getOrNull(words.size - 2)
+        val h2 = h2Word?.let(lm::id) ?: -1
+        val needsWholeWordBoost = h1Word.length >= 3 && baseCtxLen < h1Word.length
+        if (h2 < 0 && !needsWholeWordBoost) return
+
+        for (entry in candidates.entries) {
+            val word = entry.key
+            val wid = lm.id(word)
+            if (wid < 0) continue
+            var delta = 0f
+            if (h2 >= 0) {
+                val residual = (lm.trigram(h2, h1, wid) - lm.bigram(h1, wid)).coerceIn(-1.5, 4.0)
+                delta += (residual * TRIGRAM_RESIDUAL_WEIGHT).toFloat()
+            }
+            if (needsWholeWordBoost) {
+                val wholeLift = (lm.bigram(h1, wid) - lm.unigram(wid)).coerceIn(-1.0, 5.0)
+                delta += (wholeLift * WHOLE_WORD_BIGRAM_WEIGHT).toFloat()
+            }
+            if (delta != 0f) {
+                entry.setValue((entry.value + delta).coerceAtLeast(0.0001f))
+            }
+        }
+    }
+
+    /**
+     * 温和整理前排多样性：
+     * 1) 若已有分差接近的 2–4 字词（如「晚上」），把同首字单字碎片（如「晚」）轻微后移；
+     * 2) 前排已出现 2 个同首字候选（如「了」「了吗」）时，把第 3 个同首字变形轻微后移，腾出黄金首屏位。
+     */
+    private fun diversifyTopCandidates(sorted: List<AssociationCandidate>): List<AssociationCandidate> {
+        if (sorted.size < 3) return sorted
+        val bestMultiByHead = HashMap<Char, Float>()
+        for (c in sorted.take(12)) {
+            if (c.text.length in 2..4) {
+                val head = c.text[0]
+                val prev = bestMultiByHead[head] ?: 0f
+                if (c.score > prev) bestMultiByHead[head] = c.score
+            }
+        }
+        val headCounts = HashMap<Char, Int>()
+        val adjusted = sorted.mapIndexed { idx, c ->
+            var score = c.score
+            val head = c.text.firstOrNull()
+            if (head != null && idx < 10) {
+                if (c.text.length == 1) {
+                    val multiScore = bestMultiByHead[head] ?: 0f
+                    if (multiScore >= score * 0.78f) score *= 0.82f
+                }
+                val seen = headCounts[head] ?: 0
+                if (seen >= 2) score *= 0.86f
+                headCounts[head] = seen + 1
+            }
+            if (score == c.score) c else AssociationCandidate(c.text, score)
+        }
+        return adjusted.sortedByDescending { it.score }
     }
     
     suspend fun saveCache() {

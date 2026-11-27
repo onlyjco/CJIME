@@ -222,35 +222,80 @@ object PersonalAssociationBooster {
 
     /**
      * 将本机个人联想权重叠加到 [NgramFusionEngine.fuseCandidates] 的概率分中。
-     * 按上下文长度 1..4 字逐层累加，越长匹配权重越高；高置信个人专属搭配也能主动进榜。
+     * - 改四层累加为「最长匹配主导 + 浅层微弱确认」并封顶，防止 1+2+3+4 字重复堆叠压死公共语料；
+     * - 引入时间衰减（24 小时内轻微保鲜，45 天半衰期平滑回落），贴合当下聊天语境；
+     * - [afterWholeWord] 为真且上文 ≥2 字时，1 字上下文降权且不凭空注入新词，防止「今天→气」类错拼。
      */
     @Synchronized
-    fun applyToCandidates(dir: File, contextText: String, baseCandidates: MutableMap<String, Float>) {
+    fun applyToCandidates(
+        dir: File,
+        contextText: String,
+        baseCandidates: MutableMap<String, Float>,
+        afterWholeWord: Boolean = false,
+    ) {
         ensureLoaded(dir)
         if (boosts.isEmpty() && penalties.isEmpty()) return
         val contexts = trailingContexts(contextText)
         if (contexts.isEmpty()) return
+        val hasMultiCharTail = contexts.first().length >= 2
+        val now = System.currentTimeMillis()
+
+        val bestBoost = HashMap<String, Float>()
+        val secondBoost = HashMap<String, Float>()
+        val allowInject = HashSet<String>()
+        val bestPenalty = HashMap<String, Float>()
 
         for (ctx in contexts) {
-            val weight = contextWeight(ctx.length)
+            val singleAfterWhole = afterWholeWord && hasMultiCharTail && ctx.length == 1
+            val weight = if (singleAfterWhole) 0.04f else contextWeight(ctx.length)
             boostsByCtx[ctx]?.forEach { entry ->
                 if (!allowsAssociationWord(ctx.length, entry.word.length)) return@forEach
-                val bonus = weight * ln(1.0 + entry.score).toFloat()
-                val existing = baseCandidates[entry.word]
-                if (existing != null) {
-                    baseCandidates[entry.word] = existing + bonus
-                } else if (entry.score >= 1.25f) {
-                    // 明确点选/局部改错/两次以上自然连续使用过的个人搭配，可直接补充进联想候选池。
-                    baseCandidates[entry.word] = bonus * 0.92f
+                val bonus = weight * ln(1.0 + entry.score).toFloat() * recencyFactor(entry.lastUsedMs, now)
+                val prevBest = bestBoost[entry.word] ?: 0f
+                if (bonus > prevBest) {
+                    if (prevBest > 0f) secondBoost[entry.word] = max(secondBoost[entry.word] ?: 0f, prevBest)
+                    bestBoost[entry.word] = bonus
+                } else if (bonus > (secondBoost[entry.word] ?: 0f)) {
+                    secondBoost[entry.word] = bonus
+                }
+                if (!singleAfterWhole && entry.score >= 1.25f) {
+                    allowInject.add(entry.word)
                 }
             }
             penaltiesByCtx[ctx]?.forEach { entry ->
-                val existing = baseCandidates[entry.word] ?: return@forEach
-                val penalty = weight * 1.15f * ln(1.0 + entry.score).toFloat()
-                baseCandidates[entry.word] = (existing - penalty).coerceAtLeast(0.0001f)
+                if (entry.word !in baseCandidates) return@forEach
+                val penalty = weight * 1.15f * ln(1.0 + entry.score).toFloat() * recencyFactor(entry.lastUsedMs, now)
+                val prev = bestPenalty[entry.word] ?: 0f
+                if (penalty > prev) bestPenalty[entry.word] = penalty
             }
         }
+
+        for ((word, topBonus) in bestBoost) {
+            val combined = min(MAX_PERSONAL_BOOST, topBonus + (secondBoost[word] ?: 0f) * 0.15f)
+            val existing = baseCandidates[word]
+            if (existing != null) {
+                baseCandidates[word] = existing + combined
+            } else if (word in allowInject) {
+                baseCandidates[word] = combined * 0.90f
+            }
+        }
+        for ((word, pen) in bestPenalty) {
+            val existing = baseCandidates[word] ?: continue
+            baseCandidates[word] = (existing - min(MAX_PERSONAL_PENALTY, pen)).coerceAtLeast(0.0001f)
+        }
     }
+
+    private fun recencyFactor(lastUsedMs: Long, nowMs: Long): Float {
+        if (lastUsedMs <= 0L) return 0.85f
+        val ageDays = (nowMs - lastUsedMs).coerceAtLeast(0L) / 86_400_000.0
+        return when {
+            ageDays < 1.0 -> 1.12f
+            else -> (0.5 + 0.5 * kotlin.math.exp(-ageDays / 45.0)).toFloat()
+        }
+    }
+
+    private const val MAX_PERSONAL_BOOST = 0.52f
+    private const val MAX_PERSONAL_PENALTY = 0.55f
 
     @Synchronized
     fun reportLines(dir: File, limit: Int = 10): Pair<List<String>, List<String>> {
