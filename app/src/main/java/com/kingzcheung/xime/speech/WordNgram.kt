@@ -15,6 +15,10 @@ internal interface WordLanguageModel {
     fun bigram(history: Int, word: Int): Double
     /** ln P(word | history2 history). */
     fun trigram(history2: Int, history: Int, word: Int): Double
+    /** 仅当模型存在显式 (history, word) 二元条目时返回其 ln P，否则返回 null（不返回回退常量）。 */
+    fun explicitBigramOrNull(history: Int, word: Int): Double? = null
+    /** 仅当模型存在显式 (history2, history, word) 三元条目时返回其 ln P，否则返回 null（不返回回退常量）。 */
+    fun explicitTrigramOrNull(history2: Int, history: Int, word: Int): Double? = null
 }
 
 /**
@@ -130,6 +134,12 @@ internal class WordNgram private constructor(private val map: ByteBuffer) : Word
         return entry(history, 2) + lower(word)
     }
 
+    override fun explicitBigramOrNull(history: Int, word: Int): Double? {
+        if (history < 0 || word < 0) return null
+        val idx = bigramIndex(history, word)
+        return if (idx >= 0) value(logpOffset, idx) else null
+    }
+
     private fun triBegin(b: Int): Int = if (compact)
         map.getInt(triBaseOffset + 4 * (b ushr shift)) + (map.getShort(triLoOffset + 2 * b).toInt() and 0xffff)
     else map.getInt(triBeginOffset + 4 * b)
@@ -145,6 +155,14 @@ internal class WordNgram private constructor(private val map: ByteBuffer) : Word
             if (k >= 0) return value(triLogpOffset, k)
         }
         return value(backoffOffset, b) + lowerOrder
+    }
+
+    override fun explicitTrigramOrNull(history2: Int, history: Int, word: Int): Double? {
+        if (history2 < 0 || history < 0 || word < 0) return null
+        val b = bigramIndex(history2, history)
+        if (b < 0) return null
+        val k = find(triNextOffset, triBegin(b), triBegin(b + 1), word)
+        return if (k >= 0) value(triLogpOffset, k) else null
     }
 
     companion object {

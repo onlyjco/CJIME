@@ -151,7 +151,8 @@ class GlideDecoder(
             if (kept.size < limit) kept += cost else if (cost < kept.peek()) { kept.poll(); kept += cost }
         }
         // 联合束与经典兜底共享同一份 LatticeContext，整笔最多构建一次反向 DP 表。
-        val syllableBudget = max(limit * 2, 12)
+        val isFixedTwoKey = syllableGlide?.isFixedTwoKey == true
+        val syllableBudget = if (isFixedTwoKey && !isPreview) max(limit * 2 + 4, 24) else max(limit * 2, 12)
         val latticeCtx = syllableGlide?.buildLatticeContext(xs, ys, ts)
         val jointBeam = if (latticeCtx != null && wordTrie != null) {
             ChineseLatticeBeam.decodeFromContext(
@@ -178,9 +179,13 @@ class GlideDecoder(
                 }.take(syllableBudget - jointBeam.size)
             }
         }
+        val strokePathLen = pathLength(qx, qy)
         val leadShapeLen = scoredSyllables.firstOrNull()?.code?.let { collapseRepeats(it).length } ?: 0
+        val hasLongTwoKey = isFixedTwoKey && scoredSyllables.any { it.code.length >= 12 }
         val veryLongSentence = leadShapeLen > 24
-        val longSentence = leadShapeLen > 10
+        // 整笔统一采样尺度与词表外先验（不再在同一笔内混用 32/64 点和 1.5/0.8 先验），
+        // 既避免错误短码领跑把长句拖进 32 点短档（由轨迹弧长或存在长码共同触发 64 点），又避免 6 字噪声码靠先验差反压 4–5 字正解。
+        val longSentence = !veryLongSentence && (leadShapeLen > 10 || (hasLongTwoKey && strokePathLen >= 6.5f))
         val sampleCount = when {
             veryLongSentence -> VERY_LONG_SAMPLES
             longSentence -> LONG_SAMPLES
@@ -192,7 +197,8 @@ class GlideDecoder(
             longSentence -> LONG_MAX_SHAPE
             else -> MAX_SHAPE
         }
-        val unlistedPrior = if (longSentence) LONG_UNLISTED_PRIOR else UNLISTED_PRIOR
+        val unlistedPrior = if (sampleCount != SAMPLES) LONG_UNLISTED_PRIOR else UNLISTED_PRIOR
+        val shapesN = if (sampleCount != SAMPLES) HashMap<String, Float>() else shapes
         val bestSyllableCost = scoredSyllables.firstOrNull()?.cost ?: 0f
         var bestJointGeom = Float.POSITIVE_INFINITY
         var bestJointLm = Float.POSITIVE_INFINITY
@@ -211,6 +217,7 @@ class GlideDecoder(
             shapeCounts[s] = (shapeCounts[s] ?: 0) + 1
         }
         var jointSameShapeReserved = 0
+        val longTwoKeyCodes = HashSet<String>()
         scoredSyllables.forEachIndexed { rank, scored ->
             val code = scored.code
             if (code.length > MAX_SENTENCE_KEYS) return@forEachIndexed
@@ -239,14 +246,19 @@ class GlideDecoder(
             // 联合束前 2 名允许突破一次模板路占满的同形配额，避免被单模板词挤出候选池。
             val allowExtraJoint = scored.fromJointBeam && rank < 2 && jointSameShapeReserved < 2
             if (currentShapeCount >= MAX_SAME_SHAPE_CANDIDATES && !allowExtraJoint) return@forEachIndexed
+
+            val isLongTwoKey = isFixedTwoKey && code.length >= 12
             val px = FloatArray(shape.length) { keyboard.centers.getValue(shape[it]).first / unit }
             val py = FloatArray(shape.length) { keyboard.centers.getValue(shape[it]).second / unit }
             val (tx, ty) = resampleTo(px, py, sampleCount)
             val start = hypot(rx[0] - tx[0], ry[0] - ty[0])
             val end = hypot(rx[sampleCount - 1] - tx[sampleCount - 1], ry[sampleCount - 1] - ty[sampleCount - 1])
             if (start > maxEndpoint || end > maxEndpoint) return@forEachIndexed
-            val dtwScore = if (sampleCount != SAMPLES) dtwN(rx, ry, tx, ty, sampleCount, maxShape)
-                else shapes.getOrPut(shape) { dtw(sx, sy, tx, ty) }
+            val dtwScore = if (sampleCount != SAMPLES) {
+                shapesN.getOrPut(shape) { dtwN(rx, ry, tx, ty, sampleCount, maxShape) }
+            } else {
+                shapes.getOrPut(shape) { dtw(sx, sy, tx, ty) }
+            }
             if (dtwScore > maxShape) return@forEachIndexed
             val geometry = dtwScore + (start + end) / 2f * ENDPOINT_WEIGHT
             val isKnown = code in known
@@ -258,10 +270,26 @@ class GlideDecoder(
                 shape = geometry,
                 listed = isKnown,
             )
+            if (isLongTwoKey) longTwoKeyCodes.add(code)
             shapeCounts[shape] = currentShapeCount + 1
             if (currentShapeCount >= MAX_SAME_SHAPE_CANDIDATES) jointSameShapeReserved++
         }
-        return results.sortedWith(compareBy<GlideCandidate> { it.cost }.thenBy { it.word }).take(limit)
+        val sorted = results.sortedWith(compareBy<GlideCandidate> { it.cost }.thenBy { it.word })
+        if (!isFixedTwoKey || limit < 6 || longTwoKeyCodes.isEmpty() || sorted.size <= limit) {
+            return sorted.take(limit)
+        }
+        // 双拼长句（≥6 音节）在完整帧覆盖并过 DTW 门槛的前提下，于末尾最多预留 2 个竞争名额送入后级 Rime 重排，不抢占前 3 名。
+        val top = sorted.take(limit).toMutableList()
+        val missingLongs = sorted.drop(limit).filter { it.word in longTwoKeyCodes }.take(LONG_RESERVE_SLOTS)
+        if (missingLongs.isEmpty()) return top
+        var replaceAt = top.lastIndex
+        for (longCand in missingLongs) {
+            while (replaceAt >= 3 && top[replaceAt].word in longTwoKeyCodes) replaceAt--
+            if (replaceAt < 3) break
+            top[replaceAt] = longCand
+            replaceAt--
+        }
+        return top
     }
 
     companion object {
@@ -291,6 +319,7 @@ class GlideDecoder(
         const val JOINT_LM_SPREAD_WEIGHT = 0.35f
         const val SYLLABLE_TIE_COST = 0.005f
         const val MAX_SAME_SHAPE_CANDIDATES = 2
+        private const val LONG_RESERVE_SLOTS = 2
 
         internal fun collapseRepeats(word: String): String = buildString {
             for (char in word) if (isEmpty() || last() != char) append(char)

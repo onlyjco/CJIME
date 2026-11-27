@@ -51,6 +51,8 @@ class SyllableGlide(
 
     internal val syllableList: List<String>
     internal val syllableToId: Map<String, Int>
+    /** 是否为固定两键双拼方案（如首道/小鹤/自然码）：作为双拼专用弯段次级边与同键停留抵扣开关，全拼保持原行为。 */
+    internal val isFixedTwoKey: Boolean
 
     private val keys: CharArray = keyboard.centers.keys.toCharArray()
     private val keyCount: Int = keys.size
@@ -67,6 +69,7 @@ class SyllableGlide(
 
         val distinct = syllables.filter { syllable -> syllable.isNotEmpty() && syllable.all { keyboard.centers.containsKey(it) } }.distinct()
         syllableList = distinct
+        isFixedTwoKey = distinct.isNotEmpty() && distinct.all { it.length == 2 }
         val idMap = HashMap<String, Int>(distinct.size * 2)
         val logMax = ln(distinct.size + 1.0).toFloat()
         distinct.forEachIndexed { rank, syllable ->
@@ -138,6 +141,7 @@ class SyllableGlide(
         val step = ctx.step
         val nearKeys = ctx.nearKeys
         val straightUntil = ctx.straightUntil
+        val relaxedStraightUntil = ctx.relaxedStraightUntil
         val remMove = ctx.remMove
         val rem = ctx.rem
         val n = ctx.n
@@ -180,6 +184,7 @@ class SyllableGlide(
             if (k >= 0) {
                 val baseRow = node * keyCount
                 val boundaryWeight = if (canEnd) endWeight - params.pauseBonus * pause[i] else 0f
+                val intraRepeatEdge = intraRepeatEdgeCost(pause[i])
 
                 if (!cur.repeatUsed) {
                     val c = charArr[node]
@@ -187,7 +192,7 @@ class SyllableGlide(
                     if (target >= 0) {
                         val h = remMove[i][target]
                         if (h.isFinite()) {
-                            val g = cur.g + repeatEdge
+                            val g = cur.g + intraRepeatEdge
                             pq.add(AStarState(i, target, true, g, g + h, cur.code + c))
                         }
                     }
@@ -203,10 +208,12 @@ class SyllableGlide(
                     }
                 }
 
-                val maxJ = straightUntil[i]
+                val strictMaxJ = straightUntil[i]
+                val maxJ = relaxedStraightUntil[i]
                 for (j in i + 1..maxJ) {
                     val candidatesAtJ = nearKeys[j]
                     val remJ = rem[j]
+                    val secondaryPenalty = if (j > strictMaxJ) SECONDARY_STRAIGHT_PENALTY else 0f
                     for (idx in candidatesAtJ.indices) {
                         val next = candidatesAtJ[idx]
                         if (next == k) continue
@@ -217,7 +224,7 @@ class SyllableGlide(
                         val h0 = if (target0 >= 0) remJ[target0] else Float.POSITIVE_INFINITY
                         if (!h1.isFinite() && !h0.isFinite()) continue
                         val stepEdge = segmentCost(px, py, i, j, k, next, step) + params.keyCost +
-                            params.hitWeight * dist(px[j], py[j], keyX[next], keyY[next])
+                            params.hitWeight * dist(px[j], py[j], keyX[next], keyY[next]) + secondaryPenalty
                         val c = keys[next]
                         if (h1.isFinite()) {
                             val g = cur.g + stepEdge
@@ -256,6 +263,7 @@ class SyllableGlide(
         val step: Float,
         val nearKeys: Array<IntArray>,
         val straightUntil: IntArray,
+        val relaxedStraightUntil: IntArray,
         val remMove: Array<FloatArray>,
         val rem: Array<FloatArray>,
         val bestGlobalCost: Float,
@@ -271,9 +279,11 @@ class SyllableGlide(
         fun startHitCost(frame: Int, keyIdx: Int): Float =
             params.hitWeight * dist(px[frame], py[frame], keyX[keyIdx], keyY[keyIdx])
 
-        fun moveTransitionCost(fromFrame: Int, toFrame: Int, fromKey: Int, toKey: Int): Float =
-            segmentCost(px, py, fromFrame, toFrame, fromKey, toKey, step) + params.keyCost +
-                params.hitWeight * dist(px[toFrame], py[toFrame], keyX[toKey], keyY[toKey])
+        fun moveTransitionCost(fromFrame: Int, toFrame: Int, fromKey: Int, toKey: Int): Float {
+            val secondaryPenalty = if (toFrame > straightUntil[fromFrame]) SECONDARY_STRAIGHT_PENALTY else 0f
+            return segmentCost(px, py, fromFrame, toFrame, fromKey, toKey, step) + params.keyCost +
+                params.hitWeight * dist(px[toFrame], py[toFrame], keyX[toKey], keyY[toKey]) + secondaryPenalty
+        }
 
         fun minRemainingAfterBoundary(frame: Int, prevKey: Int): Float {
             if (frame >= last) return 0f
@@ -281,10 +291,12 @@ class SyllableGlide(
             val cached = minRemBoundaryCache[slot]
             if (!cached.isNaN()) return cached
             var best = Float.POSITIVE_INFINITY
-            val maxJ = straightUntil[frame]
+            val strictMaxJ = straightUntil[frame]
+            val maxJ = relaxedStraightUntil[frame]
             for (j in frame + 1..maxJ) {
                 val cands = nearKeys[j]
                 val remJ = rem[j]
+                val secPen = if (j > strictMaxJ) SECONDARY_STRAIGHT_PENALTY else 0f
                 for (idx in cands.indices) {
                     val next = cands[idx]
                     if (next == prevKey) continue
@@ -292,7 +304,7 @@ class SyllableGlide(
                     if (target < 0) continue
                     val r = remJ[target]
                     if (r.isFinite()) {
-                        val est = params.keyCost + r
+                        val est = params.keyCost + secPen + r
                         if (est < best) best = est
                     }
                 }
@@ -349,7 +361,7 @@ class SyllableGlide(
                     val repTarget = childAt[baseRow + k]
                     if (repTarget >= 0) {
                         val r = remMove[frame][repTarget]
-                        val nextCost = accCost + repeatEdgeCost
+                        val nextCost = accCost + intraRepeatEdgeCost(pause[frame])
                         if (r.isFinite() && nextCost + r <= cutoff) {
                             dfs(frame, repTarget, nextCost, true)
                         }
@@ -357,10 +369,12 @@ class SyllableGlide(
                 }
 
                 if (frame >= last) return
-                val maxJ = straightUntil[frame]
+                val strictMaxJ = straightUntil[frame]
+                val maxJ = relaxedStraightUntil[frame]
                 for (j in frame + 1..maxJ) {
                     val cands = nearKeys[j]
                     val remJ = rem[j]
+                    val secPen = if (j > strictMaxJ) SECONDARY_STRAIGHT_PENALTY else 0f
                     for (idx in cands.indices) {
                         val next = cands[idx]
                         if (next == k) continue
@@ -369,7 +383,7 @@ class SyllableGlide(
                         val r = remJ[target]
                         if (!r.isFinite()) continue
                         val nextCost = accCost + segmentCost(px, py, frame, j, k, next, step) + params.keyCost +
-                            params.hitWeight * dist(px[j], py[j], keyX[next], keyY[next])
+                            params.hitWeight * dist(px[j], py[j], keyX[next], keyY[next]) + secPen
                         if (nextCost + r <= cutoff) {
                             dfs(j, target, nextCost, false)
                         }
@@ -419,7 +433,35 @@ class SyllableGlide(
                 (j - i) * step - dist(px[i], py[i], px[j], py[j]) <= params.straightTolerance) j++
             j - 1
         }
+        val strictCtx = runBackwardDp(px, py, pause, step, nearKeys, straightUntil, straightUntil, deadlineNs)
+        val relaxedTolerance = max(params.straightTolerance, SECONDARY_STRAIGHT_TOLERANCE)
+        if (!isFixedTwoKey || relaxedTolerance <= params.straightTolerance) {
+            return strictCtx
+        }
+        // 严格 0.50 路径已连通且代价健康时直接返回，零额外分支开销、绝不拖累短句 Top-1；
+        // 仅在严格图断路（或整笔几何代价明显偏高）时，启用 0.50..0.65 带罚次级弯边救回圆角断路轨迹。
+        val needRelaxedFallback = strictCtx == null || strictCtx.bestGlobalCost > (n - 1) * RELAXED_TRIGGER_COST_PER_FRAME
+        if (!needRelaxedFallback) return strictCtx
+        val relaxedStraightUntil = IntArray(n) { i ->
+            var j = straightUntil[i] + 1
+            while (j < n && maxDeviation(px, py, i, j) <= relaxedTolerance &&
+                (j - i) * step - dist(px[i], py[i], px[j], py[j]) <= relaxedTolerance) j++
+            j - 1
+        }
+        return runBackwardDp(px, py, pause, step, nearKeys, straightUntil, relaxedStraightUntil, deadlineNs) ?: strictCtx
+    }
 
+    private fun runBackwardDp(
+        px: FloatArray,
+        py: FloatArray,
+        pause: FloatArray,
+        step: Float,
+        nearKeys: Array<IntArray>,
+        straightUntil: IntArray,
+        relaxedStraightUntil: IntArray,
+        deadlineNs: Long,
+    ): LatticeContext? {
+        val n = px.size
         val nodes = charArr.size
         val last = n - 1
         val remMove = Array(n) { FloatArray(nodes) { Float.POSITIVE_INFINITY } }
@@ -445,7 +487,9 @@ class SyllableGlide(
             val remMoveI = remMove[i]
             val remI = rem[i]
             val pauseBonusI = params.pauseBonus * pause[i]
-            val maxJ = straightUntil[i]
+            val intraRepeatEdge = intraRepeatEdgeCost(pause[i])
+            val strictMaxJ = straightUntil[i]
+            val maxJ = relaxedStraightUntil[i]
 
             for (kIdx in nearI.indices) {
                 val k = nearI[kIdx]
@@ -454,11 +498,12 @@ class SyllableGlide(
                 for (j in i + 1..maxJ) {
                     val candidatesAtJ = nearKeys[j]
                     val remJ = rem[j]
+                    val secPen = if (j > strictMaxJ) SECONDARY_STRAIGHT_PENALTY else 0f
                     for (idx in candidatesAtJ.indices) {
                         val next = candidatesAtJ[idx]
                         if (next == k) continue
                         val stepEdge = segmentCost(px, py, i, j, k, next, step) + params.keyCost +
-                            params.hitWeight * dist(px[j], py[j], keyX[next], keyY[next])
+                            params.hitWeight * dist(px[j], py[j], keyX[next], keyY[next]) + secPen
                         val rootTarget = rootChild[next]
                         val rootRem = if (rootTarget >= 0) remJ[rootTarget] else Float.POSITIVE_INFINITY
                         val rootHasRem = rootRem.isFinite()
@@ -496,7 +541,7 @@ class SyllableGlide(
                     if (sameTarget >= 0) {
                         val r = remMoveI[sameTarget]
                         if (r.isFinite()) {
-                            val cand = repeatEdge + r
+                            val cand = intraRepeatEdge + r
                             if (cand < best) best = cand
                         }
                     }
@@ -523,7 +568,14 @@ class SyllableGlide(
             }
         }
         if (!bestGlobal.isFinite()) return null
-        return LatticeContext(px, py, pause, step, nearKeys, straightUntil, remMove, rem, bestGlobal)
+        return LatticeContext(px, py, pause, step, nearKeys, straightUntil, relaxedStraightUntil, remMove, rem, bestGlobal)
+    }
+
+    /** 双拼合法同键音节（如 ee/ii/vv）若在当前帧有减速停留证据，按停顿强度抵扣部分 repeatCost。 */
+    private fun intraRepeatEdgeCost(pauseVal: Float): Float {
+        val base = params.keyCost + params.repeatCost
+        return if (isFixedTwoKey && pauseVal > 0f) (base - SAME_KEY_DWELL_DISCOUNT * pauseVal).coerceAtLeast(params.keyCost)
+        else base
     }
 
     private class AStarState(
@@ -555,6 +607,13 @@ class SyllableGlide(
         const val SYLLABLE_PRIOR = 0.6f
         const val PAUSE_BONUS = 0.22f
         const val STRAIGHT_TOLERANCE = 0.5f
+        /** 双拼弯段次级直线容差上限（仅针对固定两键方案），次级边额外叠加 [SECONDARY_STRAIGHT_PENALTY]。 */
+        const val SECONDARY_STRAIGHT_TOLERANCE = 0.65f
+        const val SECONDARY_STRAIGHT_PENALTY = 0.48f
+        /** 仅当严格 0.50 路径断路或均帧代价超过该阈值时才回退启用 0.65 次级弯边。 */
+        private const val RELAXED_TRIGGER_COST_PER_FRAME = 0.42f
+        /** 双拼同键音节（如 ee/ii/vv）局部减速停留时的 repeatCost 最大抵扣量。 */
+        const val SAME_KEY_DWELL_DISCOUNT = 0.30f
 
         private fun dist(ax: Float, ay: Float, bx: Float, by: Float): Float {
             val dx = ax - bx; val dy = ay - by

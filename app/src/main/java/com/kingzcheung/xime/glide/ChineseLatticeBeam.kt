@@ -255,7 +255,7 @@ internal object ChineseLatticeBeam {
                 } else {
                     // 跨音节同键重复（如 xin·nian 双 n）
                     addStep(prevFrame, prevKey, ctx.repeatEdgeCost)
-                    val maxJ = ctx.straightUntil[prevFrame]
+                    val maxJ = ctx.relaxedStraightUntil[prevFrame]
                     for (j in prevFrame + 1..maxJ) {
                         val cands = ctx.nearKeys[j]
                         for (idx in cands.indices) {

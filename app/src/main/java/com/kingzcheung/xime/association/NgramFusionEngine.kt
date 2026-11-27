@@ -155,12 +155,19 @@ class NgramFusionEngine(private val context: Context, private val userNgramCache
             if (wid < 0) continue
             var delta = 0f
             if (h2 >= 0) {
-                val residual = (lm.trigram(h2, h1, wid) - lm.bigram(h1, wid)).coerceIn(-1.5, 4.0)
-                delta += (residual * TRIGRAM_RESIDUAL_WEIGHT).toFloat()
+                // 仅对模型显式命中的三元计算残差，避免未命中三元时用共享回退常量相对压低 OOV 候选。
+                val tri = lm.explicitTrigramOrNull(h2, h1, wid)
+                if (tri != null) {
+                    val residual = (tri - lm.bigram(h1, wid)).coerceIn(-1.5, 4.0)
+                    delta += (residual * TRIGRAM_RESIDUAL_WEIGHT).toFloat()
+                }
             }
             if (needsWholeWordBoost) {
-                val wholeLift = (lm.bigram(h1, wid) - lm.unigram(wid)).coerceIn(-1.0, 5.0)
-                delta += (wholeLift * WHOLE_WORD_BIGRAM_WEIGHT).toFloat()
+                val bi = lm.explicitBigramOrNull(h1, wid)
+                if (bi != null) {
+                    val wholeLift = (bi - lm.unigram(wid)).coerceIn(-1.0, 5.0)
+                    delta += (wholeLift * WHOLE_WORD_BIGRAM_WEIGHT).toFloat()
+                }
             }
             if (delta != 0f) {
                 entry.setValue((entry.value + delta).coerceAtLeast(0.0001f))

@@ -250,7 +250,8 @@ object PersonalAssociationBooster {
             val weight = if (singleAfterWhole) 0.04f else contextWeight(ctx.length)
             boostsByCtx[ctx]?.forEach { entry ->
                 if (!allowsAssociationWord(ctx.length, entry.word.length)) return@forEach
-                val bonus = weight * ln(1.0 + entry.score).toFloat() * recencyFactor(entry.lastUsedMs, now)
+                val factor = recencyFactor(entry.lastUsedMs, now)
+                val bonus = weight * ln(1.0 + entry.score).toFloat() * factor
                 val prevBest = bestBoost[entry.word] ?: 0f
                 if (bonus > prevBest) {
                     if (prevBest > 0f) secondBoost[entry.word] = max(secondBoost[entry.word] ?: 0f, prevBest)
@@ -258,12 +259,13 @@ object PersonalAssociationBooster {
                 } else if (bonus > (secondBoost[entry.word] ?: 0f)) {
                     secondBoost[entry.word] = bonus
                 }
-                if (!singleAfterWhole && entry.score >= 1.25f) {
+                // 新词注入门槛按衰减后的有效证据判断，避免久远低频词持续挤占候选。
+                if (!singleAfterWhole && entry.score * factor >= 1.25f) {
                     allowInject.add(entry.word)
                 }
             }
+            // 先汇总全部上下文的负反馈（不提前过滤 baseCandidates），确保新注入的个人词同样受负反馈约束。
             penaltiesByCtx[ctx]?.forEach { entry ->
-                if (entry.word !in baseCandidates) return@forEach
                 val penalty = weight * 1.15f * ln(1.0 + entry.score).toFloat() * recencyFactor(entry.lastUsedMs, now)
                 val prev = bestPenalty[entry.word] ?: 0f
                 if (penalty > prev) bestPenalty[entry.word] = penalty
@@ -272,14 +274,19 @@ object PersonalAssociationBooster {
 
         for ((word, topBonus) in bestBoost) {
             val combined = min(MAX_PERSONAL_BOOST, topBonus + (secondBoost[word] ?: 0f) * 0.15f)
+            val pen = min(MAX_PERSONAL_PENALTY, bestPenalty[word] ?: 0f)
             val existing = baseCandidates[word]
             if (existing != null) {
-                baseCandidates[word] = existing + combined
+                baseCandidates[word] = (existing + combined - pen).coerceAtLeast(0.0001f)
             } else if (word in allowInject) {
-                baseCandidates[word] = combined * 0.90f
+                val injectedNet = combined * 0.90f - pen
+                if (injectedNet >= MIN_INJECT_NET_SCORE) {
+                    baseCandidates[word] = injectedNet
+                }
             }
         }
         for ((word, pen) in bestPenalty) {
+            if (word in bestBoost) continue
             val existing = baseCandidates[word] ?: continue
             baseCandidates[word] = (existing - min(MAX_PERSONAL_PENALTY, pen)).coerceAtLeast(0.0001f)
         }
@@ -288,14 +295,15 @@ object PersonalAssociationBooster {
     private fun recencyFactor(lastUsedMs: Long, nowMs: Long): Float {
         if (lastUsedMs <= 0L) return 0.85f
         val ageDays = (nowMs - lastUsedMs).coerceAtLeast(0L) / 86_400_000.0
-        return when {
-            ageDays < 1.0 -> 1.12f
-            else -> (0.5 + 0.5 * kotlin.math.exp(-ageDays / 45.0)).toFloat()
-        }
+        // 连续平滑衰减：保留 0.5 长期记忆底线，超出部分严格 45 天半衰期，叠加 24 小时平滑保鲜项消除满 1 天断崖。
+        val halfLife = 0.5 + 0.5 * Math.pow(2.0, -ageDays / 45.0)
+        val freshness = 0.12 * Math.pow(2.0, -ageDays)
+        return (halfLife + freshness).toFloat()
     }
 
     private const val MAX_PERSONAL_BOOST = 0.52f
     private const val MAX_PERSONAL_PENALTY = 0.55f
+    private const val MIN_INJECT_NET_SCORE = 0.04f
 
     @Synchronized
     fun reportLines(dir: File, limit: Int = 10): Pair<List<String>, List<String>> {

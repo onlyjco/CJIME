@@ -69,6 +69,8 @@ object PersonalGlideCalibration {
         val normTs: LongArray,
         val badCode: String = "",
         val source: String = "confirm",
+        val rawPoints: Int = 0,
+        val layoutMeta: String = "",
     )
 
     data class ExportSummary(
@@ -937,10 +939,25 @@ object PersonalGlideCalibration {
         }
         val cleanBad = badCode.replace("'", "").lowercase().filter { it in 'a'..'z' }
         val cleanSource = source.ifBlank { "confirm" }.replace('\t', '_').replace('\n', '_')
+        val layoutMeta = summarizeKeyboardLayout(keyboard, minCenterX, minCenterY)
         if (samples.size >= MAX_SAMPLES) samples.removeAt(0)
-        samples += SampleEntry(schemaKey, bucket, code, text, normXs, normYs, normTs, cleanBad, cleanSource)
+        samples += SampleEntry(schemaKey, bucket, code, text, normXs, normYs, normTs, cleanBad, cleanSource, xs.size, layoutMeta)
         samplesSinceAutoTune++
         saveSamples(File(dir, SAMPLES_FILE))
+    }
+
+    /** 记录三行归一化行距与二三行缩进（单位：键宽），便于离线回放精确重建真机键盘布局。 */
+    private fun summarizeKeyboardLayout(keyboard: GlideKeyboard, minX: Float, minY: Float): String {
+        val unit = keyboard.keyUnit
+        val q = keyboard.centers['q'] ?: return ""
+        val a = keyboard.centers['a'] ?: return ""
+        val z = keyboard.centers['z'] ?: return ""
+        val rowPitch12 = ((a.second - q.second) / unit * 1000f).roundToInt() / 1000f
+        val rowPitch23 = ((z.second - a.second) / unit * 1000f).roundToInt() / 1000f
+        val row2Inset = ((a.first - minX) / unit * 1000f).roundToInt() / 1000f
+        val row3Inset = ((z.first - minX) / unit * 1000f).roundToInt() / 1000f
+        val topY = ((q.second - minY) / unit * 1000f).roundToInt() / 1000f
+        return "$rowPitch12,$rowPitch23,$row2Inset,$row3Inset,$topY"
     }
 
     fun shouldAutoTune(): Boolean = samplesSinceAutoTune >= 50
@@ -1046,7 +1063,9 @@ object PersonalGlideCalibration {
                 if (xs.size >= 2 && xs.size == ys.size && ts.size == xs.size) {
                     val badCode = p.getOrNull(7).orEmpty()
                     val source = p.getOrNull(8)?.takeIf { it.isNotBlank() } ?: "confirm"
-                    samples += SampleEntry(p[0], p[1], p[2], p[3], xs, ys, ts, badCode, source)
+                    val rawPoints = p.getOrNull(9)?.toIntOrNull() ?: 0
+                    val layoutMeta = p.getOrNull(10).orEmpty()
+                    samples += SampleEntry(p[0], p[1], p[2], p[3], xs, ys, ts, badCode, source, rawPoints, layoutMeta)
                 }
             }
         }
@@ -1062,7 +1081,9 @@ object PersonalGlideCalibration {
                         .append(s.normYs.joinToString(",")).append('\t')
                         .append(s.normTs.joinToString(",")).append('\t')
                         .append(s.badCode).append('\t')
-                        .append(s.source).append('\n')
+                        .append(s.source).append('\t')
+                        .append(s.rawPoints).append('\t')
+                        .append(s.layoutMeta).append('\n')
                 }
             }
         }
@@ -1209,13 +1230,26 @@ object PersonalGlideCalibration {
                 val cleanGood = s.code.replace("'", "").lowercase().filter { it in 'a'..'z' }
                 if (cleanGood.length < 2 || s.normXs.size < 4 || s.normXs.size != s.normYs.size) continue
                 val cleanBad = s.badCode.replace("'", "").lowercase().filter { it in 'a'..'z' }
+                val isDp = s.schema.startsWith("double_pinyin")
                 val line = buildString(256) {
-                    append("{\"ver\":1,\"schema\":\"").append(escapeJson(s.schema))
+                    append("{\"ver\":2,\"schema\":\"").append(escapeJson(s.schema))
                     append("\",\"bucket\":\"").append(escapeJson(s.bucket))
                     append("\",\"good_code\":\"").append(cleanGood)
                     if (cleanBad.isNotEmpty()) append("\",\"bad_code\":\"").append(cleanBad)
                     append("\",\"source\":\"").append(escapeJson(s.source))
-                    append("\",\"xs\":[")
+                    if (isDp) append("\",\"even_dp\":").append(cleanGood.length % 2 == 0)
+                    else append("\"")
+                    if (s.rawPoints > 0) append(",\"raw_pts\":").append(s.rawPoints)
+                    if (s.layoutMeta.isNotEmpty()) {
+                        val lp = s.layoutMeta.split(',')
+                        if (lp.size >= 4) {
+                            append(",\"layout\":{\"row_pitch_12\":").append(lp[0])
+                                .append(",\"row_pitch_23\":").append(lp[1])
+                                .append(",\"row2_inset\":").append(lp[2])
+                                .append(",\"row3_inset\":").append(lp[3]).append('}')
+                        }
+                    }
+                    append(",\"xs\":[")
                     s.normXs.forEachIndexed { idx, v -> if (idx > 0) append(','); append(v) }
                     append("],\"ys\":[")
                     s.normYs.forEachIndexed { idx, v -> if (idx > 0) append(','); append(v) }

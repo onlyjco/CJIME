@@ -310,7 +310,10 @@ object GlideLexicon {
         val decoder = chineseDecoder(context, calibratedKeyboard, doublePinyin, schemaKey, personalCalibration)
         val lm = ChineseGlideContext.model(filesDir)
         val wordTrie = chineseWordTrie(context, doublePinyin, decoder, lm)
-        val raw = decodeTrimmingTail(xs, ys, calibratedKeyboard.keyUnit, ts = ts, softCompeteThreshold = 1.05f) { rx, ry, rts ->
+        val raw = decodeTrimmingTail(
+            xs, ys, calibratedKeyboard.keyUnit,
+            ts = ts, softCompeteThreshold = 1.05f, keyboard = calibratedKeyboard,
+        ) { rx, ry, rts ->
             decoder.decodeWithJointLm(
                 rx, ry,
                 limit = 10,
@@ -374,28 +377,36 @@ object GlideLexicon {
         keyUnit: Float,
         ts: LongArray?,
         softCompeteThreshold: Float,
+        keyboard: GlideKeyboard? = null,
         decode: (FloatArray, FloatArray, LongArray?) -> List<GlideCandidate>,
     ): List<GlideCandidate> {
         val validTs = ts?.takeIf { it.size == xs.size }
         val whole = decode(xs, ys, validTs)
-        val needSoftCompete = whole.isNotEmpty() && whole.first().cost > softCompeteThreshold
-        if ((whole.isNotEmpty() && !needSoftCompete) || xs.size < 3 || xs.size != ys.size || keyUnit <= 0f) return whole
+        if (xs.size < 3 || xs.size != ys.size || keyUnit <= 0f) return whole
         var length = 0f
         for (i in 1 until xs.size) length += kotlin.math.hypot(xs[i] - xs[i - 1], ys[i] - ys[i - 1])
-        val cuts = if (needSoftCompete) SOFT_TAIL_CUTS else TAIL_CUTS
-        var kept = xs.size
+        val needCostCompete = whole.isNotEmpty() && whole.first().cost > softCompeteThreshold
+        val flickCut = if (whole.isNotEmpty() && !needCostCompete && length >= 2.2f * keyUnit) {
+            detectTailFlickCut(xs, ys, keyUnit, keyboard, validTs, whole.first().shape)
+        } else null
+        val needSoftCompete = needCostCompete || flickCut != null
+        if (whole.isNotEmpty() && !needSoftCompete) return whole
+        val cuts = when {
+            flickCut != null -> floatArrayOf(flickCut)
+            needCostCompete -> SOFT_TAIL_CUTS
+            else -> TAIL_CUTS
+        }
+        val softPenalty = if (flickCut != null) FLICK_TAIL_PENALTY else SOFT_TAIL_PENALTY
         var best = whole
         var bestScore = whole.firstOrNull()?.cost ?: Float.POSITIVE_INFINITY
         for (cut in cuts) {
             if (length - cut * keyUnit < keyUnit) break
-            val count = keptAfterCut(xs, ys, cut * keyUnit)
-            if (count == kept || count < 2) continue
-            kept = count
-            val trimmed = decode(xs.copyOf(count), ys.copyOf(count), validTs?.copyOf(count))
+            val trimmedTrace = trimTailByArcLength(xs, ys, validTs, cut * keyUnit) ?: continue
+            val trimmed = decode(trimmedTrace.xs, trimmedTrace.ys, trimmedTrace.ts)
             if (trimmed.isEmpty()) continue
             if (needSoftCompete) {
                 // 软竞争加轻量截尾惩罚：只要截尾候选能挤进当前前 10 池（含救回第 2/3 候选）就合并进候选池，由后续 LM 裁决。
-                val penalized = trimmed.map { it.copy(cost = it.cost + SOFT_TAIL_PENALTY) }
+                val penalized = trimmed.map { it.copy(cost = it.cost + softPenalty) }
                 val worstKept = if (best.size < 10) Float.POSITIVE_INFINITY else best.last().cost
                 if (penalized.first().cost < worstKept) {
                     val merged = LinkedHashMap<String, GlideCandidate>()
@@ -419,16 +430,121 @@ object GlideLexicon {
     internal val TAIL_CUTS = floatArrayOf(0.5f, 1f, 1.5f, 2f, 2.5f)
     private val SOFT_TAIL_CUTS = floatArrayOf(0.5f, 1f)
     private const val SOFT_TAIL_PENALTY = 0.08f
+    private const val FLICK_TAIL_PENALTY = 0.22f
 
-    /** 从末尾往回去掉至少 [cut] 长的一段后还剩几个点。 */
-    private fun keptAfterCut(xs: FloatArray, ys: FloatArray, cut: Float): Int {
+    private class TrimmedTrace(val xs: FloatArray, val ys: FloatArray, val ts: LongArray?)
+
+    /** 按弧长精确插值截掉末尾 [cut] 像素，避免粗采样点直接截断丢失精确键心落点。 */
+    private fun trimTailByArcLength(xs: FloatArray, ys: FloatArray, ts: LongArray?, cut: Float): TrimmedTrace? {
+        if (xs.size < 3 || cut <= 0f) return null
         var removed = 0f
         var i = xs.size - 1
-        while (i > 0 && removed < cut) {
-            removed += kotlin.math.hypot(xs[i] - xs[i - 1], ys[i] - ys[i - 1])
+        while (i > 0) {
+            val seg = kotlin.math.hypot(xs[i] - xs[i - 1], ys[i] - ys[i - 1])
+            if (removed + seg >= cut) {
+                val remain = (cut - removed).coerceIn(0f, seg)
+                val fracFromPrev = if (seg > 1e-4f) (1f - remain / seg).coerceIn(0f, 1f) else 0f
+                val endX = xs[i - 1] + (xs[i] - xs[i - 1]) * fracFromPrev
+                val endY = ys[i - 1] + (ys[i] - ys[i - 1]) * fracFromPrev
+                val newSize = i + 1
+                if (newSize < 2) return null
+                val outX = xs.copyOf(newSize)
+                val outY = ys.copyOf(newSize)
+                outX[newSize - 1] = endX
+                outY[newSize - 1] = endY
+                val outT = ts?.let { t ->
+                    val arr = t.copyOf(newSize)
+                    arr[newSize - 1] = t[i - 1] + ((t[i] - t[i - 1]) * fracFromPrev).toLong()
+                    arr
+                }
+                return TrimmedTrace(outX, outY, outT)
+            }
+            removed += seg
             i--
         }
-        return i + 1
+        return null
+    }
+
+    /**
+     * 检测抬手末段短促甩尾：仅在末段 0.55–1.35 键宽内存在明显折角（或贴近键心的转折后向外直甩）时返回单次截尾长度，
+     * 正常干净抬手返回 null（零额外解码开销）。
+     */
+    private fun detectTailFlickCut(
+        xs: FloatArray,
+        ys: FloatArray,
+        keyUnit: Float,
+        keyboard: GlideKeyboard?,
+        ts: LongArray?,
+        wholeShapeCost: Float,
+    ): Float? {
+        val lastIdx = xs.lastIndex
+        val endX = xs[lastIdx]
+        val endY = ys[lastIdx]
+        var endKeyDist = Float.POSITIVE_INFINITY
+        if (keyboard != null) {
+            for ((_, c) in keyboard.centers) {
+                val d = kotlin.math.hypot(endX - c.first, endY - c.second) / keyUnit
+                if (d < endKeyDist) endKeyDist = d
+            }
+        }
+        var bestCut: Float? = null
+        var bestScore = 0f
+        var acc = 0f
+        var i = lastIdx
+        while (i > 1) {
+            acc += kotlin.math.hypot(xs[i] - xs[i - 1], ys[i] - ys[i - 1])
+            val cutUnits = acc / keyUnit
+            if (cutUnits > 1.38f) break
+            if (cutUnits >= 0.55f) {
+                val pivotIdx = i - 1
+                val tailDx = endX - xs[pivotIdx]
+                val tailDy = endY - ys[pivotIdx]
+                val tailDisp = kotlin.math.hypot(tailDx, tailDy)
+                val straightness = if (acc > 1e-4f) tailDisp / acc else 0f
+                if (straightness >= 0.88f && tailDisp >= 0.55f * keyUnit) {
+                    var prevAcc = 0f
+                    var k = pivotIdx
+                    while (k > 0 && prevAcc < 0.65f * keyUnit) {
+                        prevAcc += kotlin.math.hypot(xs[k] - xs[k - 1], ys[k] - ys[k - 1])
+                        k--
+                    }
+                    var pivotKeyDist = 0.5f
+                    if (keyboard != null) {
+                        var minD = Float.POSITIVE_INFINITY
+                        for ((_, c) in keyboard.centers) {
+                            val d = kotlin.math.hypot(xs[pivotIdx] - c.first, ys[pivotIdx] - c.second) / keyUnit
+                            if (d < minD) minD = d
+                        }
+                        pivotKeyDist = minD
+                    }
+                    // 只认两种低误报甩尾信号：
+                    // 1) 落点明显甩离任意键心，且截点正贴在合法键心上（overshootOut）；
+                    // 2) 抬手前最后 110ms 内出现明显加速直甩（speedSpike），哪怕落到邻键也能救回。
+                    val overshootOut = endKeyDist >= 0.46f && pivotKeyDist <= 0.34f && endKeyDist - pivotKeyDist >= 0.20f
+                    val speedSpike = if (ts != null && pivotIdx > 0) {
+                        val totalDt = (ts[lastIdx] - ts[0]).coerceAtLeast(1L).toFloat()
+                        val tailDt = (ts[lastIdx] - ts[pivotIdx]).coerceAtLeast(1L).toFloat()
+                        val prevDt = (ts[pivotIdx] - ts[k]).coerceAtLeast(1L).toFloat()
+                        val tailSpeed = acc / tailDt
+                        val prevSpeed = prevAcc / prevDt
+                        tailDt <= 110f && totalDt >= 80f && prevAcc >= 0.4f * keyUnit &&
+                            tailSpeed > prevSpeed * 1.45f && pivotKeyDist <= 0.34f
+                    } else false
+                    val poorWholeTail = wholeShapeCost >= 0.68f && endKeyDist >= 0.42f && pivotKeyDist <= 0.34f
+                    if (overshootOut || speedSpike || poorWholeTail) {
+                        val score = (if (overshootOut) (endKeyDist - pivotKeyDist) else 0f) +
+                            (if (speedSpike) 0.45f else 0f) +
+                            (if (poorWholeTail) 0.25f else 0f) - pivotKeyDist * 0.4f
+                        if (score > bestScore) {
+                            bestScore = score
+                            bestCut = cutUnits
+                        }
+                    }
+                }
+            }
+            i--
+        }
+        return bestCut
     }
 
     @Volatile private var failureLogged = false
