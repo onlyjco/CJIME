@@ -450,7 +450,7 @@ fun KeyboardLayout(
     // 写出现在抬手会出的词；同一时间只算一个，抬手时作废没算完的，不拖慢抬手后的识别。
     val glidePreviewOn = glideEnabled && glidePrefs.glidePreview
     val glidePreview = remember { GlidePreviewJob() }
-    val onGlideProgress: ((() -> Pair<FloatArray, FloatArray>) -> Unit)? = if (!glidePreviewOn) null else progress@{ points ->
+    val onGlideProgress: ((() -> Triple<FloatArray, FloatArray, LongArray>) -> Unit)? = if (!glidePreviewOn) null else progress@{ points ->
         val gesture = glideTrail.gesture
         if (glidePreview.gesture != gesture) {
             glidePreview.start(gesture)
@@ -472,8 +472,19 @@ fun KeyboardLayout(
             do {
                 glidePreview.moved = false
                 val keys = geometry.snapshot()
-                val (xs, ys) = glidePreview.points?.invoke() ?: break
-                if (keys.size < 26) break
+                val (xs, ys, ts) = glidePreview.points?.invoke() ?: break
+                if (keys.size < 26 || xs.size < 2) break
+                val endX = xs.last()
+                val endY = ys.last()
+                val keyUnit = com.kingzcheung.xime.glide.GlideLexicon.keyboard(keys).keyUnit
+                val movedSinceDecode = if (glidePreview.lastDecodeX.isNaN()) Float.POSITIVE_INFINITY
+                    else kotlin.math.hypot(endX - glidePreview.lastDecodeX, endY - glidePreview.lastDecodeY)
+                if (movedSinceDecode < keyUnit * 0.28f) {
+                    kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { kotlinx.coroutines.delay(GLIDE_PREVIEW_INTERVAL_MS) }
+                    continue
+                }
+                glidePreview.lastDecodeX = endX
+                glidePreview.lastDecodeY = endY
                 val glideBucket = if (chinese) com.kingzcheung.xime.glide.PersonalGlideCalibration.bucketFor(keys) else "p"
                 val preview = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
                     runCatching {
@@ -486,6 +497,7 @@ fun KeyboardLayout(
                                 xs,
                                 ys,
                                 left = left,
+                                ts = ts.takeIf { it.size == xs.size },
                                 schemaKey = glideSchemaKey,
                                 bucket = glideBucket,
                                 personalCalibration = personalLearning,
@@ -502,8 +514,24 @@ fun KeyboardLayout(
                 }
                 // 抬手或已经开始下一笔：这次的结果不再显示。
                 if (glideTrail.gesture != gesture || glideTrail.points.isEmpty()) break
-                if (chinese) callbacks.onGlidePreviewCode?.invoke(preview?.first.orEmpty(), uiState.inputSessionId, gesture)
-                else preview?.second?.let { callbacks.onGlideEnglishPreview?.invoke(it, uiState.inputSessionId) }
+                if (chinese) {
+                    val code = preview?.first.orEmpty()
+                    if (code.isNotEmpty() && code != glidePreview.lastSentCode) {
+                        val movedSinceSent = if (glidePreview.lastSentX.isNaN()) Float.POSITIVE_INFINITY
+                            else kotlin.math.hypot(endX - glidePreview.lastSentX, endY - glidePreview.lastSentY)
+                        val monotonic = glidePreview.lastSentCode.isEmpty() || code.startsWith(glidePreview.lastSentCode)
+                        val confirmed = code == glidePreview.pendingCode || movedSinceSent >= keyUnit * 1.15f
+                        if (monotonic || confirmed) {
+                            glidePreview.lastSentCode = code
+                            glidePreview.pendingCode = ""
+                            glidePreview.lastSentX = endX
+                            glidePreview.lastSentY = endY
+                            callbacks.onGlidePreviewCode?.invoke(code, uiState.inputSessionId, gesture)
+                        } else {
+                            glidePreview.pendingCode = code
+                        }
+                    }
+                } else preview?.second?.let { callbacks.onGlideEnglishPreview?.invoke(it, uiState.inputSessionId) }
                 // 歇一会儿再看手指有没有动，限制识别频率（在后台计时，不占主线程）。
                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { kotlinx.coroutines.delay(GLIDE_PREVIEW_INTERVAL_MS) }
             } while (glidePreview.moved)
@@ -607,7 +635,7 @@ fun KeyboardLayout(
     LaunchedEffect(glideEnabled, chineseGlide) {
         if (glideEnabled) kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             runCatching {
-                if (chineseGlide) com.kingzcheung.xime.glide.GlideLexicon.pinyin(glideContext)
+                if (chineseGlide) com.kingzcheung.xime.glide.GlideLexicon.warmupChinese(glideContext)
                 else {
                     com.kingzcheung.xime.glide.GlideLexicon.words(glideContext)
                     com.kingzcheung.xime.glide.GlideLexicon.bigrams(glideContext)

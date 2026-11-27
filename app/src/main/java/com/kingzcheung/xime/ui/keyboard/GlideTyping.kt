@@ -46,10 +46,17 @@ internal class GlidePreviewJob {
         private set
     var job: kotlinx.coroutines.Job? = null
     var moved = false
-    var points: (() -> Pair<FloatArray, FloatArray>)? = null
+    var points: (() -> Triple<FloatArray, FloatArray, LongArray>)? = null
     var english: ((List<com.kingzcheung.xime.glide.GlideCandidate>, (String) -> String) -> GlideEnglishPreview)? = null
     /** 中文：这一笔开头取的前文，预览和抬手后按同一前文选编码。 */
     var left: String? = null
+    /** 防抖与稳定前缀状态：同一编码不重复发 Rime，非递增回滚需连帧确认或明显位移才刷新。 */
+    var lastSentCode: String = ""
+    var pendingCode: String = ""
+    var lastDecodeX: Float = Float.NaN
+    var lastDecodeY: Float = Float.NaN
+    var lastSentX: Float = Float.NaN
+    var lastSentY: Float = Float.NaN
 
     fun start(gesture: Int) {
         job?.cancel(); job = null
@@ -58,15 +65,29 @@ internal class GlidePreviewJob {
         points = null
         english = null
         left = null
+        lastSentCode = ""
+        pendingCode = ""
+        lastDecodeX = Float.NaN
+        lastDecodeY = Float.NaN
+        lastSentX = Float.NaN
+        lastSentY = Float.NaN
     }
 
-    fun stop() { job?.cancel(); job = null; points = null }
+    fun stop() {
+        job?.cancel(); job = null; points = null
+        lastSentCode = ""
+        pendingCode = ""
+        lastDecodeX = Float.NaN
+        lastDecodeY = Float.NaN
+        lastSentX = Float.NaN
+        lastSentY = Float.NaN
+    }
 }
 
 data class GlideEnglishPreview(val text: String, val candidates: List<String>, val sentenceStart: Boolean? = null)
 
-/** 实时预览两次识别之间至少隔这么久；手机上一次中文识别约十几到三十毫秒。 */
-internal const val GLIDE_PREVIEW_INTERVAL_MS = 60L
+/** 实时预览两次识别之间至少隔这么久；收紧至 36ms 提升跟手度，并配合位移门限避免静止空算。 */
+internal const val GLIDE_PREVIEW_INTERVAL_MS = 36L
 
 /**
  * 在字母区上方观察触摸（Initial 阶段，先于按键）。确认是滑行后才消费事件，
@@ -80,8 +101,8 @@ internal fun Modifier.glideTyping(
     rootOrigin: () -> Offset,
     trail: GlideTrail,
     onTrace: (xs: FloatArray, ys: FloatArray) -> Unit,
-    /** 确认为滑行后手指每移动一批调用一次（实时预览用），参数取当前整条轨迹（根坐标），只能在主线程调用。 */
-    onProgress: ((points: () -> Pair<FloatArray, FloatArray>) -> Unit)? = null,
+    /** 确认为滑行后手指每移动一批调用一次（实时预览用），参数取当前整条轨迹（根坐标+时间戳），只能在主线程调用。 */
+    onProgress: ((points: () -> Triple<FloatArray, FloatArray, LongArray>) -> Unit)? = null,
     onEnd: (() -> Unit)? = null,
 ): Modifier {
     // 回调每次重组都会换新，不能作为 pointerInput 的 key，否则正在进行的滑行会被打断。
@@ -145,7 +166,7 @@ internal fun Modifier.glideTyping(
                         if (trail.points.isEmpty()) trail.startGesture()
                         change.consume()
                         trail.points = local.toList()
-                        currentOnProgress?.invoke { tracker.xs() to tracker.ys() }
+                        currentOnProgress?.invoke { Triple(tracker.xs(), tracker.ys(), tracker.ts()) }
                     }
                 }
             } finally {

@@ -87,9 +87,23 @@ class GlideDecoder(
     }
 
     val size: Int get() = templates.size
+    internal fun syllableList(): List<String>? = syllableGlide?.syllableList
+    internal fun syllableToId(): Map<String, Int>? = syllableGlide?.syllableToId
 
     /** [xs]/[ys] 为与键中心同一坐标系的轨迹点；轨迹过短或没有足够接近的词时返回空表。 */
-    fun decode(xs: FloatArray, ys: FloatArray, limit: Int = 6, ts: LongArray? = null): List<GlideCandidate> {
+    fun decode(xs: FloatArray, ys: FloatArray, limit: Int = 6, ts: LongArray? = null): List<GlideCandidate> =
+        decodeWithJointLm(xs, ys, limit, ts)
+
+    internal fun decodeWithJointLm(
+        xs: FloatArray,
+        ys: FloatArray,
+        limit: Int = 6,
+        ts: LongArray? = null,
+        wordTrie: ChineseWordTrie? = null,
+        lm: com.kingzcheung.xime.speech.WordLanguageModel? = null,
+        leftContext: String? = null,
+        isPreview: Boolean = false,
+    ): List<GlideCandidate> {
         if (xs.size < 2 || xs.size != ys.size) return emptyList()
         val unit = keyboard.keyUnit
         val qx = FloatArray(xs.size) { xs[it] / unit }
@@ -140,7 +154,34 @@ class GlideDecoder(
         // 长句统一改用更高点数 DTW 重比，保证同一批候选之间使用相同采样分辨率、不因跨阈值产生分差；
         // 保留 SyllableGlide 的真实代价差幅及少量同形不同码（如 xinnian / xinian）交给语言模型区分。
         val syllableBudget = max(limit * 2, 12)
-        val scoredSyllables = syllableGlide?.decodeScored(xs, ys, ts = ts, limit = syllableBudget).orEmpty()
+        val jointBeam = if (syllableGlide != null && wordTrie != null) {
+            ChineseLatticeBeam.decode(
+                syllableGlide = syllableGlide,
+                wordTrie = wordTrie,
+                xs = xs,
+                ys = ys,
+                ts = ts,
+                lm = lm,
+                leftContext = leftContext,
+                limit = syllableBudget,
+                beamWidth = if (isPreview) ChineseLatticeBeam.PREVIEW_BEAM_WIDTH else ChineseLatticeBeam.RELEASE_BEAM_WIDTH,
+                budgetMs = if (isPreview) 10L else 18L,
+            )
+        } else emptyList()
+        val scoredSyllables = if (jointBeam.size >= syllableBudget) {
+            jointBeam
+        } else {
+            val fallback = syllableGlide?.decodeScored(xs, ys, ts = ts, limit = syllableBudget).orEmpty()
+            if (jointBeam.isEmpty()) fallback
+            else {
+                val seen = jointBeam.mapTo(HashSet(syllableBudget * 2)) { it.code }
+                val basePenalty = (jointBeam.lastOrNull()?.cost ?: 0f) + 0.35f
+                val minFb = fallback.firstOrNull()?.cost ?: 0f
+                jointBeam + fallback.filter { seen.add(it.code) }.map {
+                    ScoredCode(it.code, basePenalty + (it.cost - minFb))
+                }.take(syllableBudget - jointBeam.size)
+            }
+        }
         val leadShapeLen = scoredSyllables.firstOrNull()?.code?.let { collapseRepeats(it).length } ?: 0
         val veryLongSentence = leadShapeLen > 24
         val longSentence = leadShapeLen > 10

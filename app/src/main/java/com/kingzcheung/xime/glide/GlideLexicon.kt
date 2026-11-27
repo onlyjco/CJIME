@@ -46,6 +46,8 @@ object GlideLexicon {
     @Volatile private var bigrams: EnglishBigrams? = null
     /** 英文、全拼、双拼各留一份；双拼换方案（或改了键位）时按方案内容重建。 */
     private val cached = HashMap<String, Pair<Any?, GlideDecoder>>()
+    /** P1 音节词组前缀树缓存：按 (方案, LM 实例) 复用。 */
+    private val wordTries = HashMap<Any, Pair<Int, ChineseWordTrie>>()
 
     private fun baseWords(context: Context): List<String> = words ?: synchronized(this) {
         words ?: vocabulary(context).filter { it.length >= 2 && it.all { char -> char in 'a'..'z' } }.also { words = it }
@@ -205,9 +207,43 @@ object GlideLexicon {
         }
     }
 
+    /** 预热中文词表、汉字映射和 N-gram 模型，消除首笔冷启动。 */
+    fun warmupChinese(context: Context) {
+        pinyin(context)
+        pinyinWords(context)
+        ChineseGlideContext.model(context.applicationContext.filesDir)
+    }
+
+    private fun chineseWordTrie(
+        context: Context,
+        doublePinyin: DoublePinyinScheme?,
+        decoder: GlideDecoder,
+        lm: com.kingzcheung.xime.speech.WordLanguageModel?,
+    ): ChineseWordTrie? {
+        val sylList = decoder.syllableList() ?: return null
+        val sylMap = decoder.syllableToId() ?: return null
+        val key: Any = doublePinyin ?: "py"
+        val lmIdentity = System.identityHashCode(lm)
+        return synchronized(this) {
+            val hit = wordTries[key]
+            if (hit != null && hit.first == lmIdentity && hit.second.syllableStrings.size == sylList.size) {
+                hit.second
+            } else {
+                ChineseWordTrie.build(
+                    entries = pinyin(context),
+                    words = pinyinWords(context),
+                    doublePinyin = doublePinyin,
+                    syllableList = sylList,
+                    syllableToId = sylMap,
+                    lm = lm,
+                ).also { wordTries[key] = lmIdentity to it }
+            }
+        }
+    }
+
     /**
-     * 移动中实时预览专用入口：与 [decodeStroke] 复用同一份偏移键盘和模板缓存槽，
-     * 只收窄解码候选上限，杜绝预览与抬手交替重建三万套模板。
+     * 移动中实时预览专用入口：与 [decodeStroke] 复用同一份偏移键盘、模板缓存槽和 P1 词组 Trie，
+     * 只收窄解码候选上限和束宽，杜绝预览与抬手交替重建三万套模板。
      */
     fun decodePreview(
         context: Context,
@@ -224,8 +260,18 @@ object GlideLexicon {
         val filesDir = context.applicationContext.filesDir
         val calibratedKeyboard = if (personalCalibration) PersonalGlideCalibration.applyOffsets(filesDir, bucket, keyboard) else keyboard
         val decoder = chineseDecoder(context, calibratedKeyboard, doublePinyin, schemaKey, personalCalibration)
-        val previewLimit = if (left.isNullOrEmpty()) 1 else 6
-        val raw = decoder.decode(xs, ys, limit = previewLimit, ts = ts)
+        val lm = ChineseGlideContext.model(filesDir)
+        val wordTrie = chineseWordTrie(context, doublePinyin, decoder, lm)
+        val previewLimit = if (left.isNullOrEmpty()) 2 else 6
+        val raw = decoder.decodeWithJointLm(
+            xs, ys,
+            limit = previewLimit,
+            ts = ts,
+            wordTrie = wordTrie,
+            lm = lm,
+            leftContext = left,
+            isPreview = true,
+        )
         if (raw.isEmpty()) return@decodeOrEmpty raw
         val adjusted = if (!personalCalibration || schemaKey.isEmpty() || raw.size < 2) raw else {
             val allCodes = raw.map { it.word }
@@ -235,8 +281,7 @@ object GlideLexicon {
             }.sortedWith(compareBy<GlideCandidate> { it.cost }.thenBy { it.word })
         }
         if (left.isNullOrEmpty() || adjusted.size < 2) adjusted
-        else ChineseGlideContext.rerank(adjusted, left, chineseWordOf(context, doublePinyin),
-            ChineseGlideContext.model(filesDir))
+        else ChineseGlideContext.rerank(adjusted, left, chineseWordOf(context, doublePinyin), lm)
     }
 
     /**
@@ -262,8 +307,18 @@ object GlideLexicon {
         val filesDir = context.applicationContext.filesDir
         val calibratedKeyboard = if (personalCalibration) PersonalGlideCalibration.applyOffsets(filesDir, bucket, keyboard) else keyboard
         val decoder = chineseDecoder(context, calibratedKeyboard, doublePinyin, schemaKey, personalCalibration)
+        val lm = ChineseGlideContext.model(filesDir)
+        val wordTrie = chineseWordTrie(context, doublePinyin, decoder, lm)
         val raw = decodeTrimmingTail(xs, ys, calibratedKeyboard.keyUnit, ts = ts, softCompeteThreshold = 1.05f) { rx, ry, rts ->
-            decoder.decode(rx, ry, limit = 10, ts = rts)
+            decoder.decodeWithJointLm(
+                rx, ry,
+                limit = 10,
+                ts = rts,
+                wordTrie = wordTrie,
+                lm = lm,
+                leftContext = left,
+                isPreview = false,
+            )
         }
         val adjusted = if (!personalCalibration || raw.isEmpty() || schemaKey.isEmpty()) raw else {
             val allCodes = raw.map { it.word }
@@ -274,8 +329,7 @@ object GlideLexicon {
         }
         // 中文按前文重排（[ChineseGlideContext]）；没有前文就不碰词组模型。
         if (left.isNullOrEmpty() || adjusted.size < 2) adjusted
-        else ChineseGlideContext.rerank(adjusted, left, chineseWordOf(context, doublePinyin),
-            ChineseGlideContext.model(filesDir))
+        else ChineseGlideContext.rerank(adjusted, left, chineseWordOf(context, doublePinyin), lm)
     }
 
     /** 中文滑行编码（全拼或双拼）→ 它最常用的词；全拼、各双拼方案各一份。两份词表行数对不上时一律查不到。 */
