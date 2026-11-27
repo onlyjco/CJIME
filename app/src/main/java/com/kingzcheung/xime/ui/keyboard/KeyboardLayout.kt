@@ -461,6 +461,8 @@ fun KeyboardLayout(
         if (glidePreview.job?.isActive == true) { glidePreview.moved = true; return@progress }
         val chinese = chineseGlide
         val doublePinyin = if (chinese) chineseGlideEncoding?.doublePinyin else null
+        val personalLearning = chinese && glidePrefs.personalChineseGlideLearning
+        val glideSchemaKey = if (chinese) (doublePinyin?.id ?: "pinyin") else ""
         val english = glidePreview.english
         val left = glidePreview.left
         val shift = viewModel.shiftMode.value
@@ -472,13 +474,22 @@ fun KeyboardLayout(
                 val keys = geometry.snapshot()
                 val (xs, ys) = glidePreview.points?.invoke() ?: break
                 if (keys.size < 26) break
+                val glideBucket = if (chinese) com.kingzcheung.xime.glide.PersonalGlideCalibration.bucketFor(keys) else "p"
                 val preview = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
                     runCatching {
                         val keyboard = com.kingzcheung.xime.glide.GlideLexicon.keyboard(keys)
                         if (chinese) {
-                            (if (left.isNullOrEmpty()) com.kingzcheung.xime.glide.GlideLexicon.chineseDecoder(glideContext, keyboard, doublePinyin).decode(xs, ys, limit = 1)
-                            else com.kingzcheung.xime.glide.GlideLexicon.decodeStroke(glideContext, keyboard, true, doublePinyin, xs, ys, left))
-                                .firstOrNull()?.word?.let { it to null }
+                            com.kingzcheung.xime.glide.GlideLexicon.decodePreview(
+                                glideContext,
+                                keyboard,
+                                doublePinyin,
+                                xs,
+                                ys,
+                                left = left,
+                                schemaKey = glideSchemaKey,
+                                bucket = glideBucket,
+                                personalCalibration = personalLearning,
+                            ).firstOrNull()?.word?.let { it to null }
                         } else {
                             val candidates = com.kingzcheung.xime.glide.GlideLexicon.decoder(glideContext, keyboard).decode(xs, ys)
                             if (candidates.isEmpty()) null else {

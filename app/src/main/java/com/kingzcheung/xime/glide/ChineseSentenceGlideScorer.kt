@@ -24,20 +24,28 @@ data class ChineseGlideDispatch(
  */
 internal object ChineseSentenceGlideScorer {
     const val MAX_PREVIEW_CANDIDATES = 8
+    const val MIN_PREVIEW_CANDIDATES = 3
+    const val MAX_RIME_CANDIDATES_PER_CODE = 3
     const val MAX_GEOMETRY_SPREAD = 2.8f
     const val LM_WEIGHT = 0.045f
     const val COHESION_BONUS = 0.42f
     const val INCOMPLETE_PENALTY = 3.0f
+    const val RIME_RANK_PENALTY = 0.18f
+    const val EARLY_STOP_MARGIN = 0.55f
+    const val PREVIEW_BUDGET_NS = 24_000_000L
 
     data class SentencePreview(
         val topCandidate: String,
         val preeditText: String = "",
+        val candidates: List<String> = if (topCandidate.isNotEmpty()) listOf(topCandidate) else emptyList(),
+        val inputText: String = "",
     )
 
     data class RerankedResult(
         val winnerCode: String,
         val alternativeCodes: List<String>,
         val winnerText: String?,
+        val alternativePreviews: Map<String, SentencePreview> = emptyMap(),
     )
 
     fun rerank(
@@ -64,43 +72,149 @@ internal object ChineseSentenceGlideScorer {
         val h2Init = leftWords.getOrNull(leftWords.size - 2)?.let(lm!!::id) ?: -1
         val h1Init = leftWords.lastOrNull()?.let(lm!!::id) ?: -1
 
-        data class Scored(val candidate: GlideCandidate, val text: String?, val totalCost: Float)
+        data class Scored(
+            val candidate: GlideCandidate,
+            val text: String?,
+            val preview: SentencePreview?,
+            val totalCost: Float,
+            val complete: Boolean,
+        )
 
-        val scored = pool.map { cand ->
-            val prev = runCatching { preview(cand.word) }.getOrNull()
-            val text = prev?.topCandidate?.takeIf { it.isNotEmpty() }
-            var total = cand.cost + personalDelta(cand.word, allCodes)
+        val startedNs = System.nanoTime()
+        val scoredList = ArrayList<Scored>(pool.size)
+        val completeTexts = HashSet<String>()
+        var bestTotal = Float.POSITIVE_INFINITY
+        var secondTotal = Float.POSITIVE_INFINITY
+        var bestCompleteGeom = Float.POSITIVE_INFINITY
 
-            if (text == null) {
-                total += INCOMPLETE_PENALTY
-            } else {
-                val hasUnresolvedAscii = text.any { it in 'a'..'z' || it in 'A'..'Z' } && cand.word.all { it in 'a'..'z' }
-                if (hasUnresolvedAscii) total += INCOMPLETE_PENALTY * 0.7f
-
-                if (lm != null && text.isNotEmpty()) {
-                    val words = segmentWords(text, lm)
-                    val lmAdvantage = scoreSentenceLift(words, h2Init, h1Init, lm)
-                    total -= LM_WEIGHT * lmAdvantage
-                    val cohesion = if (text.length >= 2) {
-                        ((text.length - words.size).toFloat() / (text.length - 1)).coerceIn(0f, 1f)
-                    } else 0f
-                    total -= COHESION_BONUS * cohesion
-                }
+        for ((idx, cand) in pool.withIndex()) {
+            if (idx >= MIN_PREVIEW_CANDIDATES) {
+                val elapsedNs = System.nanoTime() - startedNs
+                val clearlyAhead = completeTexts.size >= 2 &&
+                    secondTotal.isFinite() &&
+                    (secondTotal - bestTotal) >= EARLY_STOP_MARGIN &&
+                    cand.cost > bestCompleteGeom + 1.2f
+                if (elapsedNs >= PREVIEW_BUDGET_NS || clearlyAhead) break
             }
-            Scored(cand, text, total)
-        }.sortedWith(compareBy<Scored> { it.totalCost }.thenBy { it.candidate.cost })
 
+            val prev = runCatching { preview(cand.word) }.getOrNull()
+            val candidateTexts = prev?.candidates?.filter { it.isNotEmpty() }?.take(MAX_RIME_CANDIDATES_PER_CODE)
+                .orEmpty()
+                .ifEmpty { listOfNotNull(prev?.topCandidate?.takeIf { it.isNotEmpty() }) }
+            val baseTotal = cand.cost + personalDelta(cand.word, allCodes)
+
+            val item = if (candidateTexts.isEmpty()) {
+                Scored(cand, null, prev, baseTotal + INCOMPLETE_PENALTY, complete = false)
+            } else {
+                val pureAsciiCode = cand.word.all { it in 'a'..'z' }
+                val pendingTokens = countPendingAsciiTokens(prev?.preeditText.orEmpty())
+                var bestScore = Float.POSITIVE_INFINITY
+                var bestIsComplete = false
+                for ((rankIdx, candText) in candidateTexts.withIndex()) {
+                    var score = baseTotal + rankIdx * RIME_RANK_PENALTY
+                    val hasUnresolvedAscii = pureAsciiCode && candText.any { it in 'a'..'z' || it in 'A'..'Z' }
+                    if (hasUnresolvedAscii) score += INCOMPLETE_PENALTY * 0.7f
+
+                    val effectiveUnits = countEffectiveTextUnits(candText)
+                    val incompleteRatio = when {
+                        pendingTokens >= 2 && effectiveUnits < pendingTokens ->
+                            (pendingTokens - effectiveUnits).toFloat() / pendingTokens
+                        pendingTokens == 0 && pureAsciiCode && cand.word.length >= 12 -> {
+                            val minExpected = (cand.word.length + 5) / 6
+                            if (effectiveUnits < minExpected) (minExpected - effectiveUnits).toFloat() / minExpected else 0f
+                        }
+                        else -> 0f
+                    }
+                    val complete = !hasUnresolvedAscii && incompleteRatio <= 0f
+                    if (incompleteRatio > 0f) {
+                        score += INCOMPLETE_PENALTY * incompleteRatio
+                    }
+
+                    if (lm != null && candText.isNotEmpty()) {
+                        val words = segmentWords(candText, lm)
+                        val lmAdvantage = scoreSentenceLift(words, h2Init, h1Init, lm)
+                        score -= LM_WEIGHT * lmAdvantage
+                        // 只有完整覆盖全部音节的候选才给凝聚度加分，防止 2 字残缺前缀反超长句。
+                        if (complete && candText.length >= 2) {
+                            val cohesion = ((candText.length - words.size).toFloat() / (candText.length - 1)).coerceIn(0f, 1f)
+                            score -= COHESION_BONUS * cohesion
+                        }
+                    }
+                    if (score < bestScore) {
+                        bestScore = score
+                        bestIsComplete = complete
+                    }
+                }
+                val topText = prev?.topCandidate?.takeIf { it.isNotEmpty() } ?: candidateTexts.first()
+                Scored(cand, topText, prev, bestScore, bestIsComplete)
+            }
+
+            scoredList += item
+            if (item.complete && item.text != null) {
+                completeTexts += item.text
+                if (item.candidate.cost < bestCompleteGeom) bestCompleteGeom = item.candidate.cost
+            }
+            if (item.totalCost < bestTotal) {
+                secondTotal = bestTotal
+                bestTotal = item.totalCost
+            } else if (item.totalCost < secondTotal) {
+                secondTotal = item.totalCost
+            }
+        }
+
+        val scored = scoredList.sortedWith(compareBy<Scored> { it.totalCost }.thenBy { it.candidate.cost })
         val winner = scored.first()
         val seenTexts = HashSet<String>()
         winner.text?.let(seenTexts::add)
         val alternatives = ArrayList<String>()
+        val altPreviews = LinkedHashMap<String, SentencePreview>()
         for (item in scored.drop(1)) {
             val t = item.text
             if (t != null && !seenTexts.add(t)) continue
             if (t == null && !item.candidate.listed) continue
             alternatives += item.candidate.word
+            item.preview?.let { altPreviews[item.candidate.word] = it }
         }
-        return RerankedResult(winner.candidate.word, alternatives, winner.text)
+        return RerankedResult(winner.candidate.word, alternatives, winner.text, altPreviews)
+    }
+
+    private fun countPendingAsciiTokens(preeditText: String): Int {
+        if (preeditText.isEmpty()) return 0
+        var tokens = 0
+        var inAscii = false
+        for (ch in preeditText) {
+            val isLetter = ch in 'a'..'z' || ch in 'A'..'Z'
+            if (isLetter) {
+                if (!inAscii) {
+                    tokens++
+                    inAscii = true
+                }
+            } else {
+                inAscii = false
+            }
+        }
+        return tokens
+    }
+
+    private fun countEffectiveTextUnits(text: String): Int {
+        var units = 0
+        var inAscii = false
+        for (ch in text) {
+            if (ch.isWhitespace()) {
+                inAscii = false
+                continue
+            }
+            if (ch.code <= 0x7F) {
+                if (!inAscii) {
+                    units++
+                    inAscii = true
+                }
+            } else {
+                inAscii = false
+                units++
+            }
+        }
+        return units
     }
 
     /** 基于词表前缀匹配做正向+逆向最长优选分词，供 N-gram 句级打分使用。 */

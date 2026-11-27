@@ -1069,17 +1069,19 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 candidates = dispatch.candidates,
                 leftContext = dispatch.leftContext,
                 lm = lm,
-                personalDelta = { code, all ->
-                    if (learn) com.kingzcheung.xime.glide.PersonalGlideCalibration.candidateCostDelta(
-                        service.filesDir, dispatch.schemaKey, code, all
-                    ) else 0f
-                },
+                // GlideLexicon.decodeStroke 已在几何阶段叠加过一次 candidateCostDelta，这里不再重复计分。
+                personalDelta = { _, _ -> 0f },
             ) { code ->
                 runCatching {
                     service.rimeEngine.glidePreview(code, revision)?.let { res ->
+                        val top3 = res.candidates.take(com.kingzcheung.xime.glide.ChineseSentenceGlideScorer.MAX_RIME_CANDIDATES_PER_CODE)
+                            .map { it.text }
+                            .filter { it.isNotEmpty() }
                         com.kingzcheung.xime.glide.ChineseSentenceGlideScorer.SentencePreview(
-                            topCandidate = res.candidates.firstOrNull()?.text.orEmpty(),
+                            topCandidate = top3.firstOrNull().orEmpty(),
                             preeditText = res.preeditText,
+                            candidates = top3,
+                            inputText = res.inputText,
                         )
                     }
                 }.getOrNull()
@@ -1100,7 +1102,13 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 )
             }
             withEditor {
-                typeGlideCode(winnerCode, reranked.alternativeCodes, dispatch.previewToken)
+                typeGlideCode(
+                    code = winnerCode,
+                    alternatives = reranked.alternativeCodes,
+                    previewToken = dispatch.previewToken,
+                    precomputedPreviews = reranked.alternativePreviews,
+                    previewRevision = revision,
+                )
             }
         }
     }
@@ -1109,7 +1117,13 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
      * 中文滑行：一个词的编码按点按同一路径逐键送进 Rime，已打的拼音、分段选词、邻键纠错和候选刷新都不变。
      * 接在未上屏的编码后面时先补音节分隔符（xi 后面划 an 是 xi'an，不会并成 xian）。
      */
-    internal fun typeGlideCode(code: String, alternatives: List<String>, previewToken: Long?) {
+    internal fun typeGlideCode(
+        code: String,
+        alternatives: List<String>,
+        previewToken: Long?,
+        precomputedPreviews: Map<String, com.kingzcheung.xime.glide.ChineseSentenceGlideScorer.SentencePreview> = emptyMap(),
+        previewRevision: Long = -1L,
+    ) {
         if (code.isEmpty() || hasPendingCandidateCommit) {
             // 上一次点候选宿主没收、等重试时，这一笔不打；记下来，导出日志能看出是这里丢的。
             if (hasPendingCandidateCommit) service.noteInputDropped("glide_pending_commit")
@@ -1120,7 +1134,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
             previewToken?.let { service.finishGlidePreview(it, false) }
             return
         }
-        prepareGlideAlternatives(code, alternatives)
+        prepareGlideAlternatives(code, alternatives, precomputedPreviews, previewRevision)
         // The editor's snapshot predates this glide; queued edits still finish in FIFO order.
         service.keyboardCallbacks?.onDismissPreeditEditor?.invoke()
         val trackGlide = chineseGlideDeleteEnabled()
@@ -1210,7 +1224,12 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
      * 打这一笔之前，在独立会话里把其后几个编码各预览一次，记下各自的第一个候选（[GlideAlternatives]）；
      * 打完后候选栏在首选之后给出。组合里已经选过字（部分上屏）时不给，免得换编码时动到已选的部分。
      */
-    private fun prepareGlideAlternatives(code: String, alternatives: List<String>) {
+    private fun prepareGlideAlternatives(
+        code: String,
+        alternatives: List<String>,
+        precomputedPreviews: Map<String, com.kingzcheung.xime.glide.ChineseSentenceGlideScorer.SentencePreview> = emptyMap(),
+        expectedRevision: Long = -1L,
+    ) {
         val holder = service.candidateTransform.glideAlternatives
         val codes = alternatives.filter { it.isNotEmpty() && it != code }.distinct().take(GlideAlternatives.MAX)
         if (codes.isEmpty()) { holder.clear(); return }
@@ -1223,12 +1242,20 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
             val caret = snapshot.getOrNull(1)?.toIntOrNull() ?: input.length
             if ((snapshot.getOrNull(2)?.toIntOrNull() ?: 0) > 0) return@postRimeJob
             val revision = service.rimeEngine.glidePreviewRevision()
+            val canReuse = expectedRevision >= 0L && revision == expectedRevision && precomputedPreviews.isNotEmpty()
             val choices = codes.mapNotNull { alternative ->
-                val preview = runCatching { service.rimeEngine.glidePreview(alternative, revision) }.getOrNull() ?: return@mapNotNull null
-                val text = preview.candidates.firstOrNull()?.text?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
                 val (next, nextCaret) = GlideAlternatives.inserted(input, caret, alternative)
-                if (preview.inputText != next) return@mapNotNull null
-                GlideAlternatives.Choice(text, next, nextCaret, alternative)
+                val cached = if (canReuse) precomputedPreviews[alternative] else null
+                if (cached != null) {
+                    val text = cached.topCandidate.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                    if (cached.inputText != next) return@mapNotNull null
+                    GlideAlternatives.Choice(text, next, nextCaret, alternative)
+                } else {
+                    val preview = runCatching { service.rimeEngine.glidePreview(alternative, revision) }.getOrNull() ?: return@mapNotNull null
+                    val text = preview.candidates.firstOrNull()?.text?.takeIf { it.isNotEmpty() } ?: return@mapNotNull null
+                    if (preview.inputText != next) return@mapNotNull null
+                    GlideAlternatives.Choice(text, next, nextCaret, alternative)
+                }
             }
             if (choices.isEmpty()) return@postRimeJob
             val typed = GlideAlternatives.inserted(input, caret, code).first

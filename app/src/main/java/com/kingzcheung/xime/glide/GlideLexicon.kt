@@ -179,6 +179,9 @@ object GlideLexicon {
         schemaKey: String = "",
         personalCalibration: Boolean = false,
     ): GlideDecoder {
+        val baseKind = if (doublePinyin == null) "py" else "sp"
+        // 校准态与非校准态分槽缓存，避免任意非校准调用踢掉已构建的 3 万条模板。
+        val cacheKind = if (personalCalibration) "$baseKind:cal:$schemaKey" else baseKind
         val baseKey: Any? = if (personalCalibration) {
             Triple(doublePinyin, PersonalGlideCalibration.phraseRevision(), PersonalGlideCalibration.paramsRevision())
         } else {
@@ -187,7 +190,7 @@ object GlideLexicon {
         val params = if (personalCalibration) PersonalGlideCalibration.params(context.applicationContext.filesDir)
             else SyllableGlideParams()
         return cachedDecoder(
-            if (doublePinyin == null) "py" else "sp",
+            cacheKind,
             baseKey,
             keyboard,
             syllables = { glideSyllables(pinyin(context), doublePinyin) },
@@ -200,6 +203,40 @@ object GlideLexicon {
                 if (personal.isEmpty()) baseCodes else (personal + baseCodes).distinct()
             }
         }
+    }
+
+    /**
+     * 移动中实时预览专用入口：与 [decodeStroke] 复用同一份偏移键盘和模板缓存槽，
+     * 只收窄解码候选上限，杜绝预览与抬手交替重建三万套模板。
+     */
+    fun decodePreview(
+        context: Context,
+        keyboard: GlideKeyboard,
+        doublePinyin: DoublePinyinScheme?,
+        xs: FloatArray,
+        ys: FloatArray,
+        left: String? = null,
+        ts: LongArray? = null,
+        schemaKey: String = "",
+        bucket: String = "p",
+        personalCalibration: Boolean = false,
+    ): List<GlideCandidate> = decodeOrEmpty {
+        val filesDir = context.applicationContext.filesDir
+        val calibratedKeyboard = if (personalCalibration) PersonalGlideCalibration.applyOffsets(filesDir, bucket, keyboard) else keyboard
+        val decoder = chineseDecoder(context, calibratedKeyboard, doublePinyin, schemaKey, personalCalibration)
+        val previewLimit = if (left.isNullOrEmpty()) 1 else 6
+        val raw = decoder.decode(xs, ys, limit = previewLimit, ts = ts)
+        if (raw.isEmpty()) return@decodeOrEmpty raw
+        val adjusted = if (!personalCalibration || schemaKey.isEmpty() || raw.size < 2) raw else {
+            val allCodes = raw.map { it.word }
+            raw.map { c ->
+                val delta = PersonalGlideCalibration.candidateCostDelta(filesDir, schemaKey, c.word, allCodes)
+                if (delta == 0f) c else c.copy(cost = c.cost + delta)
+            }.sortedWith(compareBy<GlideCandidate> { it.cost }.thenBy { it.word })
+        }
+        if (left.isNullOrEmpty() || adjusted.size < 2) adjusted
+        else ChineseGlideContext.rerank(adjusted, left, chineseWordOf(context, doublePinyin),
+            ChineseGlideContext.model(filesDir))
     }
 
     /**
@@ -225,9 +262,8 @@ object GlideLexicon {
         val filesDir = context.applicationContext.filesDir
         val calibratedKeyboard = if (personalCalibration) PersonalGlideCalibration.applyOffsets(filesDir, bucket, keyboard) else keyboard
         val decoder = chineseDecoder(context, calibratedKeyboard, doublePinyin, schemaKey, personalCalibration)
-        val raw = decodeTrimmingTail(xs, ys, calibratedKeyboard.keyUnit) { rx, ry ->
-            val useTs = if (rx.size == xs.size) ts else null
-            decoder.decode(rx, ry, limit = 10, ts = useTs)
+        val raw = decodeTrimmingTail(xs, ys, calibratedKeyboard.keyUnit, ts = ts, softCompeteThreshold = 1.05f) { rx, ry, rts ->
+            decoder.decode(rx, ry, limit = 10, ts = rts)
         }
         val adjusted = if (!personalCalibration || raw.isEmpty() || schemaKey.isEmpty()) raw else {
             val allCodes = raw.map { it.word }
@@ -268,27 +304,65 @@ object GlideLexicon {
      * 依次去掉末尾 [TAIL_CUTS] 个键宽各认一次，取首选代价最低的那次；去掉后剩下的不到一个键宽就不再试（短划照旧按点按算）。
      * 整笔本来认得出时不走这里，结果不变。
      */
-    internal fun decodeTrimmingTail(xs: FloatArray, ys: FloatArray, keyUnit: Float,
-        decode: (FloatArray, FloatArray) -> List<GlideCandidate>): List<GlideCandidate> {
-        val whole = decode(xs, ys)
-        if (whole.isNotEmpty() || xs.size < 3 || xs.size != ys.size || keyUnit <= 0f) return whole
+    internal fun decodeTrimmingTail(
+        xs: FloatArray,
+        ys: FloatArray,
+        keyUnit: Float,
+        decode: (FloatArray, FloatArray) -> List<GlideCandidate>,
+    ): List<GlideCandidate> = decodeTrimmingTail(xs, ys, keyUnit, ts = null, softCompeteThreshold = Float.POSITIVE_INFINITY) { rx, ry, _ ->
+        decode(rx, ry)
+    }
+
+    internal fun decodeTrimmingTail(
+        xs: FloatArray,
+        ys: FloatArray,
+        keyUnit: Float,
+        ts: LongArray?,
+        softCompeteThreshold: Float,
+        decode: (FloatArray, FloatArray, LongArray?) -> List<GlideCandidate>,
+    ): List<GlideCandidate> {
+        val validTs = ts?.takeIf { it.size == xs.size }
+        val whole = decode(xs, ys, validTs)
+        val needSoftCompete = whole.isNotEmpty() && whole.first().cost > softCompeteThreshold
+        if ((whole.isNotEmpty() && !needSoftCompete) || xs.size < 3 || xs.size != ys.size || keyUnit <= 0f) return whole
         var length = 0f
         for (i in 1 until xs.size) length += kotlin.math.hypot(xs[i] - xs[i - 1], ys[i] - ys[i - 1])
+        val cuts = if (needSoftCompete) SOFT_TAIL_CUTS else TAIL_CUTS
         var kept = xs.size
         var best = whole
-        for (cut in TAIL_CUTS) {
+        var bestScore = whole.firstOrNull()?.cost ?: Float.POSITIVE_INFINITY
+        for (cut in cuts) {
             if (length - cut * keyUnit < keyUnit) break
             val count = keptAfterCut(xs, ys, cut * keyUnit)
             if (count == kept || count < 2) continue
             kept = count
-            val trimmed = decode(xs.copyOf(count), ys.copyOf(count))
-            if (trimmed.isNotEmpty() && (best.isEmpty() || trimmed.first().cost < best.first().cost)) best = trimmed
+            val trimmed = decode(xs.copyOf(count), ys.copyOf(count), validTs?.copyOf(count))
+            if (trimmed.isEmpty()) continue
+            if (needSoftCompete) {
+                // 软竞争加轻量截尾惩罚，只有甩尾明显拉垮整笔几何时才胜出，并把两条路的候选融合。
+                val penalized = trimmed.map { it.copy(cost = it.cost + SOFT_TAIL_PENALTY) }
+                if (penalized.first().cost < bestScore) {
+                    val merged = LinkedHashMap<String, GlideCandidate>()
+                    for (c in best) merged[c.word] = c
+                    for (c in penalized) {
+                        val old = merged[c.word]
+                        if (old == null || c.cost < old.cost) merged[c.word] = c
+                    }
+                    best = merged.values.sortedWith(compareBy<GlideCandidate> { it.cost }.thenBy { it.word }).take(10)
+                    bestScore = best.first().cost
+                }
+            } else if (best.isEmpty() || trimmed.first().cost < bestScore) {
+                best = trimmed
+                bestScore = trimmed.first().cost
+            }
         }
         return best
     }
 
     /** 抬手前甩出去的那段最多试去掉几个键宽。 */
     internal val TAIL_CUTS = floatArrayOf(0.5f, 1f, 1.5f, 2f, 2.5f)
+    private val SOFT_TAIL_CUTS = floatArrayOf(0.5f, 1f)
+    private const val SOFT_TAIL_PENALTY = 0.08f
 
     /** 从末尾往回去掉至少 [cut] 长的一段后还剩几个点。 */
     private fun keptAfterCut(xs: FloatArray, ys: FloatArray, cut: Float): Int {

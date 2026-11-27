@@ -179,9 +179,10 @@ class SyllableGlide(
 
         val results = ArrayList<ScoredCode>(limit)
         val seenCodes = HashSet<String>(limit * 2)
-        val maxQueueSize = maxOf(limit * 120, 480)
+        // 长句轨迹更长（n 可达 150~260），按点数动态放宽队列与扩展预算，避免长句中途截断。
+        val maxQueueSize = maxOf(limit * 140, n * 24, 960).coerceAtMost(6000)
         var expansions = 0
-        val maxExpansions = maxOf(limit * 160, 800)
+        val maxExpansions = maxOf(limit * 180, n * 32, 1200).coerceAtMost(8000)
 
         while (pq.isNotEmpty() && results.size < limit && expansions < maxExpansions) {
             val cur = pq.poll() ?: break
@@ -279,7 +280,7 @@ class SyllableGlide(
 
     companion object {
         const val STEP = 0.25f
-        const val MAX_POINTS = 200
+        const val MAX_POINTS = 260
         const val HIT_RADIUS = 1.0f
         const val HIT_WEIGHT = 1.5f
         const val SEGMENT_WEIGHT = 1.5f
