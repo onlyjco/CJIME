@@ -20,7 +20,13 @@ data class SyllableGlideParams(
     val straightTolerance: Float = SyllableGlide.STRAIGHT_TOLERANCE,
 )
 
-data class ScoredCode(val code: String, val cost: Float)
+data class ScoredCode(
+    val code: String,
+    val cost: Float,
+    val geomCost: Float = cost,
+    val lmCost: Float = 0f,
+    val fromJointBeam: Boolean = false,
+)
 
 /**
  * 中文滑行按音节逐键识别：
@@ -32,21 +38,33 @@ class SyllableGlide(
     syllables: List<String>,
     private val params: SyllableGlideParams = SyllableGlideParams(),
 ) {
-    private val char = ArrayList<Char>()
-    private val children = ArrayList<HashMap<Char, Int>>()
-    private val syllableCost = ArrayList<Float>()
-    private val syllableIdOfNode = ArrayList<Int>()
+    private val charArr: CharArray
+    private val syllableCostArr: FloatArray
+    private val syllableIdArr: IntArray
     private val nodeKey: IntArray
+    /** 扁平化子转移表：childAt[node * keyCount + keyIdx] = 目标节点或 -1，消除热循环装箱与哈希查找。 */
+    private val childAt: IntArray
+    private val rootChild: IntArray
+    private val hasChildArr: BooleanArray
+    /** 按字母键分组的前缀树节点表：反向 DP 只遍历当前帧 nearKeys 命中的节点，并将 segmentCost 提到节点循环外。 */
+    private val nodesByKey: Array<IntArray>
+
     internal val syllableList: List<String>
     internal val syllableToId: Map<String, Int>
 
     private val keys: CharArray = keyboard.centers.keys.toCharArray()
+    private val keyCount: Int = keys.size
     private val keyIndexMap: Map<Char, Int> = keys.withIndex().associate { (idx, ch) -> ch to idx }
     private val keyX = FloatArray(keys.size) { keyboard.centers.getValue(keys[it]).first / keyboard.keyUnit }
     private val keyY = FloatArray(keys.size) { keyboard.centers.getValue(keys[it]).second / keyboard.keyUnit }
 
     init {
-        char += ' '; children += HashMap(); syllableCost += Float.NaN; syllableIdOfNode += -1
+        val chars = ArrayList<Char>()
+        val children = ArrayList<HashMap<Char, Int>>()
+        val sCosts = ArrayList<Float>()
+        val sIds = ArrayList<Int>()
+        chars += ' '; children += HashMap(); sCosts += Float.NaN; sIds += -1
+
         val distinct = syllables.filter { syllable -> syllable.isNotEmpty() && syllable.all { keyboard.centers.containsKey(it) } }.distinct()
         syllableList = distinct
         val idMap = HashMap<String, Int>(distinct.size * 2)
@@ -56,17 +74,42 @@ class SyllableGlide(
             var node = 0
             for (c in syllable) {
                 node = children[node].getOrPut(c) {
-                    char += c; children += HashMap(); syllableCost += Float.NaN; syllableIdOfNode += -1
-                    char.size - 1
+                    chars += c; children += HashMap(); sCosts += Float.NaN; sIds += -1
+                    chars.size - 1
                 }
             }
-            if (syllableCost[node].isNaN()) {
-                syllableCost[node] = params.syllableCost + params.syllablePrior * ln(rank + 2.0).toFloat() / logMax
-                syllableIdOfNode[node] = rank
+            if (sCosts[node].isNaN()) {
+                sCosts[node] = params.syllableCost + params.syllablePrior * ln(rank + 2.0).toFloat() / logMax
+                sIds[node] = rank
             }
         }
         syllableToId = idMap
-        nodeKey = IntArray(char.size) { idx -> if (idx == 0) -1 else (keyIndexMap[char[idx]] ?: -1) }
+
+        val nodeCount = chars.size
+        charArr = CharArray(nodeCount) { chars[it] }
+        syllableCostArr = FloatArray(nodeCount) { sCosts[it] }
+        syllableIdArr = IntArray(nodeCount) { sIds[it] }
+        nodeKey = IntArray(nodeCount) { idx -> if (idx == 0) -1 else (keyIndexMap[chars[idx]] ?: -1) }
+        childAt = IntArray(nodeCount * keyCount) { -1 }
+        hasChildArr = BooleanArray(nodeCount)
+        for (node in 0 until nodeCount) {
+            val map = children[node]
+            if (map.isNotEmpty()) {
+                hasChildArr[node] = true
+                val base = node * keyCount
+                for ((ch, target) in map) {
+                    val kIdx = keyIndexMap[ch]
+                    if (kIdx != null) childAt[base + kIdx] = target
+                }
+            }
+        }
+        rootChild = IntArray(keyCount) { k -> childAt[k] }
+        val groups = Array(keyCount) { ArrayList<Int>() }
+        for (node in 1 until nodeCount) {
+            val k = nodeKey[node]
+            if (k >= 0) groups[k].add(node)
+        }
+        nodesByKey = Array(keyCount) { k -> groups[k].toIntArray() }
     }
 
     /** 兼容旧接口：最多返回 [limit] 串编码。 */
@@ -78,107 +121,32 @@ class SyllableGlide(
      */
     fun decodeScored(xs: FloatArray, ys: FloatArray, ts: LongArray? = null, limit: Int = 12): List<ScoredCode> {
         if (xs.size < 2 || xs.size != ys.size || limit <= 0) return emptyList()
-        val unit = keyboard.keyUnit
-        val (px, py, pause) = resampleWithPause(
-            FloatArray(xs.size) { xs[it] / unit },
-            FloatArray(ys.size) { ys[it] / unit },
-            ts,
-        )
-        val n = px.size
-        if (n < 2) return emptyList()
-        val step = pathLength(px, py) / (n - 1)
-        val nearKeys = Array(n) { i ->
-            keys.indices.filter { k -> dist(px[i], py[i], keyX[k], keyY[k]) <= params.hitRadius }.toIntArray()
-        }
-        val straightUntil = IntArray(n) { i ->
-            var j = i + 1
-            while (j < n && maxDeviation(px, py, i, j) <= params.straightTolerance &&
-                (j - i) * step - dist(px[i], py[i], px[j], py[j]) <= params.straightTolerance) j++
-            j - 1
-        }
+        val ctx = buildLatticeContext(xs, ys, ts) ?: return emptyList()
+        return decodeScoredFromContext(ctx, limit)
+    }
 
-        val nodes = char.size
-        val last = n - 1
-        val remMove = Array(n) { FloatArray(nodes) { Float.POSITIVE_INFINITY } }
-        val rem = Array(n) { FloatArray(nodes) { Float.POSITIVE_INFINITY } }
-
-        for (node in 1 until nodes) {
-            val endWeight = syllableCost[node]
-            if (!endWeight.isNaN()) {
-                remMove[last][node] = endWeight
-                rem[last][node] = endWeight
-            }
-        }
-
-        for (i in last downTo 0) {
-            for (node in 1 until nodes) {
-                val k = nodeKey[node]
-                if (k < 0) continue
-                val endWeight = syllableCost[node]
-                val canEnd = !endWeight.isNaN()
-                val boundaryWeight = if (canEnd) endWeight - params.pauseBonus * pause[i] else 0f
-                var best = remMove[i][node]
-                val maxJ = straightUntil[i]
-                for (j in i + 1..maxJ) {
-                    val candidatesAtJ = nearKeys[j]
-                    for (idx in candidatesAtJ.indices) {
-                        val next = candidatesAtJ[idx]
-                        if (next == k) continue
-                        val stepEdge = segmentCost(px, py, i, j, k, next, step) + params.keyCost +
-                            params.hitWeight * dist(px[j], py[j], keyX[next], keyY[next])
-                        val c = keys[next]
-                        children[node][c]?.let { target ->
-                            val r = rem[j][target]
-                            if (r.isFinite()) {
-                                val cand = stepEdge + r
-                                if (cand < best) best = cand
-                            }
-                        }
-                        if (canEnd) {
-                            children[0][c]?.let { target0 ->
-                                val r = rem[j][target0]
-                                if (r.isFinite()) {
-                                    val cand = stepEdge + boundaryWeight + r
-                                    if (cand < best) best = cand
-                                }
-                            }
-                        }
-                    }
-                }
-                remMove[i][node] = best
-                if (best < rem[i][node]) rem[i][node] = best
-            }
-
-            // 同位置至多原地连按一次（如双拼 ii = chi），基于 remMove[i] 松弛，保证 DAG 无环。
-            val repeatEdge = params.keyCost + params.repeatCost
-            for (node in 1 until nodes) {
-                val c = char[node]
-                var best = rem[i][node]
-                children[node][c]?.let { target ->
-                    val r = remMove[i][target]
-                    if (r.isFinite()) {
-                        val cand = repeatEdge + r
-                        if (cand < best) best = cand
-                    }
-                }
-                val endWeight = syllableCost[node]
-                if (!endWeight.isNaN()) {
-                    val boundaryWeight = endWeight - params.pauseBonus * pause[i]
-                    children[0][c]?.let { target0 ->
-                        val r = remMove[i][target0]
-                        if (r.isFinite()) {
-                            val cand = repeatEdge + boundaryWeight + r
-                            if (cand < best) best = cand
-                        }
-                    }
-                }
-                rem[i][node] = best
-            }
-        }
+    /** 复用已构建的 [LatticeContext] 执行经典 K-Best A* 兜底搜索，绝不重复构建反向 DP 表。 */
+    internal fun decodeScoredFromContext(
+        ctx: LatticeContext,
+        limit: Int = 12,
+        deadlineNs: Long = Long.MAX_VALUE,
+    ): List<ScoredCode> {
+        if (limit <= 0) return emptyList()
+        val px = ctx.px
+        val py = ctx.py
+        val pause = ctx.pause
+        val step = ctx.step
+        val nearKeys = ctx.nearKeys
+        val straightUntil = ctx.straightUntil
+        val remMove = ctx.remMove
+        val rem = ctx.rem
+        val n = ctx.n
+        val last = ctx.last
 
         val pq = PriorityQueue<AStarState>(64) { a, b -> a.f.compareTo(b.f) }
         for (k in nearKeys[0]) {
-            val target = children[0][keys[k]] ?: continue
+            val target = rootChild[k]
+            if (target < 0) continue
             val h = rem[0][target]
             if (!h.isFinite()) continue
             val g = params.hitWeight * dist(px[0], py[0], keyX[k], keyY[k])
@@ -187,17 +155,18 @@ class SyllableGlide(
 
         val results = ArrayList<ScoredCode>(limit)
         val seenCodes = HashSet<String>(limit * 2)
-        // 长句轨迹更长（n 可达 150~260），按点数动态放宽队列与扩展预算，避免长句中途截断。
         val maxQueueSize = maxOf(limit * 140, n * 24, 960).coerceAtMost(6000)
         var expansions = 0
         val maxExpansions = maxOf(limit * 180, n * 32, 1200).coerceAtMost(8000)
+        val repeatEdge = params.keyCost + params.repeatCost
 
         while (pq.isNotEmpty() && results.size < limit && expansions < maxExpansions) {
+            if ((expansions and 63) == 0 && System.nanoTime() >= deadlineNs) break
             val cur = pq.poll() ?: break
             expansions++
             val i = cur.i
             val node = cur.node
-            val endWeight = syllableCost[node]
+            val endWeight = syllableCostArr[node]
             val canEnd = !endWeight.isNaN()
 
             if (i == last) {
@@ -207,55 +176,56 @@ class SyllableGlide(
                 }
             }
 
-            if (!cur.repeatUsed) {
-                val c = char[node]
-                val repeatEdge = params.keyCost + params.repeatCost
-                children[node][c]?.let { target ->
-                    val h = remMove[i][target]
-                    if (h.isFinite()) {
-                        val g = cur.g + repeatEdge
-                        pq.add(AStarState(i, target, true, g, g + h, cur.code + c))
-                    }
-                }
-                if (canEnd) {
-                    val boundaryWeight = endWeight - params.pauseBonus * pause[i]
-                    children[0][c]?.let { target0 ->
-                        val h = remMove[i][target0]
+            val k = nodeKey[node]
+            if (k >= 0) {
+                val baseRow = node * keyCount
+                val boundaryWeight = if (canEnd) endWeight - params.pauseBonus * pause[i] else 0f
+
+                if (!cur.repeatUsed) {
+                    val c = charArr[node]
+                    val target = childAt[baseRow + k]
+                    if (target >= 0) {
+                        val h = remMove[i][target]
                         if (h.isFinite()) {
-                            val g = cur.g + repeatEdge + boundaryWeight
-                            pq.add(AStarState(i, target0, true, g, g + h, cur.code + c))
+                            val g = cur.g + repeatEdge
+                            pq.add(AStarState(i, target, true, g, g + h, cur.code + c))
+                        }
+                    }
+                    if (canEnd) {
+                        val target0 = rootChild[k]
+                        if (target0 >= 0) {
+                            val h = remMove[i][target0]
+                            if (h.isFinite()) {
+                                val g = cur.g + repeatEdge + boundaryWeight
+                                pq.add(AStarState(i, target0, true, g, g + h, cur.code + c))
+                            }
                         }
                     }
                 }
-            }
 
-            val k = nodeKey[node]
-            if (k >= 0) {
-                val boundaryWeight = if (canEnd) endWeight - params.pauseBonus * pause[i] else 0f
                 val maxJ = straightUntil[i]
                 for (j in i + 1..maxJ) {
                     val candidatesAtJ = nearKeys[j]
+                    val remJ = rem[j]
                     for (idx in candidatesAtJ.indices) {
                         val next = candidatesAtJ[idx]
                         if (next == k) continue
-                        val c = keys[next]
+                        val target = childAt[baseRow + next]
+                        val target0 = if (canEnd) rootChild[next] else -1
+                        if (target < 0 && target0 < 0) continue
+                        val h1 = if (target >= 0) remJ[target] else Float.POSITIVE_INFINITY
+                        val h0 = if (target0 >= 0) remJ[target0] else Float.POSITIVE_INFINITY
+                        if (!h1.isFinite() && !h0.isFinite()) continue
                         val stepEdge = segmentCost(px, py, i, j, k, next, step) + params.keyCost +
                             params.hitWeight * dist(px[j], py[j], keyX[next], keyY[next])
-                        children[node][c]?.let { target ->
-                            val h = rem[j][target]
-                            if (h.isFinite()) {
-                                val g = cur.g + stepEdge
-                                pq.add(AStarState(j, target, false, g, g + h, cur.code + c))
-                            }
+                        val c = keys[next]
+                        if (h1.isFinite()) {
+                            val g = cur.g + stepEdge
+                            pq.add(AStarState(j, target, false, g, g + h1, cur.code + c))
                         }
-                        if (canEnd) {
-                            children[0][c]?.let { target0 ->
-                                val h = rem[j][target0]
-                                if (h.isFinite()) {
-                                    val g = cur.g + stepEdge + boundaryWeight
-                                    pq.add(AStarState(j, target0, false, g, g + h, cur.code + c))
-                                }
-                            }
+                        if (h0.isFinite()) {
+                            val g = cur.g + stepEdge + boundaryWeight
+                            pq.add(AStarState(j, target0, false, g, g + h0, cur.code + c))
                         }
                     }
                 }
@@ -278,7 +248,7 @@ class SyllableGlide(
         val cost: Float,
     )
 
-    /** 供 P1 联合束搜索复用的轨迹网格与反向精确剩余代价表。 */
+    /** 供 P1 联合束搜索与经典兜底共享的轨迹网格与反向精确剩余代价表。 */
     internal inner class LatticeContext(
         val px: FloatArray,
         val py: FloatArray,
@@ -292,7 +262,7 @@ class SyllableGlide(
     ) {
         val n: Int get() = px.size
         val last: Int get() = px.size - 1
-        val keyCount: Int get() = keys.size
+        val keyCount: Int get() = this@SyllableGlide.keyCount
         val repeatEdgeCost: Float get() = params.keyCost + params.repeatCost
 
         private val spanCache = arrayOfNulls<List<SyllableSpan>>(px.size * keys.size)
@@ -307,26 +277,28 @@ class SyllableGlide(
 
         fun minRemainingAfterBoundary(frame: Int, prevKey: Int): Float {
             if (frame >= last) return 0f
-            val slot = frame * keys.size + prevKey
+            val slot = frame * keyCount + prevKey
             val cached = minRemBoundaryCache[slot]
             if (!cached.isNaN()) return cached
             var best = Float.POSITIVE_INFINITY
             val maxJ = straightUntil[frame]
             for (j in frame + 1..maxJ) {
                 val cands = nearKeys[j]
+                val remJ = rem[j]
                 for (idx in cands.indices) {
                     val next = cands[idx]
                     if (next == prevKey) continue
-                    val target = children[0][keys[next]] ?: continue
-                    val r = rem[j][target]
+                    val target = rootChild[next]
+                    if (target < 0) continue
+                    val r = remJ[target]
                     if (r.isFinite()) {
                         val est = params.keyCost + r
                         if (est < best) best = est
                     }
                 }
             }
-            val repTarget = children[0][keys[prevKey]]
-            if (repTarget != null) {
+            val repTarget = rootChild[prevKey]
+            if (repTarget >= 0) {
                 val r = remMove[frame][repTarget]
                 if (r.isFinite()) {
                     val est = repeatEdgeCost + r
@@ -337,11 +309,12 @@ class SyllableGlide(
             return best
         }
 
-        /** 按需提取从 ([startFrame], [firstKey]) 出发的全部可行单音节边，并按起点缓存。 */
+        /** 按需提取从 ([startFrame], [firstKey]) 出发的全部可行单音节边，并按起点缓存；按「累计代价+剩余下界」筛选避免短边挤满。 */
         fun syllablesFrom(startFrame: Int, firstKey: Int, slack: Float = 3.2f): List<SyllableSpan> {
-            val slot = startFrame * keys.size + firstKey
+            val slot = startFrame * keyCount + firstKey
             spanCache[slot]?.let { return it }
-            val startNode = children[0][keys[firstKey]] ?: run {
+            val startNode = rootChild[firstKey]
+            if (startNode < 0) {
                 spanCache[slot] = emptyList()
                 return emptyList()
             }
@@ -354,9 +327,9 @@ class SyllableGlide(
             val bestByEndSyl = HashMap<Long, SyllableSpan>(24)
 
             fun dfs(frame: Int, node: Int, accCost: Float, repeatUsed: Boolean) {
-                val endWeight = syllableCost[node]
+                val endWeight = syllableCostArr[node]
                 if (!endWeight.isNaN()) {
-                    val sylId = syllableIdOfNode[node]
+                    val sylId = syllableIdArr[node]
                     if (sylId >= 0) {
                         val boundaryWeight = if (frame < last) endWeight - params.pauseBonus * pause[frame] else endWeight
                         val total = accCost + boundaryWeight
@@ -367,14 +340,14 @@ class SyllableGlide(
                         }
                     }
                 }
-                val chMap = children[node]
-                if (chMap.isEmpty()) return
+                if (!hasChildArr[node]) return
+                val k = nodeKey[node]
+                if (k < 0) return
+                val baseRow = node * keyCount
 
-                // 同位置重复字母（音节内，如双拼）
                 if (!repeatUsed) {
-                    val sameChar = char[node]
-                    val repTarget = chMap[sameChar]
-                    if (repTarget != null) {
+                    val repTarget = childAt[baseRow + k]
+                    if (repTarget >= 0) {
                         val r = remMove[frame][repTarget]
                         val nextCost = accCost + repeatEdgeCost
                         if (r.isFinite() && nextCost + r <= cutoff) {
@@ -383,16 +356,17 @@ class SyllableGlide(
                     }
                 }
 
-                val k = nodeKey[node]
-                if (k < 0 || frame >= last) return
+                if (frame >= last) return
                 val maxJ = straightUntil[frame]
                 for (j in frame + 1..maxJ) {
                     val cands = nearKeys[j]
+                    val remJ = rem[j]
                     for (idx in cands.indices) {
                         val next = cands[idx]
                         if (next == k) continue
-                        val target = chMap[keys[next]] ?: continue
-                        val r = rem[j][target]
+                        val target = childAt[baseRow + next]
+                        if (target < 0) continue
+                        val r = remJ[target]
                         if (!r.isFinite()) continue
                         val nextCost = accCost + segmentCost(px, py, frame, j, k, next, step) + params.keyCost +
                             params.hitWeight * dist(px[j], py[j], keyX[next], keyY[next])
@@ -407,15 +381,25 @@ class SyllableGlide(
             val result = if (bestByEndSyl.isEmpty()) {
                 emptyList()
             } else {
-                bestByEndSyl.values.sortedBy { it.cost }.take(28)
+                bestByEndSyl.values
+                    .sortedBy { sp -> sp.cost + minRemainingAfterBoundary(sp.endFrame, sp.lastKey) }
+                    .take(28)
             }
             spanCache[slot] = result
             return result
         }
     }
 
-    /** 构建轨迹网格与反向精确剩余代价表，供 P1 音节晶格联合束搜索使用。 */
-    internal fun buildLatticeContext(xs: FloatArray, ys: FloatArray, ts: LongArray? = null): LatticeContext? {
+    /**
+     * 构建轨迹网格与反向精确剩余代价表，供 P1 联合束搜索与经典兜底共享。
+     * 外层按 nearKeys[i] 枚举键、将 segmentCost 提到节点循环外并配合扁平子表，消除长句 40ms+ 瓶颈。
+     */
+    internal fun buildLatticeContext(
+        xs: FloatArray,
+        ys: FloatArray,
+        ts: LongArray? = null,
+        deadlineNs: Long = Long.MAX_VALUE,
+    ): LatticeContext? {
         if (xs.size < 2 || xs.size != ys.size) return null
         val unit = keyboard.keyUnit
         val (px, py, pause) = resampleWithPause(
@@ -436,87 +420,102 @@ class SyllableGlide(
             j - 1
         }
 
-        val nodes = char.size
+        val nodes = charArr.size
         val last = n - 1
         val remMove = Array(n) { FloatArray(nodes) { Float.POSITIVE_INFINITY } }
         val rem = Array(n) { FloatArray(nodes) { Float.POSITIVE_INFINITY } }
 
-        for (node in 1 until nodes) {
-            val endWeight = syllableCost[node]
-            if (!endWeight.isNaN()) {
-                remMove[last][node] = endWeight
-                rem[last][node] = endWeight
+        val remMoveLast = remMove[last]
+        val remLast = rem[last]
+        for (k in nearKeys[last]) {
+            for (node in nodesByKey[k]) {
+                val endWeight = syllableCostArr[node]
+                if (!endWeight.isNaN()) {
+                    remMoveLast[node] = endWeight
+                    remLast[node] = endWeight
+                }
             }
         }
 
+        val repeatEdge = params.keyCost + params.repeatCost
         for (i in last downTo 0) {
-            for (node in 1 until nodes) {
-                val k = nodeKey[node]
-                if (k < 0) continue
-                val endWeight = syllableCost[node]
-                val canEnd = !endWeight.isNaN()
-                val boundaryWeight = if (canEnd) endWeight - params.pauseBonus * pause[i] else 0f
-                var best = remMove[i][node]
-                val maxJ = straightUntil[i]
+            if ((i and 15) == 0 && System.nanoTime() >= deadlineNs) return null
+            val nearI = nearKeys[i]
+            if (nearI.isEmpty()) continue
+            val remMoveI = remMove[i]
+            val remI = rem[i]
+            val pauseBonusI = params.pauseBonus * pause[i]
+            val maxJ = straightUntil[i]
+
+            for (kIdx in nearI.indices) {
+                val k = nearI[kIdx]
+                val kNodes = nodesByKey[k]
+                if (kNodes.isEmpty()) continue
                 for (j in i + 1..maxJ) {
                     val candidatesAtJ = nearKeys[j]
+                    val remJ = rem[j]
                     for (idx in candidatesAtJ.indices) {
                         val next = candidatesAtJ[idx]
                         if (next == k) continue
                         val stepEdge = segmentCost(px, py, i, j, k, next, step) + params.keyCost +
                             params.hitWeight * dist(px[j], py[j], keyX[next], keyY[next])
-                        val c = keys[next]
-                        children[node][c]?.let { target ->
-                            val r = rem[j][target]
-                            if (r.isFinite()) {
-                                val cand = stepEdge + r
-                                if (cand < best) best = cand
-                            }
-                        }
-                        if (canEnd) {
-                            children[0][c]?.let { target0 ->
-                                val r = rem[j][target0]
+                        val rootTarget = rootChild[next]
+                        val rootRem = if (rootTarget >= 0) remJ[rootTarget] else Float.POSITIVE_INFINITY
+                        val rootHasRem = rootRem.isFinite()
+                        for (nIdx in kNodes.indices) {
+                            val node = kNodes[nIdx]
+                            var best = remMoveI[node]
+                            val target = childAt[node * keyCount + next]
+                            if (target >= 0) {
+                                val r = remJ[target]
                                 if (r.isFinite()) {
-                                    val cand = stepEdge + boundaryWeight + r
+                                    val cand = stepEdge + r
                                     if (cand < best) best = cand
                                 }
                             }
+                            if (rootHasRem) {
+                                val endW = syllableCostArr[node]
+                                if (!endW.isNaN()) {
+                                    val cand = stepEdge + endW - pauseBonusI + rootRem
+                                    if (cand < best) best = cand
+                                }
+                            }
+                            remMoveI[node] = best
                         }
                     }
                 }
-                remMove[i][node] = best
-                if (best < rem[i][node]) rem[i][node] = best
-            }
 
-            val repeatEdge = params.keyCost + params.repeatCost
-            for (node in 1 until nodes) {
-                val c = char[node]
-                var best = rem[i][node]
-                children[node][c]?.let { target ->
-                    val r = remMove[i][target]
-                    if (r.isFinite()) {
-                        val cand = repeatEdge + r
-                        if (cand < best) best = cand
-                    }
-                }
-                val endWeight = syllableCost[node]
-                if (!endWeight.isNaN()) {
-                    val boundaryWeight = endWeight - params.pauseBonus * pause[i]
-                    children[0][c]?.let { target0 ->
-                        val r = remMove[i][target0]
+                // 写入 remI 并做同位置至多一次重复松弛（基于 remMoveI，保证 DAG 无环）。
+                val rootSame = rootChild[k]
+                val rootSameRem = if (rootSame >= 0) remMoveI[rootSame] else Float.POSITIVE_INFINITY
+                val rootSameFinite = rootSameRem.isFinite()
+                for (nIdx in kNodes.indices) {
+                    val node = kNodes[nIdx]
+                    var best = min(remI[node], remMoveI[node])
+                    val sameTarget = childAt[node * keyCount + k]
+                    if (sameTarget >= 0) {
+                        val r = remMoveI[sameTarget]
                         if (r.isFinite()) {
-                            val cand = repeatEdge + boundaryWeight + r
+                            val cand = repeatEdge + r
                             if (cand < best) best = cand
                         }
                     }
+                    if (rootSameFinite) {
+                        val endW = syllableCostArr[node]
+                        if (!endW.isNaN()) {
+                            val cand = repeatEdge + endW - pauseBonusI + rootSameRem
+                            if (cand < best) best = cand
+                        }
+                    }
+                    remI[node] = best
                 }
-                rem[i][node] = best
             }
         }
 
         var bestGlobal = Float.POSITIVE_INFINITY
         for (k in nearKeys[0]) {
-            val target = children[0][keys[k]] ?: continue
+            val target = rootChild[k]
+            if (target < 0) continue
             val h = rem[0][target]
             if (h.isFinite()) {
                 val total = params.hitWeight * dist(px[0], py[0], keyX[k], keyY[k]) + h

@@ -3244,6 +3244,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
             }
             service.rimeEngine.selectCandidateAtRevision(rimeIndex, snapshot.engineRevision) ?: return
         }
+        service.candidateTransform.glideAlternatives.clear()
         com.kingzcheung.xime.stats.TypingStats.onCandidatePicked(index,
             selectedCandidate?.let { snapshot.correctedCandidates[it] }.orEmpty())
 
@@ -3742,6 +3743,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 return
             }
             val selection = service.rimeEngine.selectCandidateAtRevision(engineIndex, snapshot.engineRevision, global = true) ?: return
+            service.candidateTransform.glideAlternatives.clear()
             com.kingzcheung.xime.stats.TypingStats.onCandidatePicked(engineIndex,
                 snapshot.correctedCandidates[expandedCandidate.text].orEmpty())
             val committedText = selection.committedText

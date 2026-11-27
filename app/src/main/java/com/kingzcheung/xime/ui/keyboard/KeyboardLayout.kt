@@ -474,17 +474,14 @@ fun KeyboardLayout(
                 val keys = geometry.snapshot()
                 val (xs, ys, ts) = glidePreview.points?.invoke() ?: break
                 if (keys.size < 26 || xs.size < 2) break
-                val endX = xs.last()
-                val endY = ys.last()
                 val keyUnit = com.kingzcheung.xime.glide.GlideLexicon.keyboard(keys).keyUnit
-                val movedSinceDecode = if (glidePreview.lastDecodeX.isNaN()) Float.POSITIVE_INFINITY
-                    else kotlin.math.hypot(endX - glidePreview.lastDecodeX, endY - glidePreview.lastDecodeY)
-                if (movedSinceDecode < keyUnit * 0.28f) {
+                var arcLen = 0f
+                for (i in 1 until xs.size) arcLen += kotlin.math.hypot(xs[i] - xs[i - 1], ys[i] - ys[i - 1])
+                if (glidePreview.lastDecodeArcLen > 0f && (arcLen - glidePreview.lastDecodeArcLen) < keyUnit * 0.28f) {
                     kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { kotlinx.coroutines.delay(GLIDE_PREVIEW_INTERVAL_MS) }
                     continue
                 }
-                glidePreview.lastDecodeX = endX
-                glidePreview.lastDecodeY = endY
+                glidePreview.lastDecodeArcLen = arcLen
                 val glideBucket = if (chinese) com.kingzcheung.xime.glide.PersonalGlideCalibration.bucketFor(keys) else "p"
                 val preview = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
                     runCatching {
@@ -516,19 +513,22 @@ fun KeyboardLayout(
                 if (glideTrail.gesture != gesture || glideTrail.points.isEmpty()) break
                 if (chinese) {
                     val code = preview?.first.orEmpty()
-                    if (code.isNotEmpty() && code != glidePreview.lastSentCode) {
-                        val movedSinceSent = if (glidePreview.lastSentX.isNaN()) Float.POSITIVE_INFINITY
-                            else kotlin.math.hypot(endX - glidePreview.lastSentX, endY - glidePreview.lastSentY)
-                        val monotonic = glidePreview.lastSentCode.isEmpty() || code.startsWith(glidePreview.lastSentCode)
-                        val confirmed = code == glidePreview.pendingCode || movedSinceSent >= keyUnit * 1.15f
-                        if (monotonic || confirmed) {
-                            glidePreview.lastSentCode = code
+                    if (code.isNotEmpty()) {
+                        if (code == glidePreview.lastSentCode) {
+                            // 回到已展示编码时立刻清空 pendingCode，杜绝 A→B→A→B 被误判为连续两次 B。
                             glidePreview.pendingCode = ""
-                            glidePreview.lastSentX = endX
-                            glidePreview.lastSentY = endY
-                            callbacks.onGlidePreviewCode?.invoke(code, uiState.inputSessionId, gesture)
                         } else {
-                            glidePreview.pendingCode = code
+                            val arcSinceSent = arcLen - glidePreview.lastSentArcLen
+                            val monotonic = glidePreview.lastSentCode.isEmpty() || code.startsWith(glidePreview.lastSentCode)
+                            val confirmed = code == glidePreview.pendingCode || arcSinceSent >= keyUnit * 1.15f
+                            if (monotonic || confirmed) {
+                                glidePreview.lastSentCode = code
+                                glidePreview.pendingCode = ""
+                                glidePreview.lastSentArcLen = arcLen
+                                callbacks.onGlidePreviewCode?.invoke(code, uiState.inputSessionId, gesture)
+                            } else {
+                                glidePreview.pendingCode = code
+                            }
                         }
                     }
                 } else preview?.second?.let { callbacks.onGlideEnglishPreview?.invoke(it, uiState.inputSessionId) }

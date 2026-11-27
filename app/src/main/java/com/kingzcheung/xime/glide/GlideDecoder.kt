@@ -150,17 +150,13 @@ class GlideDecoder(
             results += GlideCandidate(template.word, cost, geometry)
             if (kept.size < limit) kept += cost else if (cost < kept.peek()) { kept.poll(); kept += cost }
         }
-        // 按音节认出的编码不在词表里时，与词表结果用同一把尺子（形状 + 起止点）比；
-        // 长句统一改用更高点数 DTW 重比，保证同一批候选之间使用相同采样分辨率、不因跨阈值产生分差；
-        // 保留 SyllableGlide 的真实代价差幅及少量同形不同码（如 xinnian / xinian）交给语言模型区分。
+        // 联合束与经典兜底共享同一份 LatticeContext，整笔最多构建一次反向 DP 表。
         val syllableBudget = max(limit * 2, 12)
-        val jointBeam = if (syllableGlide != null && wordTrie != null) {
-            ChineseLatticeBeam.decode(
-                syllableGlide = syllableGlide,
+        val latticeCtx = syllableGlide?.buildLatticeContext(xs, ys, ts)
+        val jointBeam = if (latticeCtx != null && wordTrie != null) {
+            ChineseLatticeBeam.decodeFromContext(
+                ctx = latticeCtx,
                 wordTrie = wordTrie,
-                xs = xs,
-                ys = ys,
-                ts = ts,
                 lm = lm,
                 leftContext = leftContext,
                 limit = syllableBudget,
@@ -168,10 +164,10 @@ class GlideDecoder(
                 budgetMs = if (isPreview) 10L else 18L,
             )
         } else emptyList()
-        val scoredSyllables = if (jointBeam.size >= syllableBudget) {
+        val scoredSyllables = if (jointBeam.size >= syllableBudget || latticeCtx == null) {
             jointBeam
         } else {
-            val fallback = syllableGlide?.decodeScored(xs, ys, ts = ts, limit = syllableBudget).orEmpty()
+            val fallback = syllableGlide.decodeScoredFromContext(latticeCtx, limit = syllableBudget)
             if (jointBeam.isEmpty()) fallback
             else {
                 val seen = jointBeam.mapTo(HashSet(syllableBudget * 2)) { it.code }
@@ -198,17 +194,51 @@ class GlideDecoder(
         }
         val unlistedPrior = if (longSentence) LONG_UNLISTED_PRIOR else UNLISTED_PRIOR
         val bestSyllableCost = scoredSyllables.firstOrNull()?.cost ?: 0f
+        var bestJointGeom = Float.POSITIVE_INFINITY
+        var bestJointLm = Float.POSITIVE_INFINITY
+        for (sc in scoredSyllables) {
+            if (sc.fromJointBeam) {
+                if (sc.geomCost < bestJointGeom) bestJointGeom = sc.geomCost
+                if (sc.lmCost < bestJointLm) bestJointLm = sc.lmCost
+            }
+        }
+        val resultIdxByWord = HashMap<String, Int>(results.size * 2)
         val shapeCounts = HashMap<String, Int>()
-        for (existing in results) {
+        for (i in results.indices) {
+            val existing = results[i]
+            resultIdxByWord[existing.word] = i
             val s = collapseRepeats(existing.word)
             shapeCounts[s] = (shapeCounts[s] ?: 0) + 1
         }
+        var jointSameShapeReserved = 0
         scoredSyllables.forEachIndexed { rank, scored ->
             val code = scored.code
-            if (code.length > MAX_SENTENCE_KEYS || results.any { it.word == code }) return@forEachIndexed
+            if (code.length > MAX_SENTENCE_KEYS) return@forEachIndexed
+            val spreadCost = if (scored.fromJointBeam && bestJointGeom.isFinite() && bestJointLm.isFinite()) {
+                val geomSpread = ((scored.geomCost - bestJointGeom) * JOINT_GEOM_SPREAD_WEIGHT).coerceIn(0f, 0.8f)
+                val lmSpread = ((scored.lmCost - bestJointLm) * JOINT_LM_SPREAD_WEIGHT).coerceIn(0f, 0.9f)
+                geomSpread + lmSpread
+            } else {
+                ((scored.cost - bestSyllableCost) * SYLLABLE_SPREAD_WEIGHT).coerceIn(0f, 1.2f)
+            }
+
+            // 若同码已由模板路入池，合并联合束的语言证据而不是直接跳过，避免丢失 Trigram 扶正优势。
+            val existingIdx = resultIdxByWord[code]
+            if (existingIdx != null) {
+                if (scored.fromJointBeam && bestJointLm.isFinite()) {
+                    val prev = results[existingIdx]
+                    val lmBonus = (0.18f - ((scored.lmCost - bestJointLm) * JOINT_LM_SPREAD_WEIGHT).coerceIn(0f, 0.36f))
+                        .coerceIn(-0.18f, 0.18f)
+                    results[existingIdx] = prev.copy(cost = prev.cost - lmBonus)
+                }
+                return@forEachIndexed
+            }
+
             val shape = collapseRepeats(code)
-            // 同形不同码最多保留 2 个代表（如 xinnian 与 xinian 跨音节重字母），既防刷屏又不提前误杀正确切分。
-            if ((shapeCounts[shape] ?: 0) >= MAX_SAME_SHAPE_CANDIDATES) return@forEachIndexed
+            val currentShapeCount = shapeCounts[shape] ?: 0
+            // 联合束前 2 名允许突破一次模板路占满的同形配额，避免被单模板词挤出候选池。
+            val allowExtraJoint = scored.fromJointBeam && rank < 2 && jointSameShapeReserved < 2
+            if (currentShapeCount >= MAX_SAME_SHAPE_CANDIDATES && !allowExtraJoint) return@forEachIndexed
             val px = FloatArray(shape.length) { keyboard.centers.getValue(shape[it]).first / unit }
             val py = FloatArray(shape.length) { keyboard.centers.getValue(shape[it]).second / unit }
             val (tx, ty) = resampleTo(px, py, sampleCount)
@@ -219,16 +249,17 @@ class GlideDecoder(
                 else shapes.getOrPut(shape) { dtw(sx, sy, tx, ty) }
             if (dtwScore > maxShape) return@forEachIndexed
             val geometry = dtwScore + (start + end) / 2f * ENDPOINT_WEIGHT
-            val syllableSpread = ((scored.cost - bestSyllableCost) * SYLLABLE_SPREAD_WEIGHT).coerceIn(0f, 1.2f)
             val isKnown = code in known
             val priorPenalty = if (isKnown) PRIOR_WEIGHT * 0.5f else unlistedPrior * PRIOR_WEIGHT
+            resultIdxByWord[code] = results.size
             results += GlideCandidate(
                 word = code,
-                cost = geometry + priorPenalty + syllableSpread + rank * SYLLABLE_TIE_COST,
+                cost = geometry + priorPenalty + spreadCost + rank * SYLLABLE_TIE_COST,
                 shape = geometry,
                 listed = isKnown,
             )
-            shapeCounts[shape] = (shapeCounts[shape] ?: 0) + 1
+            shapeCounts[shape] = currentShapeCount + 1
+            if (currentShapeCount >= MAX_SAME_SHAPE_CANDIDATES) jointSameShapeReserved++
         }
         return results.sortedWith(compareBy<GlideCandidate> { it.cost }.thenBy { it.word }).take(limit)
     }
@@ -255,6 +286,9 @@ class GlideDecoder(
         const val LONG_UNLISTED_PRIOR = 0.8f
         const val SYLLABLE_RANK_COST = 0.05f
         const val SYLLABLE_SPREAD_WEIGHT = 0.08f
+        const val JOINT_GEOM_SPREAD_WEIGHT = 0.04f
+        /** 保留联合束中 Trigram LM 的相对分差（约 0.028/nat），避免被二次 0.08 缩放稀释。 */
+        const val JOINT_LM_SPREAD_WEIGHT = 0.35f
         const val SYLLABLE_TIE_COST = 0.005f
         const val MAX_SAME_SHAPE_CANDIDATES = 2
 

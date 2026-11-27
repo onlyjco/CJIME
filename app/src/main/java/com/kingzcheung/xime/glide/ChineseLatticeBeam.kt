@@ -100,28 +100,23 @@ internal class ChineseWordTrie private constructor(
 }
 
 /**
- * P1 帧同步联合束搜索：
- * 在 [SyllableGlide.LatticeContext] 音节晶格上，直接按词边界（1～4 音节词）前向推进，
- * 每一步在剪枝前同时计入几何路径代价与 [WordLanguageModel] Trigram 概率（无模型时退化为词表凝聚先验），
- * 解决长句滑行中“圆角/近键局部几何略差导致正确全拼在进 Rime 前就被纯几何 Top-20 淘汰”的核心问题。
+ * P1.5 帧同步联合束搜索：
+ * 复用外部共享的 [SyllableGlide.LatticeContext]，在词边界（1～4 音节词）前向推进并同步计入
+ * 几何路径代价与 [WordLanguageModel] Trigram 概率；使用原始数组缓冲消除热循环分配，
+ * 返回分别记录 geomCost 与 lmCost 的 [ScoredCode] 供 [GlideDecoder] 精确融合。
  */
 internal object ChineseLatticeBeam {
-    /** 每 1 nat 语言模型负对数概率折合多少几何代价单元（经保守标定，既能扶正圆角又不凭空脑补）。 */
     const val LM_COST_SCALE = 0.08f
-    /** 单步 LM 负对数概率钳位区间，防止极端孤立项主导整句。 */
     private const val MIN_NEG_LOGP = 2.0
     private const val MAX_NEG_LOGP = 14.5
-    /** 词未收录于 N-gram 模型时的回退负对数概率。 */
     private const val OOV_NEG_LOGP = 13.5
-    /** 无 N-gram 模型时基于词表排名的词级凝聚代价。 */
     private const val NO_LM_WORD_BASE = 0.28f
     private const val NO_LM_WORD_PRIOR = 0.52f
-    /** 每帧保留的最大束宽与同一 (lastKey, h1) 槽位的最大多样性配额。 */
     const val RELEASE_BEAM_WIDTH = 28
     const val PREVIEW_BEAM_WIDTH = 14
-    private const val MAX_PER_SLOT = 3
+    private const val MAX_PER_SLOT_LM = 3
+    private const val MAX_PER_SLOT_NO_LM = 8
     private const val MAX_WORD_SPANS_PER_ORIGIN = 40
-    private const val WORD_EXTEND_SLACK = 2.6f
     private const val GLOBAL_PRUNE_SLACK = 5.5f
 
     private class WordSpan(
@@ -132,7 +127,7 @@ internal object ChineseLatticeBeam {
         val syllableCount: Int,
         val geomCost: Float,
         val code: String,
-        val estCost: Float,
+        val rankCost: Float,
     )
 
     private class BeamState(
@@ -146,6 +141,7 @@ internal object ChineseLatticeBeam {
         val totalCost: Float get() = geomCost + lmCost
     }
 
+    /** 兼容旧签名：内部构建一次性 LatticeContext。 */
     fun decode(
         syllableGlide: SyllableGlide,
         wordTrie: ChineseWordTrie,
@@ -158,9 +154,22 @@ internal object ChineseLatticeBeam {
         beamWidth: Int = RELEASE_BEAM_WIDTH,
         budgetMs: Long = 18L,
     ): List<ScoredCode> {
+        val ctx = syllableGlide.buildLatticeContext(xs, ys, ts) ?: return emptyList()
+        return decodeFromContext(ctx, wordTrie, lm, leftContext, limit, beamWidth, budgetMs)
+    }
+
+    /** 复用已构建的 [ctx] 执行联合束搜索；[budgetMs] 仅计入束搜索自身耗时，不再被反向 DP 提前吃光。 */
+    fun decodeFromContext(
+        ctx: SyllableGlide.LatticeContext,
+        wordTrie: ChineseWordTrie,
+        lm: WordLanguageModel?,
+        leftContext: String?,
+        limit: Int,
+        beamWidth: Int = RELEASE_BEAM_WIDTH,
+        budgetMs: Long = 18L,
+    ): List<ScoredCode> {
         if (limit <= 0) return emptyList()
         val deadlineNs = System.nanoTime() + budgetMs * 1_000_000L
-        val ctx = syllableGlide.buildLatticeContext(xs, ys, ts) ?: return emptyList()
         val n = ctx.n
         val last = ctx.last
 
@@ -173,6 +182,13 @@ internal object ChineseLatticeBeam {
         val beam = Array<ArrayList<BeamState>?>(n) { null }
         val completed = ArrayList<BeamState>(beamWidth * 2)
         val geomPruneLimit = ctx.bestGlobalCost + GLOBAL_PRUNE_SLACK
+        val maxPerSlot = if (lm != null) MAX_PER_SLOT_LM else MAX_PER_SLOT_NO_LM
+
+        // 按深度复用的起点转移原始数组缓冲，消除 Triple 装箱分配。
+        val maxDepth = ChineseWordTrie.MAX_WORD_SYLLABLES + 1
+        val bufFrames = Array(maxDepth) { IntArray(64) }
+        val bufKeys = Array(maxDepth) { IntArray(64) }
+        val bufCosts = Array(maxDepth) { FloatArray(64) }
 
         fun wordLmCost(h2: Int, h1: Int, wid: Int, rankPrior: Float): Float {
             if (lm == null) {
@@ -181,7 +197,6 @@ internal object ChineseLatticeBeam {
             val negLogP = if (wid >= 0) {
                 (-lm.trigram(h2, h1, wid)).coerceIn(MIN_NEG_LOGP, MAX_NEG_LOGP)
             } else {
-                // 未入 LM 的词按词表排名给温和回退，避免高频常用词被误杀。
                 (OOV_NEG_LOGP - (1f - rankPrior) * 2.0).coerceIn(MIN_NEG_LOGP, MAX_NEG_LOGP)
             }
             return (negLogP * LM_COST_SCALE).toFloat()
@@ -197,12 +212,10 @@ internal object ChineseLatticeBeam {
             return (negLogP * LM_COST_SCALE).toFloat()
         }
 
-        /**
-         * 从指定词边界 ([originFrame], [originKey]) 沿 1～4 个连续音节展开全部词跨度。
-         * [originKey] == -1 表示整笔起点（首音节从帧 0 开始）。
-         */
+        var expandTicks = 0
+
         fun expandWordsFrom(originFrame: Int, originKey: Int, baseGeom: Float): List<WordSpan> {
-            val bestByEndCode = HashMap<String, WordSpan>(48)
+            val bestByEndCode = HashMap<Int, HashMap<String, WordSpan>>(16)
             val codeBuf = StringBuilder(24)
 
             fun emitNextSyllable(
@@ -213,34 +226,58 @@ internal object ChineseLatticeBeam {
                 depth: Int,
             ) {
                 if (depth > ChineseWordTrie.MAX_WORD_SYLLABLES) return
-                val startKeyList: List<Triple<Int, Int, Float>> = if (prevKey < 0) {
-                    ctx.nearKeys[0].map { k -> Triple(0, k, ctx.startHitCost(0, k)) }
+                if ((++expandTicks and 127) == 0 && System.nanoTime() >= deadlineNs) return
+
+                var fArr = bufFrames[depth]
+                var kArr = bufKeys[depth]
+                var cArr = bufCosts[depth]
+                var count = 0
+
+                fun addStep(sf: Int, sk: Int, sc: Float) {
+                    if (count >= fArr.size) {
+                        val nextCap = fArr.size * 2
+                        fArr = fArr.copyOf(nextCap); bufFrames[depth] = fArr
+                        kArr = kArr.copyOf(nextCap); bufKeys[depth] = kArr
+                        cArr = cArr.copyOf(nextCap); bufCosts[depth] = cArr
+                    }
+                    fArr[count] = sf
+                    kArr[count] = sk
+                    cArr[count] = sc
+                    count++
+                }
+
+                if (prevKey < 0) {
+                    val near0 = ctx.nearKeys[0]
+                    for (idx in near0.indices) {
+                        val k = near0[idx]
+                        addStep(0, k, ctx.startHitCost(0, k))
+                    }
                 } else {
-                    val list = ArrayList<Triple<Int, Int, Float>>(16)
-                    // 跨音节同键重复（如 xin·nian 的双 n、shi·shi 折返）
-                    list += Triple(prevFrame, prevKey, ctx.repeatEdgeCost)
+                    // 跨音节同键重复（如 xin·nian 双 n）
+                    addStep(prevFrame, prevKey, ctx.repeatEdgeCost)
                     val maxJ = ctx.straightUntil[prevFrame]
                     for (j in prevFrame + 1..maxJ) {
                         val cands = ctx.nearKeys[j]
                         for (idx in cands.indices) {
                             val nk = cands[idx]
                             if (nk == prevKey) continue
-                            list += Triple(j, nk, ctx.moveTransitionCost(prevFrame, j, prevKey, nk))
+                            addStep(j, nk, ctx.moveTransitionCost(prevFrame, j, prevKey, nk))
                         }
                     }
-                    list
                 }
 
-                for (entry in startKeyList) {
-                    val startF = entry.first
-                    val startK = entry.second
-                    val transCost = entry.third
+                for (eIdx in 0 until count) {
+                    val startF = fArr[eIdx]
+                    val startK = kArr[eIdx]
+                    val transCost = cArr[eIdx]
                     val spans = ctx.syllablesFrom(startF, startK)
-                    for (sp in spans) {
+                    for (sIdx in spans.indices) {
+                        val sp = spans[sIdx]
                         val nextNode = wordTrie.child(trieNode, sp.sylId)
                         if (nextNode < 0) continue
                         val newGeom = accGeom + transCost + sp.cost
-                        val totalGeomEst = baseGeom + newGeom + ctx.minRemainingAfterBoundary(sp.endFrame, sp.lastKey)
+                        val remAfter = ctx.minRemainingAfterBoundary(sp.endFrame, sp.lastKey)
+                        val totalGeomEst = baseGeom + newGeom + remAfter
                         if (totalGeomEst > geomPruneLimit) continue
 
                         val sylStr = wordTrie.syllableStrings[sp.sylId]
@@ -250,11 +287,12 @@ internal object ChineseLatticeBeam {
                             val spanCode = codeBuf.toString()
                             val wid = wordTrie.lmId(nextNode)
                             val rPrior = wordTrie.rankPrior(nextNode)
-                            val est = newGeom + wordPriorEstimate(wid, rPrior)
-                            val key = "${sp.endFrame}:$spanCode"
-                            val old = bestByEndCode[key]
+                            // 按「累计几何 + 剩余下界 + 词先验」排名，避免短跨度挤掉完整多音节词。
+                            val rankCost = newGeom + remAfter + wordPriorEstimate(wid, rPrior)
+                            val bucket = bestByEndCode.getOrPut(sp.endFrame) { HashMap(8) }
+                            val old = bucket[spanCode]
                             if (old == null || newGeom < old.geomCost) {
-                                bestByEndCode[key] = WordSpan(
+                                bucket[spanCode] = WordSpan(
                                     endFrame = sp.endFrame,
                                     lastKey = sp.lastKey,
                                     wordLmId = wid,
@@ -262,7 +300,7 @@ internal object ChineseLatticeBeam {
                                     syllableCount = depth,
                                     geomCost = newGeom,
                                     code = spanCode,
-                                    estCost = est,
+                                    rankCost = rankCost,
                                 )
                             }
                         }
@@ -276,7 +314,11 @@ internal object ChineseLatticeBeam {
 
             emitNextSyllable(originFrame, originKey, 0, 0f, 1)
             if (bestByEndCode.isEmpty()) return emptyList()
-            return bestByEndCode.values.sortedBy { it.estCost }.take(MAX_WORD_SPANS_PER_ORIGIN)
+            val all = ArrayList<WordSpan>(64)
+            for (map in bestByEndCode.values) all.addAll(map.values)
+            if (all.size <= MAX_WORD_SPANS_PER_ORIGIN) return all
+            all.sortBy { it.rankCost }
+            return all.subList(0, MAX_WORD_SPANS_PER_ORIGIN)
         }
 
         fun pushState(targetFrame: Int, state: BeamState) {
@@ -292,14 +334,15 @@ internal object ChineseLatticeBeam {
             if (list.size <= 1) return list
             list.sortBy { it.totalCost }
             val out = ArrayList<BeamState>(beamWidth)
-            val seenCodeKey = HashSet<String>(beamWidth * 2)
+            // 先查槽位配额再去重（含 h1 区分词历史），避免不同词历史误合并或被拒项占用去重键。
+            val seen = HashSet<String>(beamWidth * 2)
             val slotCounts = HashMap<Long, Int>(beamWidth * 2)
             for (st in list) {
-                val ck = "${st.lastKey}:${st.code}"
-                if (!seenCodeKey.add(ck)) continue
                 val slotKey = (st.lastKey.toLong() shl 32) or (st.h1.toLong() and 0xFFFFFFFFL)
                 val cnt = slotCounts[slotKey] ?: 0
-                if (cnt >= MAX_PER_SLOT) continue
+                if (cnt >= maxPerSlot) continue
+                val dedupKey = "${st.lastKey}:${st.h1}:${st.code}"
+                if (!seen.add(dedupKey)) continue
                 slotCounts[slotKey] = cnt + 1
                 out += st
                 if (out.size >= beamWidth) break
@@ -307,7 +350,6 @@ internal object ChineseLatticeBeam {
             return out
         }
 
-        // 起点词展开（帧 0）
         val initialSpans = expandWordsFrom(0, -1, 0f)
         for (sp in initialSpans) {
             val lCost = wordLmCost(h2Init, h1Init, sp.wordLmId, sp.wordRankPrior)
@@ -319,7 +361,6 @@ internal object ChineseLatticeBeam {
             )
         }
 
-        // 按帧前向推进束搜索
         for (frame in 0 until last) {
             val rawStates = beam[frame] ?: continue
             beam[frame] = null
@@ -327,7 +368,6 @@ internal object ChineseLatticeBeam {
             val active = pruneFrame(rawStates)
             if (active.isEmpty()) continue
 
-            // 同一帧内按 lastKey 分组，共享词跨度展开，大幅减少重复计算。
             val byKey = HashMap<Int, ArrayList<BeamState>>(6)
             for (st in active) {
                 byKey.getOrPut(st.lastKey) { ArrayList(8) }.add(st)
@@ -360,7 +400,13 @@ internal object ChineseLatticeBeam {
         val seenCodes = HashSet<String>(limit * 2)
         for (st in completed) {
             if (seenCodes.add(st.code)) {
-                results += ScoredCode(st.code, st.totalCost)
+                results += ScoredCode(
+                    code = st.code,
+                    cost = st.totalCost,
+                    geomCost = st.geomCost,
+                    lmCost = st.lmCost,
+                    fromJointBeam = true,
+                )
                 if (results.size >= limit) break
             }
         }

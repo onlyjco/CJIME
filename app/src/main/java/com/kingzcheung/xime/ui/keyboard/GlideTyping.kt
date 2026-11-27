@@ -50,13 +50,11 @@ internal class GlidePreviewJob {
     var english: ((List<com.kingzcheung.xime.glide.GlideCandidate>, (String) -> String) -> GlideEnglishPreview)? = null
     /** 中文：这一笔开头取的前文，预览和抬手后按同一前文选编码。 */
     var left: String? = null
-    /** 防抖与稳定前缀状态：同一编码不重复发 Rime，非递增回滚需连帧确认或明显位移才刷新。 */
+    /** 防抖与稳定前缀状态：按累计弧长判移动防回环漏算，同一编码不重复发 Rime 并清空 pendingCode 防 A→B→A→B 误确认。 */
     var lastSentCode: String = ""
     var pendingCode: String = ""
-    var lastDecodeX: Float = Float.NaN
-    var lastDecodeY: Float = Float.NaN
-    var lastSentX: Float = Float.NaN
-    var lastSentY: Float = Float.NaN
+    var lastDecodeArcLen: Float = 0f
+    var lastSentArcLen: Float = 0f
 
     fun start(gesture: Int) {
         job?.cancel(); job = null
@@ -67,20 +65,16 @@ internal class GlidePreviewJob {
         left = null
         lastSentCode = ""
         pendingCode = ""
-        lastDecodeX = Float.NaN
-        lastDecodeY = Float.NaN
-        lastSentX = Float.NaN
-        lastSentY = Float.NaN
+        lastDecodeArcLen = 0f
+        lastSentArcLen = 0f
     }
 
     fun stop() {
         job?.cancel(); job = null; points = null
         lastSentCode = ""
         pendingCode = ""
-        lastDecodeX = Float.NaN
-        lastDecodeY = Float.NaN
-        lastSentX = Float.NaN
-        lastSentY = Float.NaN
+        lastDecodeArcLen = 0f
+        lastSentArcLen = 0f
     }
 }
 
@@ -152,6 +146,8 @@ internal fun Modifier.glideTyping(
                     if (tracker.abandoned) { next = awaitNextDown(event); break }
                     if (!change.pressed) {
                         if (tracker.claimed) {
+                            // 直到 UP 才首次达标接管的短划也必须递增 gesture，防止沿用上一笔的 previewGesture 与旧前文。
+                            if (trail.points.isEmpty()) trail.startGesture()
                             change.consume()
                             traced = true
                             val xs = tracker.xs(); val ys = tracker.ys(); val ts = tracker.ts()

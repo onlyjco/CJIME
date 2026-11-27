@@ -379,6 +379,7 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
                 val repFlagsSnapshot = if (lastReplacementOwner === owner && lastReplacementCode == goodCode) lastReplacementFlags else null
                 withContext(Dispatchers.Main) {
                     if (current(owner)) {
+                        service.candidateTransform.glideAlternatives.clear()
                         service.sessionController.applyRawGlideEdit(
                             oldRaw = owner.snapshot.input,
                             editStart = owner.snapshot.boundaries[owner.start],

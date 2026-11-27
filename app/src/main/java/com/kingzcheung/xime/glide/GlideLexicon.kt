@@ -280,7 +280,8 @@ object GlideLexicon {
                 if (delta == 0f) c else c.copy(cost = c.cost + delta)
             }.sortedWith(compareBy<GlideCandidate> { it.cost }.thenBy { it.word })
         }
-        if (left.isNullOrEmpty() || adjusted.size < 2) adjusted
+        // 联合束已带左文 Trigram 时不再对 listed 候选重复叠加左文 Bigram。
+        if (left.isNullOrEmpty() || adjusted.size < 2 || (wordTrie != null && lm != null)) adjusted
         else ChineseGlideContext.rerank(adjusted, left, chineseWordOf(context, doublePinyin), lm)
     }
 
@@ -327,8 +328,8 @@ object GlideLexicon {
                 if (delta == 0f) c else c.copy(cost = c.cost + delta)
             }.sortedWith(compareBy<GlideCandidate> { it.cost }.thenBy { it.word })
         }
-        // 中文按前文重排（[ChineseGlideContext]）；没有前文就不碰词组模型。
-        if (left.isNullOrEmpty() || adjusted.size < 2) adjusted
+        // 联合束已带左文 Trigram 时不再对 listed 候选重复叠加左文 Bigram；无词树或无 LM 时沿用旧上下文重排。
+        if (left.isNullOrEmpty() || adjusted.size < 2 || (wordTrie != null && lm != null)) adjusted
         else ChineseGlideContext.rerank(adjusted, left, chineseWordOf(context, doublePinyin), lm)
     }
 
@@ -393,9 +394,10 @@ object GlideLexicon {
             val trimmed = decode(xs.copyOf(count), ys.copyOf(count), validTs?.copyOf(count))
             if (trimmed.isEmpty()) continue
             if (needSoftCompete) {
-                // 软竞争加轻量截尾惩罚，只有甩尾明显拉垮整笔几何时才胜出，并把两条路的候选融合。
+                // 软竞争加轻量截尾惩罚：只要截尾候选能挤进当前前 10 池（含救回第 2/3 候选）就合并进候选池，由后续 LM 裁决。
                 val penalized = trimmed.map { it.copy(cost = it.cost + SOFT_TAIL_PENALTY) }
-                if (penalized.first().cost < bestScore) {
+                val worstKept = if (best.size < 10) Float.POSITIVE_INFINITY else best.last().cost
+                if (penalized.first().cost < worstKept) {
                     val merged = LinkedHashMap<String, GlideCandidate>()
                     for (c in best) merged[c.word] = c
                     for (c in penalized) {

@@ -126,7 +126,7 @@ internal class CandidateTransformCoordinator(private val service: XimeInputMetho
         val transformed = transformByPlugin(inputText, preedit, engineCandidates, asciiMode)
         val state = service.uiState.value
         return glideAlternatives.inject(withContacts(transformed, inputText, preedit, engineCandidates, firstPage),
-            inputText, engineCandidates, firstPage, state.currentSchemaId, state.inputSessionId)
+            inputText, engineCandidates, firstPage, state.currentSchemaId, state.inputSessionId, preedit)
     }
 
     /** 中文滑行这一笔的备选，见 [GlideAlternatives]。 */

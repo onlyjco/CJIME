@@ -98,55 +98,48 @@ internal object ChineseSentenceGlideScorer {
             }
 
             val prev = runCatching { preview(cand.word) }.getOrNull()
-            val candidateTexts = prev?.candidates?.filter { it.isNotEmpty() }?.take(MAX_RIME_CANDIDATES_PER_CODE)
-                .orEmpty()
-                .ifEmpty { listOfNotNull(prev?.topCandidate?.takeIf { it.isNotEmpty() }) }
+            // 严格对 Rime 实际展示的第 1 候选（topText）计分，保证“打分项 = 赢家展示项 = 正式上屏项”，
+            // 彻底消除“按第 2 项世界打分却向用户展示第 1 项世”的错位问题。
+            val topText = prev?.topCandidate?.takeIf { it.isNotEmpty() }
+                ?: prev?.candidates?.firstOrNull { it.isNotEmpty() }
             val baseTotal = cand.cost + personalDelta(cand.word, allCodes)
 
-            val item = if (candidateTexts.isEmpty()) {
+            val item = if (topText == null) {
                 Scored(cand, null, prev, baseTotal + INCOMPLETE_PENALTY, complete = false)
             } else {
                 val pureAsciiCode = cand.word.all { it in 'a'..'z' }
                 val pendingTokens = countPendingAsciiTokens(prev?.preeditText.orEmpty())
-                var bestScore = Float.POSITIVE_INFINITY
-                var bestIsComplete = false
-                for ((rankIdx, candText) in candidateTexts.withIndex()) {
-                    var score = baseTotal + rankIdx * RIME_RANK_PENALTY
-                    val hasUnresolvedAscii = pureAsciiCode && candText.any { it in 'a'..'z' || it in 'A'..'Z' }
-                    if (hasUnresolvedAscii) score += INCOMPLETE_PENALTY * 0.7f
+                var score = baseTotal
+                val hasUnresolvedAscii = pureAsciiCode && topText.any { it in 'a'..'z' || it in 'A'..'Z' }
+                if (hasUnresolvedAscii) score += INCOMPLETE_PENALTY * 0.7f
 
-                    val effectiveUnits = countEffectiveTextUnits(candText)
-                    val incompleteRatio = when {
-                        pendingTokens >= 2 && effectiveUnits < pendingTokens ->
-                            (pendingTokens - effectiveUnits).toFloat() / pendingTokens
-                        pendingTokens == 0 && pureAsciiCode && cand.word.length >= 12 -> {
-                            val minExpected = (cand.word.length + 5) / 6
-                            if (effectiveUnits < minExpected) (minExpected - effectiveUnits).toFloat() / minExpected else 0f
-                        }
-                        else -> 0f
+                val effectiveUnits = countEffectiveTextUnits(topText)
+                val incompleteRatio = when {
+                    pendingTokens >= 2 && effectiveUnits < pendingTokens ->
+                        (pendingTokens - effectiveUnits).toFloat() / pendingTokens
+                    // 连续未分隔长拼音（pendingTokens == 0 或 1，如 "jintianwanshang"）同样校验最小字数下界。
+                    pendingTokens <= 1 && pureAsciiCode && cand.word.length >= 10 -> {
+                        val minExpected = (cand.word.length + 5) / 6
+                        if (effectiveUnits < minExpected) (minExpected - effectiveUnits).toFloat() / minExpected else 0f
                     }
-                    val complete = !hasUnresolvedAscii && incompleteRatio <= 0f
-                    if (incompleteRatio > 0f) {
-                        score += INCOMPLETE_PENALTY * incompleteRatio
-                    }
+                    else -> 0f
+                }
+                val complete = !hasUnresolvedAscii && incompleteRatio <= 0f
+                if (incompleteRatio > 0f) {
+                    score += INCOMPLETE_PENALTY * incompleteRatio
+                }
 
-                    if (lm != null && candText.isNotEmpty()) {
-                        val words = segmentWords(candText, lm)
-                        val lmAdvantage = scoreSentenceLift(words, h2Init, h1Init, lm)
-                        score -= LM_WEIGHT * lmAdvantage
-                        // 只有完整覆盖全部音节的候选才给凝聚度加分，防止 2 字残缺前缀反超长句。
-                        if (complete && candText.length >= 2) {
-                            val cohesion = ((candText.length - words.size).toFloat() / (candText.length - 1)).coerceIn(0f, 1f)
-                            score -= COHESION_BONUS * cohesion
-                        }
-                    }
-                    if (score < bestScore) {
-                        bestScore = score
-                        bestIsComplete = complete
+                if (lm != null && topText.isNotEmpty()) {
+                    val words = segmentWords(topText, lm)
+                    val lmAdvantage = scoreSentenceLift(words, h2Init, h1Init, lm)
+                    score -= LM_WEIGHT * lmAdvantage
+                    // 只有完整覆盖全部音节的候选才给凝聚度加分，防止 2 字残缺前缀反超长句。
+                    if (complete && topText.length >= 2) {
+                        val cohesion = ((topText.length - words.size).toFloat() / (topText.length - 1)).coerceIn(0f, 1f)
+                        score -= COHESION_BONUS * cohesion
                     }
                 }
-                val topText = prev?.topCandidate?.takeIf { it.isNotEmpty() } ?: candidateTexts.first()
-                Scored(cand, topText, prev, bestScore, bestIsComplete)
+                Scored(cand, topText, prev, score, complete)
             }
 
             scoredList += item

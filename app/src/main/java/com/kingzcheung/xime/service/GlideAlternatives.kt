@@ -29,7 +29,7 @@ internal class GlideAlternatives {
 
     fun clear() { entry = null }
 
-    /** 首选之后插进备选；不是这一笔的输入、不是第一页、方案或输入框换了时原样返回。 */
+    /** 首选之后插进备选；不是这一笔的输入、已有部分选定汉字、不是第一页、方案或输入框换了时原样返回。 */
     fun inject(
         base: CandidateTransformResult?,
         inputText: String,
@@ -37,9 +37,12 @@ internal class GlideAlternatives {
         firstPage: Boolean,
         schema: String,
         session: Long,
+        preedit: String = "",
     ): CandidateTransformResult? {
         val current = entry ?: return base
         if (current.schema != schema || current.session != session) { entry = null; return base }
+        // 组合中已部分选定汉字（例如 "我ey'sv..."）时，引擎候选只针对未选定后缀，整句滑行备选必须立刻作废。
+        if (preedit.any { it.code >= 0x2E80 }) { entry = null; return base }
         if (current.input != inputText) {
             if (current.seen) entry = null
             return base
@@ -65,10 +68,10 @@ internal class GlideAlternatives {
         /** 首选之外最多给几个：每个都要在独立会话里预览一次，抬手到出字会多等一点。 */
         const val MAX = 2
 
-        /** 这一笔的编码插在光标处：输入不空、末尾不是分隔符时先补一个 '（与逐键打入时相同）。 */
-        fun inserted(input: String, caret: Int, code: String): Pair<String, Int> {
+        /** 这一笔的编码插在光标处：输入不空、末尾不是分隔符且光标位于已确认段之后时才补 '（与 ImeKeyRouter 正式路径完全一致）。 */
+        fun inserted(input: String, caret: Int, code: String, confirmed: Int = 0): Pair<String, Int> {
             val at = caret.coerceIn(0, input.length)
-            val separator = if (input.isNotEmpty() && input.last() != '\'') "'" else ""
+            val separator = if (input.isNotEmpty() && input.last() != '\'' && at > confirmed) "'" else ""
             return input.substring(0, at) + separator + code + input.substring(at) to at + separator.length + code.length
         }
     }
