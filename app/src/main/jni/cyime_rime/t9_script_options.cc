@@ -208,11 +208,25 @@ void T9ScriptOptions::LoadT9Options(Config* config, Context* context) {
   }
 }
 
-string T9ScriptOptions::T9ResolveOnce(const char* type_name, const char* suffix, const string& name) {
+namespace {
+std::mutex& T9ResolvedMutex() {
   static std::mutex mutex;
+  return mutex;
+}
+std::map<string, string>& T9ResolvedPaths() {
   static std::map<string, string> resolved;
-  std::lock_guard<std::mutex> lock(mutex);
-  auto& path = resolved[Service::instance().deployer().user_data_dir.string() + '\n' + type_name + '\n' + name];
+  return resolved;
+}
+}  // namespace
+
+void T9ClearResolvedCache() {
+  std::lock_guard<std::mutex> lock(T9ResolvedMutex());
+  T9ResolvedPaths().clear();
+}
+
+string T9ScriptOptions::T9ResolveOnce(const char* type_name, const char* suffix, const string& name) {
+  std::lock_guard<std::mutex> lock(T9ResolvedMutex());
+  auto& path = T9ResolvedPaths()[Service::instance().deployer().user_data_dir.string() + '\n' + type_name + '\n' + name];
   if (path.empty()) {
     const ResourceType type{type_name, "", suffix};
     std::unique_ptr<ResourceResolver> resolver(Service::instance().CreateResourceResolver(type));

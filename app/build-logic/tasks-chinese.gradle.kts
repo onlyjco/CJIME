@@ -53,7 +53,7 @@ val prepareChineseDictionaries by tasks.registering {
     inputs.property("symbolNames", 1)
     inputs.property("greekLetters", 1)
     inputs.property("unicodeCodes", 2)
-    inputs.property("doublePinyinSentences", 1)
+    inputs.property("doublePinyinSentences", 2)
     inputs.property("shortcutOrder", 1)
     val extWeights = file("data/rime_ice_ext_weights.tsv.gz")
     inputs.file(extWeights)
@@ -954,7 +954,8 @@ val prepareChineseDictionaries by tasks.registering {
                 schema.replace("    - script_translator\n", "    - script_translator\n    - lua_translator@*cyime_rare_chars\n") +
                     "\ncyime_rare_double_pinyin: true\n" +
                     "\nt9:\n  sentence_rescore: true\n  rescore_keys_per_syllable: 2\n  ngram_model: t9_ngram\n" +
-                    "  ngram_sentence_start: false\n  rescore_rime_weight: 0.15\n  near_homophone_penalty: 3.0\n"
+                    "  ngram_sentence_start: false\n  rescore_rime_weight: 0.15\n  near_homophone_penalty: 3.0\n" +
+                    "  menu_sentences: 2\n  menu_sentence_margin: 1.8\n  menu_prefixes: 3\n"
             })
         // Double pinyin after a pause (2026-11-16): one key left out, a key pressed twice, two keys swapped. A helper
         // prism spells every two-key code those ways as well; it is read only after a pause, and candidate_policy.cc

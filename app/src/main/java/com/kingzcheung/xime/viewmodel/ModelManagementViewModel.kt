@@ -213,7 +213,7 @@ class ModelManagementViewModel(application: Application) : AndroidViewModel(appl
                             model.versions.firstOrNull { it.version == actualVersion })
                     }
                     val message = if (ModelManager.getModel(modelId)?.category == com.kingzcheung.xime.model.ModelCategory.CANDIDATE)
-                        "已安装，重新启动输入法后生效" else "模型下载完成"
+                        "已安装，立即生效" else "模型下载完成"
                     _uiState.update { s -> s.copy(toastMessage = message) }
                 }
             }

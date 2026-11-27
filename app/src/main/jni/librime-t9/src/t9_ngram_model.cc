@@ -37,6 +37,13 @@ void T9NgramModel::ReleaseResidentPages() {
   }
 }
 
+void T9NgramModel::ClearCache() {
+  std::lock_guard<std::mutex> lock(OpenMutex());
+  // Live translations keep their own shared_ptr alive; clearing the cache only drops
+  // remembered handles/nulls so the next lookup maps any newly installed or switched file.
+  OpenModels().clear();
+}
+
 std::shared_ptr<const T9NgramModel> T9NgramModel::Open(const std::string& path) {
   std::lock_guard<std::mutex> lock(OpenMutex());
   auto& models = OpenModels();

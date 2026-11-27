@@ -30,6 +30,8 @@
 namespace rime {
 // cyime_rime/t9_cylm_sentence.h (in rime-static; that header needs cylm.h, not on this target's include path).
 int T9CylmForget(const std::string& text, int wait_ms);
+// cyime_rime/t9_script_options.cc: clears T9ResolveOnce path cache when a model is installed/removed at runtime.
+void T9ClearResolvedCache();
 }
 #include <android/log.h>
 #include <algorithm>
@@ -2200,6 +2202,18 @@ Java_com_kingzcheung_xime_rime_RimeEngine_nativeReleaseT9ModelPages(
     (void)env;
     (void)thiz;
     T9NgramModel::ReleaseResidentPages();
+}
+
+// 词组模型在运行期间安装、替换或删除时清掉进程内路径与句柄缓存，下次按键立即重新打开 t9_ngram.lm。
+JNIEXPORT void JNICALL
+Java_com_kingzcheung_xime_rime_RimeEngine_nativeClearT9ModelCache(
+    JNIEnv* env,
+    jobject thiz
+) {
+    (void)env;
+    (void)thiz;
+    T9NgramModel::ClearCache();
+    rime::T9ClearResolvedCache();
 }
 
 // 抽查文件有多少页在内存里：每 stride 页查一页，返回 0~1，打不开返回 -1。

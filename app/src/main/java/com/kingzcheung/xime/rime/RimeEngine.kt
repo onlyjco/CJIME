@@ -390,6 +390,7 @@ class RimeEngine {
                         mergedAlphabet = null
                         sessionReplaced()
                         isInitialized = true
+                        com.kingzcheung.xime.model.CandidateModelAssets.onModelFilesChanged = { clearT9ModelCache() }
 
                         // 部署后主动触发：为已部署目录中所有 T9 方案打九键特有补丁
                         // （t9 四要素 + 个人词库 packs 兜底），保证第三方九键方案
@@ -1177,6 +1178,7 @@ class RimeEngine {
             // 部署时 librime 才会编译对应的 user_<schemaId>.table.bin。
             // 幂等：补丁已就位时 native 侧直接 skip，开销极小。
             ensureT9SchemaPatchesForDeployedSchemas(userDataDir)
+            nativeClearT9ModelCache()
             try { return nativeDeploy() } finally { sessionReplaced() }
         }
     }
@@ -1191,6 +1193,7 @@ class RimeEngine {
         if (!isInitialized) return false
         mutateLocked {
             ensureT9SchemaPatchesForDeployedSchemas(userDataDir)
+            nativeClearT9ModelCache()
             // 先关掉会话再维护：会话开着时 librime 按缓存里的旧方案列表编译，刚打开的方案这一遍编不进去（11-15 首道双拼）。
             nativeReleaseSessionForMaintenance()
             if (!nativeStartMaintenance(false)) {
@@ -1322,6 +1325,12 @@ class RimeEngine {
         if (!isInitialized || schemaId.isEmpty()) return
         val usesModel = tryLocked(true) { !getSchemaString(schemaId, "t9/ngram_model").isNullOrEmpty() }
         if (!usesModel) nativeReleaseT9ModelPages()
+    }
+
+    /** 词组模型安装、切换或删除后清掉原生层路径和 mmap 缓存，无需重启进程，下次按键即重新加载。 */
+    fun clearT9ModelCache() {
+        if (!isInitialized) return
+        runCatching { nativeClearT9ModelCache() }
     }
 
     /** 抽查文件在内存里的比例（每 [stride] 页查一页），0~1；打不开为 -1。在 IO 线程调用。 */
@@ -1465,6 +1474,7 @@ class RimeEngine {
     private external fun nativePrefetchFile(path: String): Long
     private external fun nativeResidentFraction(path: String, stride: Int): Float
     private external fun nativeReleaseT9ModelPages()
+    private external fun nativeClearT9ModelCache()
     private external fun nativeGetCurrentSchema(): String?
     private external fun nativeProcessKey(keycode: Int, mask: Int): Boolean
     private external fun nativeProcessKeyAndGetResult(keycode: Int, mask: Int): RimeProcessResult

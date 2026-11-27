@@ -43,6 +43,9 @@ class DoublePinyinSentenceTest {
         assertEquals("2", line(t9, "rescore_keys_per_syllable"))
         assertEquals(line(section(full, "t9"), "ngram_model"), line(t9, "ngram_model"))
         assertEquals("false", line(t9, "ngram_sentence_start"))
+        assertEquals("2", line(t9, "menu_sentences"))
+        assertEquals("1.8", line(t9, "menu_sentence_margin"))
+        assertEquals("3", line(t9, "menu_prefixes"))
         // 全拼照旧按元音段判断（zdky 这类简拼保持 Rime 原顺序）。
         assertEquals(null, line(section(full, "t9"), "rescore_keys_per_syllable"))
     }

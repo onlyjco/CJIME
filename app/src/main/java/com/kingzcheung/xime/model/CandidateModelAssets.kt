@@ -14,6 +14,9 @@ internal object CandidateModelAssets {
     private fun disabledKey(id: String) = "candidate_model_disabled_$id"
     private val verifiedRuntime = ConcurrentHashMap<String, List<String>>()
 
+    /** Rime 引擎初始化后注册：词组模型安装、切换或删除时清理原生层缓存，免重启进程立即生效。 */
+    @Volatile internal var onModelFilesChanged: (() -> Unit)? = null
+
     /** 候选模型清单：内置的加上网上模型目录补的新版本（[RemoteModelVersions]），按文件认下载时要认得出新版本。 */
     private fun catalog(): List<ModelInfo> =
         ModelManager.getAllModels().filter { model -> CandidateModelCatalog.models.any { it.id == model.id } }
@@ -92,6 +95,7 @@ internal object CandidateModelAssets {
         if (model.id == CandidateModelCatalog.NGRAM || model.id == CandidateModelCatalog.NGRAM_SMALL) {
             dropSupersededGrammar(context)
             dropUnusedNgramVariant(context)
+            onModelFilesChanged?.invoke()
         }
     }
 
@@ -179,7 +183,11 @@ internal object CandidateModelAssets {
         val files = model.versions.flatMap { it.files }.map { it.name }.distinct().map { it to modelDownloadFile(root, it) }
         if (files.any { (name, file) -> file.exists() && !matchesAnyVersion(model, name, file) }) return false
         setDisabled(context, model.id, true)
-        return files.all { (_, file) -> !file.exists() || file.delete() }
+        val removed = files.all { (_, file) -> !file.exists() || file.delete() }
+        if (removed && (model.id == CandidateModelCatalog.NGRAM || model.id == CandidateModelCatalog.NGRAM_SMALL)) {
+            onModelFilesChanged?.invoke()
+        }
+        return removed
     }
 }
 

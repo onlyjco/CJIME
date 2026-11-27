@@ -26,6 +26,9 @@ class T9NgramModel {
   // the data stay valid: the next read faults the page back in from the page cache or storage.
   // For the keyboard to call when the current schema does not use a model (26 keys after 9 keys).
   static void ReleaseResidentPages();
+  // Clears cached model handles (including remembered missing-file nulls) so a newly installed
+  // or replaced t9_ngram.lm takes effect immediately without restarting the IME process.
+  static void ClearCache();
   ~T9NgramModel();
 
   int32_t Id(const char* text, size_t size) const;

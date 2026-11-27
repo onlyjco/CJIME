@@ -3323,7 +3323,7 @@ GitHub 暂时限制了查询次数，过一会儿再试	GitHub is temporarily li
 已导入「{0}」{1} 个词{2}，其中 {3} 个笔画编码的词只给笔画输入用，点「应用更改」后生效	Imported “{0}” with {1} words{2}; {3} of them have stroke codes and are for stroke input only. Tap “Apply changes” to use it
 CJIME 日志 - {0}	CJIME log - {0}
 分享失败: {0}	Sharing failed: {0}
-已安装，重新启动输入法后生效	Installed; takes effect after restarting the keyboard
+已安装，立即生效	Installed; takes effect immediately
 模型下载完成	Model downloaded
 模型已删除	Model deleted
 删除失败	Delete failed
