@@ -3622,7 +3622,7 @@ Language · 语言	Language · 语言
 长按拖动排序	Long-press and drag to reorder
 现在的条目会换成默认的几条，自己加的和改过的都会去掉。	The list will be replaced by the defaults. Entries you added or changed will be removed.
 显示自造词角标	Show learned-word badge
-学到的词在候选右上角显示小铅笔；关掉只是不显示，照常学习	Show a small pencil at the top right of words it has learned; turning this off only hides it, learning continues
+学到的词在候选右上角显示小圆点；关掉只是不显示，照常学习	Show a small dot at the top right of words it has learned; turning this off only hides it, learning continues
 # 设置页说明精简（11-18）
 0 到数字键盘里打	0 is on the number pad
 0 改在回车上{0}输入	0 moves to {0} on Enter
@@ -3991,3 +3991,6 @@ Shift、Ctrl、空格、删除键的小技巧	Tips for Shift, Ctrl, Space and De
 在数字或英文字母后输入标点符号时自动转为半角	Automatically convert punctuation to half-width after digits or English letters
 上下滑输入符号的距离：{0} dp	Swipe distance for symbols: {0} dp
 上下滑输入符号的距离	Swipe distance for symbols
+，其中 {0} 个没写拼音，按内置词库注上	; {0} had no pinyin and were read from the built-in dictionary
+，{0} 个单字内置词库里已有	; {0} single characters are already in the built-in dictionary
+，跳过 {0} 行（读不出拼音）	, {0} lines skipped (no pinyin could be found)

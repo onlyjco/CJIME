@@ -55,10 +55,16 @@ internal data class VoicePillResumeMark(val packageName: String, val atMs: Long)
 /** 打断后多久内回来还自动续听：等对方回消息够用，又不至于隔很久突然开麦。 */
 internal const val VOICE_PILL_RESUME_WINDOW_MS = 10 * 60_000L
 
-/** 悬浮条听写结束时是否记下续听：只有用户自己收起的悬浮条、因发送或焦点离开而停下才算。 */
+/** 连续语音听写结束时是否记下续听：发送、失焦、换输入框或收起键盘后回到输入框自动续听。 */
 internal fun voicePillResumeArmsAfter(end: VoiceSessionEnd, pillByUser: Boolean, enabled: Boolean): Boolean =
-    enabled && pillByUser && (end == VoiceSessionEnd.FIELD_CLEARED || end == VoiceSessionEnd.FOCUS_LEAVES ||
-        end == VoiceSessionEnd.FOCUS_TO_OTHER_FIELD)
+    enabled && pillByUser && (
+        end == VoiceSessionEnd.FIELD_CLEARED ||
+        end == VoiceSessionEnd.FOCUS_LEAVES ||
+        end == VoiceSessionEnd.FOCUS_TO_OTHER_FIELD ||
+        end == VoiceSessionEnd.COLLAPSE_BUTTON ||
+        end == VoiceSessionEnd.APP_HIDES_KEYBOARD ||
+        end == VoiceSessionEnd.BACK_KEY
+    )
 
 /** 回到输入框时是否自动续听：同一个应用、还在有效期内。 */
 internal fun voicePillResumeApplies(mark: VoicePillResumeMark?, packageName: String?, nowMs: Long): Boolean =

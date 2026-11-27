@@ -339,19 +339,12 @@ fun SettingsMainContent(
                         thickness = 0.5.dp,
                         color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f)
                     )
-                    // 首页这一行右边就是语音开关，点开关直接开关语音，点行进语音页（用户 10-20 要求恢复）。
-                    var sttEnabled by remember(entryStatus.sttEnabled) { mutableStateOf(entryStatus.sttEnabled) }
-                    SettingsToggleItem(
+                    SettingsItem(
                         icon = Icons.TwoTone.GraphicEq,
                         title = stringResource(R.string.item_speech_title), searchKey = "语音转文本",
                         subtitle = stringResource(R.string.item_speech_summary),
-                        checked = sttEnabled,
-                        showArrow = true,
                         onClick = onNavigateToSpeechToText,
-                        onCheckedChange = { enabled ->
-                            sttEnabled = enabled
-                            SettingsPreferences.setSttEnabled(context, enabled)
-                        }
+                        showArrow = true
                     )
                     HorizontalDivider(
                         modifier = Modifier.padding(start = 56.dp),
@@ -464,28 +457,12 @@ private val typingStatsSwitched = androidx.compose.runtime.mutableIntStateOf(0)
 
 @androidx.compose.runtime.Composable
 private fun TypingStatsSmartRow(onClick: () -> Unit) {
-    val context = LocalContext.current
-    val lifecycle = androidx.lifecycle.compose.LocalLifecycleOwner.current.lifecycle
-    var enabled by remember { mutableStateOf(com.kingzcheung.xime.stats.TypingStats.isEnabled(context)) }
-    LaunchedEffect(lifecycle) {
-        // 在统计页里开关后回到首页要跟着变。
-        lifecycle.repeatOnLifecycle(androidx.lifecycle.Lifecycle.State.RESUMED) {
-            enabled = com.kingzcheung.xime.stats.TypingStats.isEnabled(context)
-        }
-    }
-    SettingsToggleItem(
+    SettingsItem(
         icon = Icons.TwoTone.QueryStats,
         title = "打字统计", searchKey = "打字统计",
         subtitle = "只在本机记字数、速度和码长，不记内容",
-        checked = enabled,
-        showArrow = true,
         onClick = onClick,
-        onCheckedChange = {
-            enabled = it
-            com.kingzcheung.xime.stats.TypingStats.setEnabled(context, it)
-            typingStatsSwitched.intValue++
-        },
-        costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.TYPING_STATS,
+        showArrow = true,
     )
 }
 

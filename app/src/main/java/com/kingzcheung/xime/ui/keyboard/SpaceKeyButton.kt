@@ -73,8 +73,11 @@ fun SpaceKeyButton(
     val onMoveVertical by rememberUpdatedState(actions.onCursorMoveVertical)
     val onCursorMode by rememberUpdatedState(actions.onCursorModeChange)
     val onVoiceToggle by rememberUpdatedState(actions.onVoiceToggle)
+    val onVoiceHoldStart by rememberUpdatedState(actions.onVoiceHoldStart)
     val onVoiceHoldEnd by rememberUpdatedState(actions.onVoiceHoldEnd)
     val onVoiceHoldCancel by rememberUpdatedState(actions.onVoiceHoldCancel)
+    val onVoiceNormalLock by rememberUpdatedState(actions.onVoiceNormalLock)
+    val onVoiceContinuousLock by rememberUpdatedState(actions.onVoiceContinuousLock)
     val voiceOn by rememberUpdatedState(isVoiceMode)
     val holdAction = settings.effectiveSpaceHold
     val cursorUnitPx = rememberCursorUnitPx()
@@ -117,17 +120,18 @@ fun SpaceKeyButton(
                 size = size, cornerRadius = CornerRadius(KeyShapes.current.radius(shadowShapeRadius).toPx()))
         } else Modifier
     }
-    val keyFill = frostedKeyColor(
-        backgroundColor, textColor, frostedGlass,
-        legacyStateColor = if (pressed) backgroundColor.copy(alpha = 0.7f) else backgroundColor,
-        pressed = pressed,
-    )
     // 上滑取消的提示只在麦克风真开着时显示（语音总开关关着时长按不会开麦）。
     val showVoiceCancel = voiceHolding && isVoiceMode
     // 已锁定、还在听：手指离开了，空格照样是在听的样子，写「点按结束」。
     val voiceLocked = voiceLock?.locked == true && isVoiceMode
     // 进入语音的样子同样只在麦克风真开着时出现：总开关关着、输入框不许语音时不假装在听。
     val showVoiceHold = (voiceHoldStarted || voiceLocked) && isVoiceMode
+    val visualPressed = pressed && !showVoiceHold
+    val keyFill = frostedKeyColor(
+        backgroundColor, textColor, frostedGlass,
+        legacyStateColor = if (visualPressed) backgroundColor.copy(alpha = 0.7f) else backgroundColor,
+        pressed = visualPressed,
+    )
     // 锁按钮跟着麦克风真开着才浮出来（按住说话、但麦没开起来时不出锁）；只由开始这次说话的这个空格去写。
     // 开了上滑取消时中间的取消按钮一起浮出，过线时跟空格一起变红。
     SideEffect {
@@ -164,13 +168,6 @@ fun SpaceKeyButton(
         accentColor, KeyFlickFeedback.DELETE, cancelProgress, frostedGlass.enabled) else null
     // 音量（0~1，没在听时 0）：只在绘制时读，音量变了只重画不重组。
     val voiceLevel = LocalKeyGapLightVoice.current
-    val voiceSpread = remember { Animatable(0f) }
-    LaunchedEffect(showVoiceHold) {
-        if (showVoiceHold) {
-            voiceSpread.snapTo(0f)
-            voiceSpread.animateTo(1f, tween(VOICE_HOLD_SPREAD_MS, easing = FastOutSlowInEasing))
-        } else voiceSpread.animateTo(0f, tween(VOICE_HOLD_FADE_MS))
-    }
     // 换语言后空格先写语言名再淡成图标（用户 11-09，像 iOS）；只在平时不写语言名时出现。
     val displayName = schemaName.replace("拼音九键", "拼音")
     LaunchedEffect(displayName) { SpaceLanguageFlash.observe(displayName, android.os.SystemClock.uptimeMillis()) }
@@ -247,7 +244,8 @@ fun SpaceKeyButton(
                             SpaceHoldAction.VOICE_TOGGLE -> {
                                 // 工具栏麦克风已经在听时，长按只把它结束，松手不再动。
                                 startedVoice = !voiceOn
-                                onVoiceToggle?.invoke()
+                                if (startedVoice) (onVoiceHoldStart ?: onVoiceToggle)?.invoke()
+                                else onVoiceToggle?.invoke()
                                 voiceHolding = startedVoice && settings.voiceSwipeCancel
                                 if (startedVoice) { voiceHoldX = lastX; voiceHoldStarted = true; voiceLock?.space = spaceBounds }
                             }
@@ -292,7 +290,6 @@ fun SpaceKeyButton(
                                 // 抬手那一下偏出去：还算刚才那一把。
                                 voiceLock.side = if (side != 0) side else if (lockArmed) voiceLock.side else 0
                                 onCancelButton = voiceLock.cancelButtonContains(inRoot)
-                                voiceLock.finger = inRoot
                                 if (lockArmed != voiceLock.armed) {
                                     voiceLock.armed = lockArmed
                                     if (lockArmed && voiceLock.holding) view.performKeyboardHaptic(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
@@ -393,10 +390,12 @@ fun SpaceKeyButton(
                             com.kingzcheung.xime.util.FileLogger.i("SpaceVoiceLock", "release armed=${voiceLock?.armed} side=${voiceLock?.side} " +
                                 "holding=${voiceLock?.holding} voiceOn=$voiceOn lock=$lockNow cancel=${voiceHolding && voiceCancelArmed}")
                             when {
-                                // 锁定：手指离开也一直听，点一下空格结束。和锁按钮画「到位」用同一个条件（[SpaceVoiceLockState.lockReady]）。
+                                // 锁定：左锁普通锁定（绝不触发连续语音），右锁开启当次连续语音并锁定。
                                 lockNow -> {
-                                    voiceLock?.lockedSide = voiceLock?.side?.takeIf { it != 0 } ?: -1
+                                    val lockedContinuous = (voiceLock?.side ?: 0) > 0
                                     voiceLock?.locked = true
+                                    if (lockedContinuous) onVoiceContinuousLock?.invoke()
+                                    else onVoiceNormalLock?.invoke()
                                     view.performKeyboardHaptic(android.view.HapticFeedbackConstants.KEYBOARD_TAP)
                                 }
                                 voiceHolding && voiceCancelArmed -> onVoiceHoldCancel?.invoke()
@@ -408,7 +407,6 @@ fun SpaceKeyButton(
                         voiceLock?.side = 0
                         voiceLock?.cancelShown = false
                         voiceLock?.cancelArmed = false
-                        voiceLock?.finger = Offset.Unspecified
                         voiceHolding = false
                         voiceCancelArmed = false
                         voiceCancelPull = 0f
@@ -423,18 +421,7 @@ fun SpaceKeyButton(
             .padding(scaledKeyVisualPadding())
             .keyGlow(Modifier.then(shadow)
             .clip(RoundedCornerShape(LocalKeyCornerRadius.current))
-            .background(cancelColors?.background ?: keyFill)
-            .drawBehind {
-                // 开始说话：强调色从按住的地方铺满整个空格，之后随音量轻轻变深；上滑时一点点让给删除色。
-                val spread = voiceSpread.value * (1f - cancelProgress)
-                if (spread > 0f) {
-                    val level = voiceLevel?.invoke() ?: 0f
-                    val x = voiceHoldX.coerceIn(0f, size.width)
-                    val reach = kotlin.math.hypot(maxOf(x, size.width - x), size.height)
-                    drawCircle(accentColor.copy(alpha = (0.20f + 0.16f * level) * spread),
-                        radius = reach * voiceSpread.value, center = Offset(x, size.height / 2f))
-                }
-            },
+            .background(cancelColors?.background ?: keyFill),
                 // 键缝动效：空格真的输入了一下，一块光从空格往上走到顶边；按住移光标时色块跟着手指。
                 gapLight = GapLightKind.RISE, gapLightTrigger = gapLightTrigger),
         contentAlignment = Alignment.Center
@@ -451,7 +438,8 @@ fun SpaceKeyButton(
         if (showVoiceHold) {
             val hintSize = (maxHeight.value * 0.32f / density.fontScale).coerceIn(9f, 16f)
             val color = cancelColors?.foreground ?: textColor
-            Row(Modifier.graphicsLayer { alpha = voiceSpread.value }.semantics { contentDescription = "空格，正在语音输入" },
+            // 不使用 graphicsLayer alpha 离屏层，避免麦克风外圈采样光晕在出现瞬间被 Row 边界裁切。
+            Row(Modifier.semantics { contentDescription = "空格，正在语音输入" },
                 verticalAlignment = Alignment.CenterVertically) {
                 VoiceHoldMic(lerp(accentColor, color, cancelProgress), (hintSize * 1.3f).dp, voiceLevel)
                 if (voiceLocked && !voiceHoldStarted) {
@@ -465,6 +453,7 @@ fun SpaceKeyButton(
                     Spacer(Modifier.width(4.dp))
                     Text(when {
                         voiceLocked && !voiceHoldStarted -> "点按结束"
+                        showVoiceLockArmed && (voiceLock?.side ?: 0) > 0 -> "松手连续"
                         showVoiceLockArmed -> "松手锁定"
                         showVoiceCancel && voiceCancelArmed -> "松手取消"
                         showVoiceCancel -> "上滑取消"

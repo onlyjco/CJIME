@@ -623,7 +623,10 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         }
         val origin = glassAnchorOrigin()
         if (handwritingGlassControls != bounds || handwritingGlassControlsOrigin != origin) {
+            // 全屏手写报给应用的顶线跟着这块按键的顶边走（computeImeInsets）：顶边变了再排一次版，让系统重算。
+            val topChanged = handwritingGlassControls?.top != bounds?.top
             handwritingGlassControls = bounds
+            if (topChanged && ::keyboardContainer.isInitialized) keyboardContainer.requestLayout()
             handwritingGlassControlsOrigin = origin
             updateKeyboardGlass()
         }
@@ -1012,12 +1015,14 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
      * 幂等：收尾已在进行中时重复调用自动跳过。
      */
     internal fun endVoiceSession() {
+        stopVoicePillResume()
         voiceRecognitionHandler.cancelPreStart()
         voiceRecognitionHandler.finishRecognition()
     }
 
     /** 按住空格说话上滑取消：停麦，撤掉这次已经写进输入框的字，迟到的识别结果也不再写。 */
     internal fun cancelVoiceSession() {
+        stopVoicePillResume()
         voiceRecognitionHandler.discardSession()
         voiceRecognitionHandler.cancelPreStart()
         restoreAfterVoiceFinish()
@@ -1033,6 +1038,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         keyboardViewModel.exitVoice()
         isTrackingVoiceButtons = false
         voiceRecordingStarted = false
+        TerminalEditor.voiceActive = false
         voiceAmplitudeState.floatValue = 0f
         uiState.value = uiState.value.copy(
             isVoiceMode = false,
@@ -1049,6 +1055,11 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         if (voicePillRestartInPlace) {
             voicePillRestartInPlace = false
             scheduleVoicePillResume()
+        } else {
+            suppressVoiceContinuousForSession = false
+            if (!voicePillResume.armed && !temporaryVoiceContinuous && uiState.value.spaceVoiceContinuousOverride != null) {
+                uiState.value = uiState.value.copy(spaceVoiceContinuousOverride = null)
+            }
         }
         // 悬浮条是因为 App 收起键盘才出现的：听写结束就一起收起，回到 App 原来没有键盘的样子。
         if (voicePillAuto) {
@@ -2406,7 +2417,19 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 val frostedGlass = keyboardPrefs.frostedGlass
                 // 尺寸调整中的透明度控制整块键盘；玻璃表面参数仍由独立设置管理。
                 val keyboardLayerOpacity = state.keyboardOpacity
-                val page by keyboardViewModel.page.collectAsState(com.kingzcheung.xime.keyboard.KeyboardPage.Main(com.kingzcheung.xime.keyboard.MainType.FULL))
+                val page = keyboardViewModel.pageState.value
+                // 同步语音听写期间的编码显示位置：开启语音时把编码临时切到键盘编码区，避免与语音实时正文冲突。
+                val voiceInputRedirect = state.isVoiceMode || voiceRecordingStarted
+                if (TerminalEditor.voiceActive != voiceInputRedirect) {
+                    TerminalEditor.voiceActive = voiceInputRedirect
+                }
+                LaunchedEffect(voiceInputRedirect) {
+                    if (voiceInputRedirect) {
+                        if (inlineComposition.active) endComposingInputBox()
+                    } else if (candidateState.value.isComposing) {
+                        syncInlinePinyinLocation()
+                    }
+                }
                 LaunchedEffect(page) {
                     if ((page as? KeyboardPage.Overlay)?.route !is OverlayRoute.Clipboard && clipboardKeyboard.active) {
                         clipboardKeyboard.reset()
@@ -2418,7 +2441,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                     isHandwritingMode && !state.showKeyboardResize && !state.isCompact,
                     state.handwritingExpanded, state.inputSessionId, instant = state.handwritingRestored)
                 val handwritingExpanded = handwritingExpansion.active
-                val clipboardPanelOpen = !state.clipboardSearchVisible &&
+                val clipboardPanelOpen = !state.clipboardSearchVisible && !handwritingExpanded &&
                     clipboardPanelCanExpand(page, state.showKeyboardResize, state.isCompact)
                 val imagePanelExpanded = clipboardPanelOpen && state.clipboardImagesExpanded
                 LaunchedEffect(clipboardPanelOpen) {
@@ -2438,8 +2461,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 // 「柔化顶部边缘」只给固定键盘、顶部直角时（顶部圆角的缺口里没法渐变；设置页两者互锁）。
                 val softTopEdge = com.kingzcheung.xime.ui.keyboard.rememberGlassSoftTopEdge()
                 val roundedKeyboardTop = com.kingzcheung.xime.ui.keyboard.rememberRoundedKeyboardTop()
+                // 固定键盘进入调节模式时保持柔化顶边子窗状态，避免刚点进调节就拆掉模糊子窗引发 HyperOS PassBlur 闪白。
                 val glassTopFeather = frostedGlass.enabled && softTopEdge && !roundedKeyboardTop && !state.isCompact &&
-                    !state.voiceCollapsed && !state.isFloatingMode && !handwritingExpanded && !state.showKeyboardResize
+                    !state.voiceCollapsed && !state.isFloatingMode && !handwritingExpanded
                 // A see-through keyboard showing a panel (clipboard, emoji, symbols, editing, clipboard
                 // search) blurs the app behind it, so the panel's text is not read through the app's.
                 val panelBackdrop = com.kingzcheung.xime.ui.theme.panelNeedsBackdropBlur(frostedGlass.enabled,
@@ -2633,7 +2657,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                             handwritingOverlayActive = handwritingExpanded
                             val inClipboardMotion = clipboardExpansion?.isInMotion == true
                             clipboardMotionActive = inClipboardMotion
-                            if (state.isFloatingMode || state.showKeyboardResize || state.isCompact) {
+                            if (state.isFloatingMode || state.showKeyboardResize || state.isCompact || handwritingExpanded) {
                                 keyboardContainer.updateMatchParentHeight()
                             } else {
                                 keyboardContainer.updateHeight(totalDp)
@@ -2823,75 +2847,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                             )
                           }
                           }
-                        } else if (state.voiceCollapsed) {
-                          // 语音收起：键盘让位，只留底部悬浮条；外观沿用实体键盘浮条（主题 + 毛玻璃）。
-                          androidx.compose.runtime.CompositionLocalProvider(
-                              com.kingzcheung.xime.ui.theme.LocalMaterialPalette provides
-                                  com.kingzcheung.xime.ui.theme.MaterialPalette(cardBg, hardwarePalette.accent)) {
-                          Box(Modifier.fillMaxSize().padding(bottom = activeBottomDp.dp)) {
-                            androidx.compose.runtime.DisposableEffect(Unit) {
-                                voicePillOnScreen = true
-                                onDispose { voicePillOnScreen = false; voicePillMoving = false; voicePillReserveTop = null }
-                            }
-                            val pillPrefs = com.kingzcheung.xime.ui.keyboard.rememberKeyboardInputPreferences(isDark)
-                            val pillContinuous = androidx.compose.runtime.remember {
-                                androidx.compose.runtime.mutableStateOf(SettingsPreferences.isSttPillResume(this@XimeInputMethodService))
-                            }
-                            val glass = pillPrefs.frostedGlass
-                            val pillEnglish = state.isAsciiMode || state.inputProfile.language == com.kingzcheung.xime.settings.InputLanguage.ENGLISH
-                            com.kingzcheung.xime.ui.keyboard.VoiceCollapsedPill(
-                                listening = state.isVoiceMode,
-                                autoResumed = voicePillAutoResumed.value,
-                                amplitude = { voiceAmplitudeState.floatValue },
-                                languageLabel = if (pillEnglish) "EN" else when (state.inputProfile.language) {
-                                    com.kingzcheung.xime.settings.InputLanguage.CHINESE -> "中"
-                                    com.kingzcheung.xime.settings.InputLanguage.CANTONESE -> "粤"
-                                    else -> state.inputProfile.language.displayName
-                                },
-                                languageActions = com.kingzcheung.xime.ui.keyboard.KeyboardInputActions(
-                                    schemas = com.kingzcheung.xime.settings.InputModes.available(state.schemas),
-                                    currentInputModeId = com.kingzcheung.xime.settings.InputModes.selectedId(state.currentSchemaId, state.isAsciiMode),
-                                    fieldNativeModeId = state.currentSchemaId.takeIf { state.isAddressField },
-                                    onSwitchSchema = { id -> if (inputReadiness.ticket() != null) schemaController.switchSchema(id) },
-                                ),
-                                onSwitchLanguage = { switchHardwareLanguage() },
-                                onShowKeyboard = { expandFromVoicePill() },
-                                onBackspace = { keyboardCallbacks?.onKeyPress("delete", false) },
-                                onBackspacePress = { keyboardCallbacks?.onKeyPressDown?.invoke("delete") },
-                                onBackspaceRelease = { keyboardCallbacks?.onKeyRelease?.invoke("delete") },
-                                backspaceRepeatMs = pillPrefs.deleteRepeatSpeed.intervalMs,
-                                // 连续语音开关（设置 › 语音转文本里同一项，键不变）：用户 11-22 要在浮窗里直接开关。
-                                continuous = pillContinuous.value,
-                                onContinuousChange = { on ->
-                                    pillContinuous.value = on
-                                    SettingsPreferences.setSttPillResume(this@XimeInputMethodService, on)
-                                },
-                                onMic = {
-                                    // 在悬浮条上点麦克风停下：用户自己停的，之后不再自动续听。
-                                    // 收尾期间焦点离开也不能再记成“被打断”。
-                                    if (uiState.value.isVoiceMode) { stopVoicePillResume(); voiceStopRequested = true }
-                                    keyboardCallbacks?.onVoiceStickyToggle?.invoke()
-                                },
-                                backgroundColor = cardBg,
-                                contentColor = hardwarePalette.candidateText,
-                                selectedTextColor = hardwarePalette.selectedText,
-                                accentColor = hardwarePalette.accent,
-                                frostedGlass = glass,
-                                surface = {
-                                    Modifier.keyboardBackground(rootTheme.keyboardBackground, isDark, cardBg,
-                                        frostedGlass = glass, translucentSurface = true)
-                                },
-                                onBoundsChanged = { updateHardwareSurfaceBounds(toolbar = true, it) },
-                                position = hardwareToolbarPosition.value,
-                                onPositionChange = { hardwareToolbarPosition.value = it },
-                                dockAtEdge = state.hardwareOptions.dockAtEdge,
-                                onMovingChange = { moving ->
-                                    voicePillMoving = moving
-                                    if (!moving && ::keyboardContainer.isInitialized) keyboardContainer.requestLayout()
-                                },
-                            )
-                          }
-                          }
                         } else {
                         // The navigation strip and keyboard sample one backdrop in window coordinates;
                         // this strip draws only its own slice, never a separately fitted glass image.
@@ -3002,6 +2957,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                                     recentClipboardItems = recentClipboardItemsState.value,
                                     isVoiceMode = state.isVoiceMode,
                                     voiceSticky = state.voiceSticky,
+                                    voiceContinuousSession = state.voiceContinuousSession,
+                                    spaceVoiceContinuousOverride = state.spaceVoiceContinuousOverride,
                                     voiceBottomActive = state.voiceButtonState.bottomActive,
                                     voiceLeftActive = state.voiceButtonState.leftActive,
                                     voiceRightActive = state.voiceButtonState.rightActive,
@@ -4043,9 +4000,20 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             if (event?.isCanceled != true) collapseScreenKeyboardToHardwareToolbar()
             return true
         }
-        // 返回键就是退出键盘：听写同时结束，不收成悬浮条（用户 10-24）。
+        // 返回键就是退出键盘：未开连续语音时结束听写；开了连续语音则先记下续听再停麦，回来自动续听。
         if (keyCode == KeyEvent.KEYCODE_BACK && event?.isCanceled != true && uiState.value.isVoiceMode &&
-            !voiceKeepsListeningAfter(VoiceSessionEnd.BACK_KEY)) { stopVoicePillResume(); stopVoiceBeforeLeaving() }
+            !voiceKeepsListeningAfter(VoiceSessionEnd.BACK_KEY)) {
+            if (voicePillResumeEnabled()) {
+                noteVoicePillInterrupted(VoiceSessionEnd.BACK_KEY)
+                voiceStopRequested = true
+                mainHandler.removeCallbacks(showVoicePillAfterHide)
+                voiceRecognitionHandler.endInputSession()
+                restoreAfterVoiceFinish()
+            } else {
+                stopVoicePillResume()
+                stopVoiceBeforeLeaving()
+            }
+        }
         return super.onKeyUp(keyCode, event)
     }
 
@@ -4406,13 +4374,11 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         applyCompactMode()
         softEditorBoundsOnScreen = null
         requestSoftEditorBounds()
-        // 开车连续语音：回到刚才的应用，键盘直接是悬浮条，随后自动开麦。
+        // 连续语音：回到刚才的应用，保持正常展开键盘并自动重新开麦。
         if (voicePillResumePending && !settingsPreviewEditor) {
             voicePillResumePending = false
             if (!uiState.value.isCompact) {
-                voicePillByUser = true
                 voicePillPackage = currentInputEditorInfo?.packageName
-                uiState.value = uiState.value.copy(voiceCollapsed = true, handwritingExpanded = false)
                 scheduleVoicePillResume()
             }
         }
@@ -4427,7 +4393,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     }
 
     /** 手写上次是全屏就直接全屏打开（11-05）；首次和上次半屏都照旧半屏。 */
-    private fun restoreHandwritingFullscreen() {
+    internal fun restoreHandwritingFullscreen() {
         val state = uiState.value
         val handwritingPage = (keyboardViewModel.page.value.underlyingPage() as? KeyboardPage.Main)?.type ==
             com.kingzcheung.xime.keyboard.MainType.HANDWRITING
@@ -4440,6 +4406,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
                 resizing = state.showKeyboardResize,
                 settingsPreview = settingsPreviewEditor,
             )) return
+        if (::keyboardContainer.isInitialized) keyboardContainer.updateMatchParentHeight()
         uiState.value = state.copy(handwritingExpanded = true, handwritingRestored = true)
     }
 
@@ -5010,19 +4977,13 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         inputStallWatchdog?.stop()
         HeapReclaim.onKeyboardHidden()
         KeyboardPanelLaunch.previewVisible = false
-        val keepVoice = voiceKeptAlive
         voiceKeptAlive = false
         mainHandler.removeCallbacks(showVoicePillAfterHide)
         mainHandler.removeCallbacks(stopVoiceIfStillHidden)
-        if (keepVoice) {
-            // 不清输入会话：听写会话以它为准，清了就会被当成换了输入框而丢弃。
-            mainHandler.postDelayed(showVoicePillAfterHide, VOICE_PILL_RESHOW_DELAY_MS)
-        } else {
-            // 返回键、焦点离开、锁屏等：本次听写到此结束，麦克风立即释放。
-            voiceRecognitionHandler.endInputSession()
-            // 切去别的应用时系统缺内存就卸掉空闲的语音模型；照 AOSP 的 Android 14 起不再发缺内存的回调。
-            com.kingzcheung.xime.speech.AsrBackendFactory.keyboardHidden()
-        }
+        // 独立语音悬浮窗已摘除：键盘收起时若开启连续语音先记下续听，再立即结束本次录音并释放麦克风。
+        noteVoicePillInterrupted(VoiceSessionEnd.APP_HIDES_KEYBOARD)
+        voiceRecognitionHandler.endInputSession()
+        com.kingzcheung.xime.speech.AsrBackendFactory.keyboardHidden()
         // 玻璃模糊窗口晚 1 秒再拆：onWindowHidden 时系统的下滑收起动画才开始播，立刻拆掉的话，
         // 下滑那一段键盘后面没有模糊，应用的字清清楚楚透出来，看着就是「闪一下」。模糊窗口是输入法窗口的
         // 子窗口，键盘收完会跟着一起藏，晚拆不会多露一块；1 秒内又弹出来（切聊天框）就直接接着用，不重建。
@@ -5038,10 +4999,14 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         runtimeObserver?.stop()
         clipboardSyncBridge?.setKeyboardVisible(false)
         cancelKeyboardResize()
-        if (!keepVoice) clearInputState(preserveRecentClipboard = true)
+        // 菜单页点设置跳转时不在点击瞬间关菜单（避免闪出底层按键），等键盘真正收起后再静默复位菜单页。
+        if ((keyboardViewModel.page.value as? com.kingzcheung.xime.keyboard.KeyboardPage.Overlay)?.route == OverlayRoute.Menu) {
+            keyboardViewModel.closeOverlay()
+        }
+        clearInputState(preserveRecentClipboard = true)
         // 手动切到的数字面板只算这一次输入：收起键盘就回到主键盘，下次弹出（同一个框或别的框）不再停在数字面板（#334）。
-        // 数字框（自动数字面板）、剪贴板表情这些覆盖页、留着的语音条都不动。
-        if (!keepVoice && lastStartWantedNumberPanel != true && keyboardViewModel.page.value.let {
+        // 数字框（自动数字面板）、剪贴板表情这些覆盖页不动。
+        if (lastStartWantedNumberPanel != true && keyboardViewModel.page.value.let {
                 it is com.kingzcheung.xime.keyboard.KeyboardPage.Panel && it.type == com.kingzcheung.xime.keyboard.PanelType.NUMBER })
             keyboardViewModel.resetKeyboard(uiState.value.isAsciiMode,
                 uiState.value.currentSchemaId.ifBlank { SettingsPreferences.getCurrentSchema(this) })
@@ -5074,6 +5039,13 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             glassBlurWindows.values.forEach { it.setVisible(false) }
         }
         startVoiceAfterPermission()
+        // 连续语音：同一输入框内收起再弹起键盘（不走 onStartInput）时自动重新开麦。
+        if (!settingsPreviewEditor && !uiState.value.isCompact && !uiState.value.isVoiceMode &&
+            voicePillResumeEnabled() && voicePillResume.appliesTo(currentInputEditorInfo?.packageName) &&
+            voicePillResumeFieldAllowed()) {
+            voicePillPackage = currentInputEditorInfo?.packageName
+            scheduleVoicePillResume()
+        }
         requestHardwareCursorUpdates()
         startRuntimeObservation()
         // 键盘弹出时对比系统取色与缓存的动态主题色，壁纸取色变化则重建主题并热更新 UI。
@@ -5216,10 +5188,12 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         if (uiState.value.isVoiceMode || voiceRecordingStarted) {
             isTrackingVoiceButtons = false
             voiceRecordingStarted = false
+            TerminalEditor.voiceActive = false
             voiceAmplitudeState.floatValue = 0f
             uiState.value = uiState.value.copy(
                 isVoiceMode = false,
                 voiceSticky = false,
+                spaceVoiceContinuousOverride = if (temporaryVoiceContinuous && voicePillResume.armed) true else null,
                 voiceButtonState = VoiceButtonState(),
                 voiceRecognitionState = RecognitionState.IDLE,
                 voiceRecognizedText = "",
@@ -5269,6 +5243,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             mark = { markInputBoxComposing(it) },
             owns = { inlineComposition.active && inlineComposition.text == it && inlineComposition.caret == it.length },
             clear = { endComposingInputBox() },
+            existingRanges = { candidateState.value.glideUnderlineRanges },
         )
     }
     private val glidePreviewRouter by lazy {
@@ -5515,15 +5490,31 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         val ic = currentInputConnection
         val last = lastEditorIdentity
         val state = uiState.value
-        if ((!restarting && !afterLock) || attribute == null || ic == null || last == null || code.isNullOrEmpty() || !inlineComposition.active ||
+        if ((!restarting && !afterLock) || attribute == null || ic == null || last == null ||
             attribute.packageName.isNullOrEmpty() || attribute.packageName != last.first || attribute.fieldId != last.second ||
             (afterLock && attribute.inputType != last.third) ||
             editorInputPolicy.field.scoped || EditorFieldPolicy.from(attribute).scoped ||
             EditorInfoClassifier.isSecretEditor(attribute) || EditorInfoClassifier.isTerminalEditor(attribute) ||
-            state.inputTarget.isInternal || state.isVoiceMode || voiceRecordingStarted || !candidateState.value.isComposing ||
-            TerminalEditor.inputTextLocation(this) != SettingsPreferences.INPUT_TEXT_INPUT_BOX) return false
+            state.inputTarget.isInternal || state.isVoiceMode || voiceRecordingStarted) return false
         val selStart = attribute.initialSelStart
         val selEnd = attribute.initialSelEnd
+        val caretContinues = selStart >= 0 && selStart == selEnd && (selStart == voiceHostCaret || selStart == voiceHostCaretBefore ||
+            ((if (AndroidPlatform.initialSurroundingText) attribute.getInitialTextAfterCursor(1, 0) else null)
+                ?: runCatching { ic.getTextAfterCursor(1, 0) }.getOrNull())?.isEmpty() == true)
+        val resume = restartResume(TerminalEditor.inputTextLocation(this) == SettingsPreferences.INPUT_TEXT_INPUT_BOX,
+            inlineComposition.active, code, candidateState.value.isComposing, inputCommands.hasPendingCommands, caretContinues)
+        if (resume == RestartResume.KEEP && !afterLock) {
+            // 框里没有我们写的编码，宿主的初始光标可信：之后的编码、上屏从这里接着写。
+            (ic as? TrackedInputConnection)?.memory?.started(selStart, selEnd, enabled = true)
+            inlineComposition.selectionReported(selStart, selEnd, -1, -1)
+            continueFieldAfterRestart(attribute, restarting)
+            FileLogger.w("InputLifecycle", "composition kept after restart: composing=${candidateState.value.isComposing} " +
+                "queued=${inputCommands.hasPendingCommands}")
+            voiceHostCaretBefore = -1
+            voiceHostCaret = selStart
+            return true
+        }
+        if (resume != RestartResume.ADOPT_INLINE || code == null) return false
         val window = code.length + 1
         val before = (if (AndroidPlatform.initialSurroundingText) attribute.getInitialTextBeforeCursor(window, 0) else null)
             ?: runCatching { ic.getTextBeforeCursor(window, 0) }.getOrNull()
@@ -5546,6 +5537,15 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             } finally { ic.endBatchEdit() }
         }.getOrDefault(false)
         if (!adopted) return false
+        continueFieldAfterRestart(attribute, restarting)
+        // 只记长度与位置，不记文字内容。
+        FileLogger.w("InputLifecycle", "inline composition resumed after restart: len=${code.length} " +
+            "sel=$selStart/$selEnd at=${region.start}")
+        return true
+    }
+
+    /** 接着用上一个连接里的输入会话：只换成新连接的框属性，拼音、候选、队列都不动。 */
+    private fun continueFieldAfterRestart(attribute: EditorInfo, restarting: Boolean) {
         lastEditorIdentity = Triple(attribute.packageName, attribute.fieldId, attribute.inputType)
         beginEditorField(attribute, restarting)
         englishEditorReadCapability.clear()
@@ -5553,10 +5553,6 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         updateHardwareKeyboardConnection()
         requestHardwareCursorUpdates()
         updateEnterKeyText(attribute)
-        // 只记长度与位置，不记文字内容。
-        FileLogger.w("InputLifecycle", "inline composition resumed after restart: len=${code.length} " +
-            "sel=$selStart/$selEnd at=${region.start}")
-        return true
     }
 
     /**
@@ -5702,6 +5698,8 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         if (collapseScreenKeyboardToHardwareToolbar()) return
         // 语音听写中：收起成底部悬浮条，语音继续（仿 Gboard），不结束本次听写。
         if (collapseToVoicePill(VoiceSessionEnd.COLLAPSE_BUTTON)) return
+        // 连续语音开启时，点键盘收起按钮先记下续听再清理状态，再次打开键盘时自动续听。
+        noteVoicePillInterrupted(VoiceSessionEnd.COLLAPSE_BUTTON)
         KeyboardPanelLaunch.closeTypingTrial?.invoke()
         clearInputState()
         requestHideSelf(0)
@@ -5726,7 +5724,9 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     private fun stopVoiceBeforeLeaving() {
         voiceStopRequested = true
         mainHandler.removeCallbacks(showVoicePillAfterHide)
-        endVoiceSession()
+        // 发送/清空触发的自动停麦不清除连续语音续听标记（区别于用户主动点击停麦的 endVoiceSession）。
+        voiceRecognitionHandler.cancelPreStart()
+        voiceRecognitionHandler.finishRecognition()
     }
 
     private val showVoicePillAfterHide = Runnable {
@@ -5761,8 +5761,59 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
     /** 这段听写是自动续上的：悬浮条写明，免得用户不知道麦克风为什么开着。 */
     private val voicePillAutoResumed = androidx.compose.runtime.mutableStateOf(false)
 
-    private fun voicePillResumeEnabled(): Boolean =
-        SettingsPreferences.isSttEnabled(this) && SettingsPreferences.isSttPillResume(this)
+    /** 长按空格右锁触发的当次连续语音（不改持久化设置，主动停麦时清除）。 */
+    private var temporaryVoiceContinuous = false
+    /** 长按空格左侧普通锁触发的当次非连续语音（不论设置里的连续语音开关是否打开，均不触发连续语音）。 */
+    private var suppressVoiceContinuousForSession = false
+
+    internal fun resetVoiceContinuousSessionOverride() {
+        suppressVoiceContinuousForSession = false
+        if (!temporaryVoiceContinuous && uiState.value.spaceVoiceContinuousOverride != null) {
+            uiState.value = uiState.value.copy(spaceVoiceContinuousOverride = null)
+        }
+    }
+
+    internal fun beginSpaceVoiceHold() {
+        suppressVoiceContinuousForSession = false
+        temporaryVoiceContinuous = false
+        if (uiState.value.voiceContinuousSession || uiState.value.spaceVoiceContinuousOverride != false) {
+            uiState.value = uiState.value.copy(
+                voiceContinuousSession = false,
+                spaceVoiceContinuousOverride = false,
+            )
+        }
+    }
+
+    internal fun disableVoiceContinuousForSession() {
+        suppressVoiceContinuousForSession = true
+        temporaryVoiceContinuous = false
+        if (uiState.value.voiceContinuousSession || uiState.value.spaceVoiceContinuousOverride != false) {
+            uiState.value = uiState.value.copy(
+                voiceContinuousSession = false,
+                spaceVoiceContinuousOverride = false,
+            )
+        }
+        voicePillResume.disarm()
+        voicePillRestartInPlace = false
+        voicePillResumePending = false
+        cancelVoicePillResume()
+    }
+
+    internal fun enableTemporaryVoiceContinuous() {
+        suppressVoiceContinuousForSession = false
+        temporaryVoiceContinuous = true
+        if (!uiState.value.voiceContinuousSession || uiState.value.spaceVoiceContinuousOverride != true) {
+            uiState.value = uiState.value.copy(
+                voiceContinuousSession = true,
+                spaceVoiceContinuousOverride = true,
+            )
+        }
+    }
+
+    private fun voicePillResumeEnabled(): Boolean {
+        if (suppressVoiceContinuousForSession) return false
+        return SettingsPreferences.isSttPillResume(this) || temporaryVoiceContinuous
+    }
 
     private fun voicePillResumeFieldAllowed(): Boolean {
         val audio = getSystemService(AUDIO_SERVICE) as android.media.AudioManager
@@ -5773,17 +5824,27 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             com.kingzcheung.xime.util.PermissionHelper.hasRecordAudioPermission(this))
     }
 
-    /** 悬浮条听写正被发送、失焦或换输入框打断：记下应用，回来时续听。用户已要求停止、熄屏都不记。 */
+    /** 连续语音听写正被发送、失焦或换输入框打断：记下应用，回到展开键盘时自动续听。 */
     private fun noteVoicePillInterrupted(end: VoiceSessionEnd) {
         val state = uiState.value
-        if (!state.voiceCollapsed || !state.isVoiceMode || !state.voiceSticky || voiceStopRequested) return
+        if (!state.isVoiceMode || !state.voiceSticky || voiceStopRequested) return
         if (!(getSystemService(POWER_SERVICE) as android.os.PowerManager).isInteractive) { stopVoicePillResume(); return }
-        if (voicePillResumeArmsAfter(end, voicePillByUser, voicePillResumeEnabled()))
-            voicePillResume.arm(voicePillPackage)
+        if (voicePillResumeArmsAfter(end, pillByUser = true, enabled = voicePillResumeEnabled())) {
+            val pkg = voicePillPackage ?: currentInputEditorInfo?.packageName
+            voicePillResume.arm(pkg)
+        }
     }
 
-    /** 用户自己停下：不再自动续听。 */
+    /** 用户自己停下：不再自动续听，同时复位当次临时连续/禁用连续语音。 */
     private fun stopVoicePillResume() {
+        temporaryVoiceContinuous = false
+        suppressVoiceContinuousForSession = false
+        if (uiState.value.voiceContinuousSession || uiState.value.spaceVoiceContinuousOverride != null) {
+            uiState.value = uiState.value.copy(
+                voiceContinuousSession = false,
+                spaceVoiceContinuousOverride = null,
+            )
+        }
         voicePillResume.disarm()
         voicePillRestartInPlace = false
         voicePillResumePending = false
@@ -5804,11 +5865,11 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         voicePillResumeScheduled = false
     }
 
-    /** 真正开麦前再查一遍：窗口在显示、有输入框焦点、悬浮条还在、这个框允许。 */
+    /** 真正开麦前再查一遍：窗口在显示、有输入框焦点、这个框允许。 */
     private val resumeVoicePill = Runnable {
         voicePillResumeScheduled = false
         val state = uiState.value
-        if (!isInputViewShown || currentInputConnection == null || state.isVoiceMode || !state.voiceCollapsed) return@Runnable
+        if (!isInputViewShown || currentInputConnection == null || state.isVoiceMode) return@Runnable
         if (!voicePillResumeEnabled() || !voicePillResume.appliesTo(currentInputEditorInfo?.packageName) ||
             !voicePillResumeFieldAllowed()) return@Runnable
         // 用掉这次记号；这段听写再被打断时重新记。
@@ -5817,9 +5878,7 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
         if (uiState.value.isVoiceMode) voicePillAutoResumed.value = true
     }
 
-    private fun canCollapseToVoicePill(): Boolean = uiState.value.let {
-        it.isVoiceMode && it.voiceSticky && !it.voiceCollapsed && !it.isCompact
-    }
+    private fun canCollapseToVoicePill(): Boolean = false
 
     private fun collapseToVoicePill(end: VoiceSessionEnd): Boolean {
         if (!voiceKeepsListeningAfter(end) || !canCollapseToVoicePill()) return false
@@ -5997,7 +6056,11 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             (keyboardViewModel.page.value.underlyingPage() as? KeyboardPage.Main)?.type == com.kingzcheung.xime.keyboard.MainType.HANDWRITING) {
             val windowHeight = window.window?.decorView?.height ?: resources.displayMetrics.heightPixels
             val reserve = if (state.isFloatingMode) 0 else (handwritingNormalInsetDp * resources.displayMetrics.density).roundToInt()
-            outInsets.contentTopInsets = (windowHeight - reserve).coerceAtLeast(0)
+            // 固定键盘全屏时应用只让出底下那块按键（候选栏 + 展开栏 + 底排）：以前一直让出平时手写键盘的整高，
+            // 输入框和底下按键之间空出一大截透明书写区（11-25 用户：全屏手写高度不对）。
+            val footerTop = handwritingGlassControls?.top?.takeIf { !state.isFloatingMode && state.handwritingExpanded }
+            outInsets.contentTopInsets = (footerTop?.coerceIn(windowHeight - reserve, windowHeight) ?: (windowHeight - reserve))
+                .coerceAtLeast(0)
             outInsets.visibleTopInsets = outInsets.contentTopInsets
             outInsets.touchableInsets = Insets.TOUCHABLE_INSETS_FRAME
             return
@@ -6317,13 +6380,41 @@ class XimeInputMethodService : InputMethodService(), LifecycleOwner, SavedStateR
             return TextCommitResult.ACCEPTED_INTERNAL
         }
         val connection = currentInputConnection ?: return TextCommitResult.NO_CONNECTION
-        val committed = when {
-            caret != CommitCaret.NONE -> connection.commitTextWithCaret(delivered, caret)
-            // 多行短语一行一行上屏（见 commitPhraseLines）。
-            com.kingzcheung.xime.settings.PhraseLineBreaks.STORED in text && !isPaste -> connection.commitPhraseLines(delivered)
-            else -> connection.commitText(if (isPaste) delivered else withTextLocale(delivered), 1)
+        val voiceTypingCommit = uiState.value.isVoiceMode && !isTerminalEditor()
+        val committed = if (voiceTypingCommit) {
+            // 方案 A：语音开启时键盘确认候选不记忆旧光标，直接插到输入框末尾并通知语音冻结当前前缀。
+            connection.beginBatchEdit()
+            try {
+                val extracted = runCatching {
+                    connection.getExtractedText(android.view.inputmethod.ExtractedTextRequest(), 0)
+                }.getOrNull()
+                if (extracted?.text != null && extracted.startOffset >= 0) {
+                    val end = extracted.startOffset + extracted.text.length
+                    val curStart = extracted.startOffset + extracted.selectionStart
+                    val curEnd = extracted.startOffset + extracted.selectionEnd
+                    if (curStart != end || curEnd != end) {
+                        connection.setSelection(end, end)
+                    }
+                }
+                when {
+                    caret != CommitCaret.NONE -> connection.commitTextWithCaret(delivered, caret)
+                    // 多行短语一行一行上屏（见 commitPhraseLines）。
+                    com.kingzcheung.xime.settings.PhraseLineBreaks.STORED in text && !isPaste -> connection.commitPhraseLines(delivered)
+                    else -> connection.commitText(if (isPaste) delivered else withTextLocale(delivered), 1)
+                }
+            } finally {
+                connection.endBatchEdit()
+            }
+        } else {
+            when {
+                caret != CommitCaret.NONE -> connection.commitTextWithCaret(delivered, caret)
+                // 多行短语一行一行上屏（见 commitPhraseLines）。
+                com.kingzcheung.xime.settings.PhraseLineBreaks.STORED in text && !isPaste -> connection.commitPhraseLines(delivered)
+                else -> connection.commitText(if (isPaste) delivered else withTextLocale(delivered), 1)
+            }
         }
         if (!committed) return TextCommitResult.REJECTED
+        if (voiceTypingCommit) voiceRecognitionHandler.onManualTextCommitted()
         if (inlineComposition.text != null) inlineComposition.ended()
         if (isSensitive || isSecretEditor()) return TextCommitResult.ACCEPTED_HOST
         pluginEvents.onTextCommitted(delivered, isPaste)

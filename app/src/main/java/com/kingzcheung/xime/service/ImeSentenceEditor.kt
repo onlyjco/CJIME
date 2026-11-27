@@ -6,19 +6,93 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 internal const val SENTENCE_CODE_HIGHLIGHT_COLOR = 0x663399ff
+internal const val SENTENCE_CODE_HIGHLIGHT_COLOR_ALT = 0x663399fe
+/** 非零极低透明底色（1/255 灰，奇偶交替最低位）：阻止 Android TextLine / Compose TextField 把相邻同色 BackgroundColorSpan 合并成整段，确保选区边界与末音节字偶距全程零跳动。 */
+internal const val SENTENCE_CODE_NEUTRAL_BG = 0x01808080
+internal const val SENTENCE_CODE_NEUTRAL_BG_ALT = 0x01808081
 
 /** Use parcelable system spans and keep the same character boundaries for each selection. */
-internal fun sentenceCodeHighlight(text: String, from: Int, to: Int): android.text.SpannableString =
+internal fun sentenceCodeHighlight(
+    text: String,
+    from: Int,
+    to: Int,
+    underlineRanges: List<IntRange> = emptyList(),
+): android.text.SpannableString =
     android.text.SpannableString(text).apply {
-        setSpan(android.text.style.UnderlineSpan(), 0, text.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        // 显式附带 NORMAL 样式阻止宿主 EditText 默认给整段组合编码加下划线，仅对滑行片段区间画下划线。
+        setSpan(android.text.style.StyleSpan(android.graphics.Typeface.NORMAL), 0, text.length, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        for (r in underlineRanges) {
+            val s = r.first.coerceIn(0, text.length)
+            val e = (r.last + 1).coerceIn(s, text.length)
+            if (e > s) setSpan(android.text.style.UnderlineSpan(), s, e, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
         var index = 0
+        var charStep = 0
         while (index < text.length) {
             val next = index + Character.charCount(text.codePointAt(index))
-            val color = if (index < to && next > from) SENTENCE_CODE_HIGHLIGHT_COLOR else android.graphics.Color.TRANSPARENT
+            val odd = (charStep and 1) != 0
+            val selected = to > from && index < to && next > from
+            val color = when {
+                selected && odd -> SENTENCE_CODE_HIGHLIGHT_COLOR_ALT
+                selected -> SENTENCE_CODE_HIGHLIGHT_COLOR
+                odd -> SENTENCE_CODE_NEUTRAL_BG_ALT
+                else -> SENTENCE_CODE_NEUTRAL_BG
+            }
             setSpan(android.text.style.BackgroundColorSpan(color), index, next, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
             index = next
+            charStep++
         }
     }
+
+private fun remapSentenceUnderlineRanges(
+    baseRanges: List<IntRange>,
+    editStart: Int,
+    editEnd: Int,
+    replacementLength: Int,
+    newLength: Int,
+    keepInside: Boolean,
+    replacementUnderlines: List<IntRange> = emptyList(),
+): List<IntRange> {
+    if ((baseRanges.isEmpty() && replacementUnderlines.isEmpty()) || newLength <= 0) return emptyList()
+    val delta = replacementLength - (editEnd - editStart)
+    val out = ArrayList<IntRange>(baseRanges.size + replacementUnderlines.size)
+    for (r in baseRanges) {
+        val rs = r.first
+        val re = r.last + 1
+        // 左侧未改动段
+        val leftEnd = minOf(re, editStart)
+        if (leftEnd > rs) {
+            val s = rs.coerceIn(0, newLength)
+            val e = leftEnd.coerceIn(s, newLength)
+            if (e > s) out.add(s until e)
+        }
+        // 中间选中段（仅在编码未替换时保留原有滑行下划线）
+        if (keepInside) {
+            val midStart = maxOf(rs, editStart)
+            val midEnd = minOf(re, editEnd)
+            if (midEnd > midStart) {
+                val s = midStart.coerceIn(0, newLength)
+                val e = midEnd.coerceIn(s, newLength)
+                if (e > s) out.add(s until e)
+            }
+        }
+        // 右侧未改动段（按长度差平移）
+        val rightStart = maxOf(rs, editEnd)
+        if (re > rightStart) {
+            val s = (rightStart + delta).coerceIn(0, newLength)
+            val e = (re + delta).coerceIn(s, newLength)
+            if (e > s) out.add(s until e)
+        }
+    }
+    if (!keepInside && replacementLength > 0) {
+        for (r in replacementUnderlines) {
+            val s = (editStart + r.first).coerceIn(editStart, minOf(editStart + replacementLength, newLength))
+            val e = (editStart + r.last + 1).coerceIn(s, minOf(editStart + replacementLength, newLength))
+            if (e > s) out.add(s until e)
+        }
+    }
+    return out
+}
 
 /** An isolated candidate lookup; the live composition changes only on confirmation. */
 data class SentenceEditSession(
@@ -64,6 +138,7 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
     private var previewOwner: SentenceEditSession? = null
     private var previewConnection: android.view.inputmethod.InputConnection? = null
     private var previewBase: String? = null
+    private var previewBaseUnderlines: List<IntRange> = emptyList()
     private var previewWritten: String? = null
     private var previewCaret = 0
     private var dragConnection: android.view.inputmethod.InputConnection? = null
@@ -106,7 +181,8 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
                 runCatching { ic.getSelectedText(0).isNullOrEmpty() }.getOrDefault(false)) {
                 ic.beginBatchEdit()
                 try {
-                    if (ic.setComposingText(text, 1)) {
+                    val restored = sentenceCodeHighlight(text, 0, 0, service.candidateState.value.glideUnderlineRanges)
+                    if (ic.setComposingText(restored, 1)) {
                         service.markInputBoxComposing(text)
                         service.placeInlinePinyinCaret(text, dragCaret)
                     }
@@ -128,7 +204,7 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
         val shown = dragOwner?.let { it.displaySelection(text) }
         if (shown == range) { dragOwner = owner; return }
         if (dragOwner == null && runCatching { !ic.getSelectedText(0).isNullOrEmpty() }.getOrDefault(true)) return
-        val styled = sentenceCodeHighlight(text, range.first, range.last + 1)
+        val styled = sentenceCodeHighlight(text, range.first, range.last + 1, service.candidateState.value.glideUnderlineRanges)
         ic.beginBatchEdit()
         try {
             if (ic.setComposingText(styled, 1)) {
@@ -140,7 +216,7 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
     }
 
     /** Only replace our own composing span; never touch surrounding host text. */
-    fun preview(owner: SentenceEditSession, code: String) {
+    fun preview(owner: SentenceEditSession, code: String, replacementUnderlines: List<IntRange> = emptyList()) {
         if (!current(owner) || service.uiState.value.inputTarget.isInternal ||
             TerminalEditor.inputTextLocation(service) != com.kingzcheung.xime.settings.SettingsPreferences.INPUT_TEXT_INPUT_BOX) return
         val ic = service.currentInputConnection ?: return
@@ -155,6 +231,7 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
             val syllables = Regex("[A-Za-züÜ;]+").findAll(base).toList()
             if (keys(base) != keys(owner.snapshot.input) && syllables.size != owner.snapshot.sentence.length) return
             previewOwner = owner; previewConnection = ic; previewBase = base; previewWritten = base
+            previewBaseUnderlines = service.candidateState.value.glideUnderlineRanges
             previewCaret = service.inlinePinyinCaret()
         }
         if (previewConnection !== ic || service.inlinePinyinText() != previewWritten ||
@@ -183,8 +260,17 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
         }
         val caret = if (code.isNotEmpty()) start + shownCode.length else before.trimEnd(' ', '\'').length.coerceAtMost(text.length)
         if (code.isEmpty() && text == previewWritten && caret == previewCaret) return
-        val styled = if (code.isNotEmpty()) sentenceCodeHighlight(text, start, start + shownCode.length)
-            else if (text.isNotEmpty()) sentenceCodeHighlight(text, 0, 0) else text
+        val underlines = remapSentenceUnderlineRanges(
+            baseRanges = previewBaseUnderlines,
+            editStart = start,
+            editEnd = end,
+            replacementLength = if (code.isNotEmpty()) shownCode.length else 0,
+            newLength = text.length,
+            keepInside = code == owner.originalCode && replacementUnderlines.isEmpty(),
+            replacementUnderlines = replacementUnderlines,
+        )
+        val styled = if (code.isNotEmpty()) sentenceCodeHighlight(text, start, start + shownCode.length, underlines)
+            else if (text.isNotEmpty()) sentenceCodeHighlight(text, 0, 0, underlines) else text
         ic.beginBatchEdit()
         try {
             if (runCatching { ic.setComposingText(styled, 1) }.getOrDefault(false)) {
@@ -217,7 +303,7 @@ internal class ImeSentenceEditor(private val service: XimeInputMethodService) {
             service.sessionController.refreshInputBoxComposition()
         }
         if (previewOwner === owner) {
-            previewOwner = null; previewConnection = null; previewBase = null; previewWritten = null; previewCaret = 0
+            previewOwner = null; previewConnection = null; previewBase = null; previewBaseUnderlines = emptyList(); previewWritten = null; previewCaret = 0
         }
     }
 

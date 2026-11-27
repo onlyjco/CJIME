@@ -140,12 +140,24 @@ internal class InlineQuickActionEditor(private val motionScope: CoroutineScope? 
         val previous = motion.position
         if (previous != null && previous != target && motion.revision != orderRevision &&
             dragging != null && id != dragging && motionScope != null) {
-            val from = previous + motion.offset.value - target
+            val from = previous + motion.offset - target
+            // 同步写入起始偏移，避免 Animatable.snapTo 等待 MutatorMutex 在快速来回拖动时闪出一帧原位残影。
             motion.job?.cancel()
-            motion.job = motionScope.launch(start = CoroutineStart.UNDISPATCHED) {
-                motion.offset.snapTo(from)
-                motion.offset.animateTo(Offset.Zero, tween(220, easing = FastOutSlowInEasing))
+            motion.offset = from
+            motion.job = motionScope.launch {
+                val startNanos = androidx.compose.runtime.withFrameNanos { it }
+                val durationNanos = 180_000_000L
+                while (true) {
+                    val now = androidx.compose.runtime.withFrameNanos { it }
+                    val t = ((now - startNanos).toFloat() / durationNanos).coerceIn(0f, 1f)
+                    val eased = FastOutSlowInEasing.transform(t)
+                    motion.offset = from * (1f - eased)
+                    if (t >= 1f) break
+                }
             }
+        } else if (previous == target && motion.job?.isActive == true) {
+            motion.job?.cancel()
+            motion.offset = Offset.Zero
         }
         motion.position = target
         motion.revision = orderRevision
@@ -215,6 +227,23 @@ internal class InlineQuickActionEditor(private val motionScope: CoroutineScope? 
                 }
                 dragFromToolbar = inToolbar
             }
+            // 工具栏内横向换序：按排序后的槽位中心 X 直接算目标下标，避免快速来回拖动命中尚未重排的旧 bounds[id] 造成原位残影闪动。
+            if (inToolbar && source in toolbar) {
+                val centers = toolbar.mapNotNull { bounds[it]?.center?.x }.sorted()
+                if (centers.size == toolbar.size) {
+                    val from = toolbar.indexOf(source)
+                    val to = centers.indices.minByOrNull { kotlin.math.abs(centers[it] - point.x) } ?: from
+                    if (from >= 0 && to >= 0 && from != to) {
+                        val bar = toolbar.toMutableList().apply { add(to, removeAt(from)) }
+                        if (toolbar != bar) {
+                            orderRevision++
+                            toolbar = bar
+                        }
+                    }
+                    lastHover = null
+                    return
+                }
+            }
             // A blank area can accept an item from the other section, but hovering over
             // whitespace in its current section must not repeatedly jump it to the end.
             if (target == null && (source in toolbar) == inToolbar) { lastHover = null; return }
@@ -237,7 +266,7 @@ internal class InlineQuickActionEditor(private val motionScope: CoroutineScope? 
 }
 
 internal class QuickActionMotion {
-    val offset = Animatable(Offset.Zero, Offset.VectorConverter)
+    var offset by mutableStateOf(Offset.Zero)
     var position: Offset? = null
     var revision = 0
     var job: Job? = null
@@ -259,8 +288,8 @@ internal fun Modifier.inlineQuickActionMotion(id: String): Modifier {
     if (!editor.active) return this
     val motion = remember(editor, id) { editor.motionFor(id) }
     return graphicsLayer {
-        translationX = motion.offset.value.x
-        translationY = motion.offset.value.y
+        translationX = motion.offset.x
+        translationY = motion.offset.y
     }
 }
 
@@ -311,10 +340,17 @@ internal fun BoxScope.InlineQuickActionOverlay(
     showEditHint: Boolean = false,
 ) {
     val density = LocalDensity.current
-    if (editor.active && showSaveHint && editor.saveBounds != Rect.Zero && editor.dragging == null) {
-        QuickActionHintPill("点此保存", editor.saveBounds, "quick-actions-save-hint", editor, textColor)
-    } else if (!editor.active && showEditHint && editor.editBounds != Rect.Zero) {
-        QuickActionHintPill("点此编辑", editor.editBounds, "quick-actions-edit-hint", editor, textColor)
+    val hint = when {
+        editor.active && showSaveHint && editor.dragging == null -> {
+            val anchor = editor.saveBounds.takeUnless { it == Rect.Zero } ?: editor.editBounds
+            if (anchor != Rect.Zero) Triple("点此保存", anchor, "quick-actions-save-hint") else null
+        }
+        !editor.active && showEditHint && editor.editBounds != Rect.Zero ->
+            Triple("点此编辑", editor.editBounds, "quick-actions-edit-hint")
+        else -> null
+    }
+    if (hint != null) {
+        QuickActionHintPill(hint.first, hint.second, hint.third, editor, textColor)
     }
     val id = editor.dragging ?: return
     val action = actions.firstOrNull { it.item.id == id } ?: return

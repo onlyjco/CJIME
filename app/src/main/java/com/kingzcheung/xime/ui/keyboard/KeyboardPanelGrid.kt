@@ -80,6 +80,34 @@ internal fun <T> KeyboardPanelGrid(
             maxHeight - (if (preferSinglePage && !fixedEditGrid && items.size <= columns * 2) 0.dp else indicatorHeight) >=
                 minimumRowHeight * 2 + spacing) 2 else 1
         val pages = items.chunked(rows * columns)
+        val pageIndicatorHeight = if (pages.size == 1 && !fixedEditGrid) 0.dp else indicatorHeight
+        val gridHeight = if (compactCards) minOf(maxHeight,
+            maxOf(120.dp, minimumRowHeight) * rows + spacing * (rows - 1) + pageIndicatorHeight) else minOf(maxHeight,
+            maxOf(104.dp, minimumRowHeight) * rows + spacing * (rows - 1) + pageIndicatorHeight)
+        val gridWidth = if (compactCards) minOf(maxWidth, 180.dp * columns + spacing * (columns - 1)) else minOf(maxWidth, 144.dp * columns + spacing * (columns - 1))
+        if (pages.size == 1) {
+            // 单页菜单/面板完全跳过 PagerState、协程与手势拦截，直接一次布局绘制，避免首次展开首帧开销与残影。
+            Box(Modifier.fillMaxSize()) {
+                Column(Modifier.align(Alignment.Center).width(gridWidth).height(gridHeight),
+                    horizontalAlignment = Alignment.CenterHorizontally) {
+                    Box(Modifier.fillMaxWidth().weight(1f).testTag(pagerTag)) {
+                        Column(Modifier.fillMaxSize(), verticalArrangement = Arrangement.spacedBy(spacing)) {
+                            repeat(rows) { row ->
+                                Row(Modifier.fillMaxWidth().weight(1f), horizontalArrangement = Arrangement.spacedBy(spacing)) {
+                                    repeat(columns) { column ->
+                                        val cellModifier = Modifier.weight(1f).fillMaxHeight()
+                                        val item = pages[0].getOrNull(row * columns + column)
+                                        if (item == null) Spacer(cellModifier) else content(item, cellModifier)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                    if (pageIndicatorHeight > 0.dp) Spacer(Modifier.height(pageIndicatorHeight))
+                }
+            }
+            return@BoxWithConstraints
+        }
         val pagerState = rememberPagerState(pageCount = { pages.size })
         val latestPageCount by androidx.compose.runtime.rememberUpdatedState(pages.size)
         val pageEdge = with(LocalDensity.current) { 28.dp.toPx() }
@@ -102,11 +130,6 @@ internal fun <T> KeyboardPanelGrid(
                 }
             }
         }
-        val pageIndicatorHeight = if (pages.size == 1 && !fixedEditGrid) 0.dp else indicatorHeight
-        val gridHeight = if (compactCards) minOf(maxHeight,
-            maxOf(120.dp, minimumRowHeight) * rows + spacing * (rows - 1) + pageIndicatorHeight) else minOf(maxHeight,
-            maxOf(104.dp, minimumRowHeight) * rows + spacing * (rows - 1) + pageIndicatorHeight)
-        val gridWidth = if (compactCards) minOf(maxWidth, 180.dp * columns + spacing * (columns - 1)) else minOf(maxWidth, 144.dp * columns + spacing * (columns - 1))
         // 划不动的方向（第一页往右、最后一页往左）：这一划什么也不做，也不能在松手时算成点了格子。
         // 最后一页再往左划不退出菜单（11-10：翻到最后一页多划一下，什么都没点菜单就没了）；退出用返回键。
         // 手势放在整块面板上，平板上从网格两边的空白起手也一样。
@@ -132,7 +155,7 @@ internal fun <T> KeyboardPanelGrid(
             }
             Row(Modifier.height(pageIndicatorHeight), horizontalArrangement = Arrangement.spacedBy(6.dp),
                 verticalAlignment = Alignment.CenterVertically) {
-                if (pages.size > 1) repeat(pages.size) { index ->
+                repeat(pages.size) { index ->
                     Box(Modifier.size(if (index == pagerState.currentPage) 8.dp else 6.dp)
                         .clip(CircleShape).background(if (index == pagerState.currentPage) textColor else textColor.copy(alpha = 0.3f)))
                 }

@@ -26,6 +26,8 @@ import androidx.compose.foundation.layout.absoluteOffset
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import com.kingzcheung.xime.service.displaySelection
+import androidx.compose.foundation.layout.PaddingValues
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxHeight
@@ -72,6 +74,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.semantics.clearAndSetSemantics
 import androidx.compose.ui.layout.boundsInWindow
+import androidx.compose.ui.layout.layout
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -122,7 +125,6 @@ import com.kingzcheung.xime.ui.menubar.ClipboardView
 import com.kingzcheung.xime.ui.menubar.SchemaListView
 import com.kingzcheung.xime.ui.theme.KeyboardThemes
 import com.kingzcheung.xime.ui.theme.keyboardBackground
-import com.kingzcheung.xime.ui.theme.cySwapFadeIn
 import com.kingzcheung.xime.util.FileLogger
 import com.kingzcheung.xime.util.PermissionHelper
 import com.kingzcheung.xime.viewmodel.KeyboardUiState
@@ -220,21 +222,18 @@ fun KeyboardView(
         (pageKeyboardState == KeyboardLayoutState.English || pageKeyboardState == KeyboardLayoutState.Chinese)
     val keyboardState = if (previewLetterLayout || hostLetterLayout) initialKeyboardLayoutState(state.isAsciiMode, state.currentSchemaId) else pageKeyboardState
     val pickedKaomoji = remember(state.inputSessionId) { ArrayDeque<String>() }
-    val sessionPage by viewModel.page.collectAsStateWithLifecycle()
+    val sessionPage = viewModel.pageState.value
     val page = if (previewLetterLayout) KeyboardPage.Main(MainType.FULL) else sessionPage
     val underlyingPage = page.underlyingPage()
     val overlayVisibility = remember { MutableTransitionState(false) }
     overlayVisibility.targetState = page is KeyboardPage.Overlay
-    val overlayVisible = overlayVisibility.currentState || overlayVisibility.targetState || !overlayVisibility.isIdle
-    // The same host also retains the toolbar and panel throughout the closing animation.
-    var retainedOverlay by remember { mutableStateOf<KeyboardPage.Overlay?>(null) }
-    (page as? KeyboardPage.Overlay)?.let { if (retainedOverlay != it) retainedOverlay = it }
+    val overlayVisible = page is KeyboardPage.Overlay
+    val activeOverlay = page as? KeyboardPage.Overlay
     val textLayout by viewModel.lastMainLayout.collectAsStateWithLifecycle()
     val candidatePageExpanded by viewModel.candidatePageExpanded.collectAsStateWithLifecycle()
     var candidatePageOpening by remember { mutableIntStateOf(0) }
     val candidateStripExtended by viewModel.candidateStripExtended.collectAsStateWithLifecycle()
     // 所有功能栏覆盖层（菜单、剪贴板、表情、编辑、方案、符号等）与候选展开页均直接切换，去掉向下揭幕展开动画。
-    val symbolPageSwap = ((page as? KeyboardPage.Overlay) ?: retainedOverlay)?.route is OverlayRoute.Symbol
     val overlayReveal = rememberKeyboardPanelRevealState(page is KeyboardPage.Overlay, overlayVisibility,
         instant = true)
     val candidateReveal = rememberKeyboardPanelRevealState(candidatePageExpanded, instant = true)
@@ -361,9 +360,14 @@ fun KeyboardView(
     // 屏幕太窄（手机竖屏）时分体自动用完整键盘：整个键盘（字母区、中缝、调节框）都按不分体排；
     // 转到够宽的方向再分开。存着的「分体键盘」不改。
     val splitFitsScreen = SplitKeyboardGeometry.fitsScreen(LocalConfiguration.current.screenWidthDp)
-    val inputPreferences = remember(storedInputPreferences, splitFitsScreen) {
-        if (storedInputPreferences.splitKeyboardEnabled && !splitFitsScreen)
+    val inputPreferences = remember(storedInputPreferences, splitFitsScreen, state.isVoiceMode) {
+        var prefs = if (storedInputPreferences.splitKeyboardEnabled && !splitFitsScreen)
             storedInputPreferences.copy(splitKeyboardEnabled = false) else storedInputPreferences
+        // 语音听写期间复用原有键盘编码区（候选栏上方拼音行/气泡），不往宿主输入框写组合编码，避免与语音实时正文冲突。
+        if (state.isVoiceMode && prefs.inputTextLocation == SettingsPreferences.INPUT_TEXT_INPUT_BOX) {
+            prefs = prefs.copy(inputTextLocation = SettingsPreferences.INPUT_TEXT_CANDIDATE_BAR)
+        }
+        prefs
     }
     // 「ing 放在 Shift 键上」决定 26 键第二排补不补分号键；只由输入法自己的键盘交给 KeysConfigHelper（设置页的预览不改它）。
     LaunchedEffect(inputPreferences.doublePinyinSemicolonOnShift) {
@@ -425,21 +429,36 @@ fun KeyboardView(
     val inlineMotionScope = rememberCoroutineScope()
     val inlineEditor = remember(state.inputSessionId) { InlineQuickActionEditor(inlineMotionScope) }
     val menuOverlayOpen = (page as? KeyboardPage.Overlay)?.route is OverlayRoute.Menu
+    val hintPrefs = remember(keyboardContext) { SettingsPreferences.getPrefsPublic(keyboardContext) }
+    var voiceContinuous by remember(hintPrefs) {
+        mutableStateOf(SettingsPreferences.isSttPillResume(keyboardContext))
+    }
+    DisposableEffect(hintPrefs) {
+        val listener = android.content.SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
+            if (key == null || key == SettingsPreferences.KEY_STT_PILL_RESUME) {
+                voiceContinuous = SettingsPreferences.isSttPillResume(keyboardContext)
+            }
+        }
+        hintPrefs.registerOnSharedPreferenceChangeListener(listener)
+        onDispose { hintPrefs.unregisterOnSharedPreferenceChangeListener(listener) }
+    }
+    var saveHintShownTotal by remember(hintPrefs) {
+        mutableIntStateOf(hintPrefs.getInt("inline_quick_action_save_hint_count", 0))
+    }
     var saveHintShownInMenu by remember(state.inputSessionId, menuOverlayOpen) { mutableStateOf(false) }
     var showInlineSaveHint by remember(state.inputSessionId) { mutableStateOf(false) }
-    LaunchedEffect(inlineEditor.active, menuOverlayOpen) {
-        if (inlineEditor.active && menuOverlayOpen && !saveHintShownInMenu) {
-            saveHintShownInMenu = true
-            showInlineSaveHint = true
+    LaunchedEffect(showInlineSaveHint) {
+        if (showInlineSaveHint) {
             kotlinx.coroutines.delay(1000L)
-            showInlineSaveHint = false
-        } else if (!inlineEditor.active) {
             showInlineSaveHint = false
         }
     }
+    LaunchedEffect(inlineEditor.active) {
+        if (!inlineEditor.active) showInlineSaveHint = false
+    }
     var showInlineEditHint by remember(state.inputSessionId) { mutableStateOf(false) }
     LaunchedEffect(menuOverlayOpen) {
-        showInlineEditHint = menuOverlayOpen && !inlineEditor.active
+        showInlineEditHint = menuOverlayOpen && !inlineEditor.active && saveHintShownTotal < 5
         if (showInlineEditHint) {
             kotlinx.coroutines.delay(1000L)
             showInlineEditHint = false
@@ -448,6 +467,7 @@ fun KeyboardView(
     LaunchedEffect(page) {
         if ((page as? KeyboardPage.Overlay)?.route != OverlayRoute.Menu && inlineEditor.active) inlineEditor.cancel()
     }
+    val rememberedMainAscii by viewModel.asciiStateMachine.mainAsciiModeFlow.collectAsStateWithLifecycle()
     val punctuationFull = !state.isAsciiMode && !state.inputProfile.language.typesLettersDirectly && (state.schemaSwitches.firstOrNull { it.name == "full_shape" }?.currentIndex?.let { it == 1 }
         ?: SettingsPreferences.punctuationFullWidth(androidx.compose.ui.platform.LocalContext.current, true))
     // 打开了「跟随全角半角」的字母键角标按它换写法（KeysConfigHelper.getKeyGesture）；在画键之前更新。
@@ -456,6 +476,7 @@ fun KeyboardView(
     val spaceVoiceLock = remember { SpaceVoiceLockState() }
     CompositionLocalProvider(
         androidx.compose.foundation.LocalIndication provides NoKeyboardIndication,
+        LocalVoiceContinuous provides (state.spaceVoiceContinuousOverride ?: voiceContinuous),
         LocalInlineQuickActionEditor provides inlineEditor,
         LocalSpaceVoiceLock provides spaceVoiceLock,
         LocalKeyGapLightVoice provides gapLightVoice,
@@ -480,10 +501,28 @@ fun KeyboardView(
             inputTextLocaleTag(state.inputProfile.language, state.inputProfile.scheme, inputPreferences.traditionalOutput)
                 ?.let { base.copy(localeList = remember(it) { androidx.compose.ui.text.intl.LocaleList(it) }) } ?: base
         },
-        LocalTextModeLabel provides when {
-            page.textMainType() == MainType.HANDWRITING -> state.inputProfile.language.displayName
-            textLayout is KeyboardLayoutState.English -> "ABC"
-            else -> state.inputProfile.language.displayName
+        LocalTextModeLabel provides run {
+            val inSymbolPanel = viewState.asciiContext() == AsciiKeyboardContext.SYMBOL_PANEL
+            val returnToEnglish = if (inSymbolPanel) {
+                rememberedMainAscii ?: (textLayout is KeyboardLayoutState.English)
+            } else {
+                state.isAsciiMode || state.currentSchemaId == com.kingzcheung.xime.settings.InputModes.ENGLISH
+            }
+            // 读取当前方案本身所属语言（不带临时 asciiMode 覆盖），避免数字/符号面板或未标注导入方案（如首道双拼）左下角错显「英文」。
+            val schemaEntry = state.schemas.firstOrNull { it.schemaId == state.currentSchemaId }
+            val baseLanguage = schemaEntry?.language
+                ?: com.kingzcheung.xime.settings.InputProfiles.describe(state.currentSchemaId).language
+            when {
+                page.textMainType() == MainType.HANDWRITING -> when (baseLanguage) {
+                    com.kingzcheung.xime.settings.InputLanguage.CANTONESE -> "粤语"
+                    com.kingzcheung.xime.settings.InputLanguage.ENGLISH -> "ABC"
+                    else -> "中文"
+                }
+                returnToEnglish -> "ABC"
+                baseLanguage == com.kingzcheung.xime.settings.InputLanguage.CANTONESE -> "粤语"
+                baseLanguage == com.kingzcheung.xime.settings.InputLanguage.ENGLISH -> "ABC"
+                else -> "中文"
+            }
         },
         LocalKeyboardPunctuation provides if (state.isCalculatorMode) null else KeyboardPunctuation(
             full = punctuationFull,
@@ -509,8 +548,15 @@ fun KeyboardView(
             onCursorModeChange = { if (it) callbacks.onPreeditCursorMove?.invoke("preedit_cursor:0") },
             onVoiceModeChange = callbacks.onVoiceModeChange,
             onVoiceToggle = callbacks.onVoiceStickyToggle,
+            onVoiceHoldStart = callbacks.onVoiceHoldStart,
             onVoiceHoldEnd = callbacks.onVoiceHoldEnd,
             onVoiceHoldCancel = callbacks.onVoiceHoldCancel,
+            onVoiceNormalLock = {
+                callbacks.onVoiceNormalLock?.invoke()
+            },
+            onVoiceContinuousLock = {
+                callbacks.onVoiceContinuousLock?.invoke()
+            },
             isSttEnabled = state.isSttEnabled,
             schemas = com.kingzcheung.xime.settings.InputModes.available(state.schemas),
             currentInputModeId = com.kingzcheung.xime.settings.InputModes.selectedId(state.currentSchemaId, state.isAsciiMode),
@@ -588,6 +634,18 @@ fun KeyboardView(
         val sessionKey = listOf(resizeActive, state.isFloatingMode, maxWidth, maxHeight, fixedBottomInsetDp,
             state.keyboardBottomPaddingDp)
         val initialPreviewRect = remember(sessionKey) { seedPreviewRect }
+        // 固定键盘刚进调节且全屏容器尚未扩窗完成前，继续保持原菜单栏遮挡底层按键；
+        // 全屏高度就绪的同一帧同步隐藏菜单栏并呈现调节层（遮罩/边框/确认框），彻底消除裸键盘闪动与确认框慢半拍。
+        val resizeViewportReady = !resizeActive || state.isFloatingMode ||
+            hostHeightPx > seedPreviewRect.height + 16f * resizeControlDensity.density
+        val renderPage = if (resizeActive && resizeViewportReady && page is KeyboardPage.Overlay) page.behind else page
+        val effectiveOverlayVisible = renderPage is KeyboardPage.Overlay
+        val effectiveActiveOverlay = renderPage as? KeyboardPage.Overlay
+        LaunchedEffect(resizeActive, resizeViewportReady) {
+            if (resizeActive && resizeViewportReady && viewModel.page.value is KeyboardPage.Overlay) {
+                viewModel.closeOverlay()
+            }
+        }
         val initialPadding = remember(sessionKey) { state.keyboardBottomPaddingDp }
         val resizePreviewRect = remember(sessionKey) { mutableStateOf(initialPreviewRect) }
         val liveResizePreviewRect = remember(sessionKey) { mutableStateOf(initialPreviewRect) }
@@ -692,7 +750,7 @@ fun KeyboardView(
         }?.let { change -> { change(true) } },
         rotationDegrees = state.floatingRotation,
         previewRotationState = if (resizeActive && state.isFloatingMode) resizeRotation else null,
-        previewRectState = if (resizeActive) resizePreviewRect else null,
+        previewRectState = if (resizeActive && resizeViewportReady) resizePreviewRect else null,
         livePreviewRectState = if (resizeActive && state.isFloatingMode) liveResizePreviewRect else null,
         externalDragging = resizeActive && state.isFloatingMode && resizeDraggingState.value,
         onCardPositioned = onCardPositioned,
@@ -837,6 +895,8 @@ fun KeyboardView(
             callbacks.onSentenceDragPreview?.invoke(null)
         }
         var sentenceCode by remember { mutableStateOf("") }
+        var sentenceCodeGlideFlags by remember { mutableStateOf<List<Boolean>>(emptyList()) }
+        var sentenceConfirmedGlideFlags by remember { mutableStateOf<List<List<Boolean>>>(emptyList()) }
         var sentenceWord by remember { mutableStateOf("") }
         var sentenceWordCode by remember { mutableStateOf("") }
         var sentenceConfirmed by remember { mutableStateOf(emptyList<com.kingzcheung.xime.rime.RimeEngine.SentenceEditCandidate>()) }
@@ -879,6 +939,55 @@ fun KeyboardView(
                 }
             }
         }
+        fun sentenceFlagsToRanges(flags: List<Boolean>, text: String): List<IntRange> {
+            if (text.isEmpty() || flags.isEmpty()) return emptyList()
+            val len = minOf(flags.size, text.length)
+            val underlined = BooleanArray(len) { i -> flags[i] }
+            // 两个滑行字母之间的隔音符并入同一段下划线，避免单个词内断线。
+            for (i in 1 until len - 1) {
+                if (!text[i].isLetterOrDigit() && underlined[i - 1] && underlined[i + 1]) {
+                    underlined[i] = true
+                }
+            }
+            val ranges = ArrayList<IntRange>()
+            var start = -1
+            for (i in underlined.indices) {
+                if (underlined[i] && start < 0) start = i
+                else if (!underlined[i] && start >= 0) {
+                    ranges.add(start until i)
+                    start = -1
+                }
+            }
+            if (start >= 0) ranges.add(start until len)
+            return ranges
+        }
+        fun originalSentenceGlideFlags(
+            owner: com.kingzcheung.xime.service.SentenceEditSession,
+            baseDisplay: String,
+            baseRanges: List<IntRange>,
+        ): List<Boolean> {
+            val code = owner.originalCode
+            if (code.isEmpty() || baseRanges.isEmpty() || baseDisplay.isEmpty()) return List(code.length) { false }
+            val sel = owner.displaySelection(baseDisplay) ?: return List(code.length) { false }
+            val selText = baseDisplay.substring(sel.first, sel.last + 1)
+            val letterUnderlined = ArrayList<Boolean>()
+            for (i in sel.first..sel.last) {
+                val ch = baseDisplay[i]
+                if (ch.isLetterOrDigit()) {
+                    letterUnderlined.add(baseRanges.any { i in it })
+                }
+            }
+            if (letterUnderlined.isEmpty()) return List(code.length) { false }
+            var li = 0
+            return List(code.length) { idx ->
+                val ch = code[idx]
+                if (ch.isLetterOrDigit()) {
+                    val u = if (li < letterUnderlined.size) letterUnderlined[li] else letterUnderlined.last()
+                    li++
+                    u
+                } else false
+            }
+        }
         fun closeSentenceEdit(restorePreview: Boolean = true) {
             clearCandidateStroke()
             sentenceEdit?.let { callbacks.onEndSentencePreview?.invoke(it, restorePreview) }
@@ -888,6 +997,8 @@ fun KeyboardView(
             sentenceWordsCode = null
             sentenceWordsSelection = emptyList()
             sentenceConfirmed = emptyList()
+            sentenceCodeGlideFlags = emptyList()
+            sentenceConfirmedGlideFlags = emptyList()
             sentenceOptions = emptyList()
             sentenceSelected = emptyList()
             sentenceChoicesCode = ""
@@ -896,7 +1007,9 @@ fun KeyboardView(
             sentenceApplying = false
         }
         fun previewSentenceCode(owner: com.kingzcheung.xime.service.SentenceEditSession) {
-            callbacks.onSentencePreview?.invoke(owner, sentenceConfirmed.joinToString("") { it.code } + sentenceCode)
+            val combinedCode = sentenceConfirmed.joinToString("") { it.code } + sentenceCode
+            val combinedFlags = sentenceConfirmedGlideFlags.flatten() + sentenceCodeGlideFlags
+            callbacks.onSentencePreview?.invoke(owner, combinedCode, sentenceFlagsToRanges(combinedFlags, combinedCode))
         }
         fun finishSentenceEdit(commit: Boolean, segments: List<com.kingzcheung.xime.rime.RimeEngine.SentenceEditCandidate>) {
             val owner = sentenceEdit ?: return
@@ -931,9 +1044,17 @@ fun KeyboardView(
                 val originalSuffix = owner.originalRemainingStart(remaining, segments.joinToString("") { it.code })
                     ?.let { owner.snapshot.sentence.substring(it, owner.end) }.orEmpty()
                 val consumed = sentenceCode.length - remaining.length
+                val takenFlags = sentenceCodeGlideFlags.take(candidate.code.length).let {
+                    if (it.size == candidate.code.length) it else it + List(candidate.code.length - it.size) { false }
+                }
+                val remFlags = sentenceCodeGlideFlags.drop(consumed).take(remaining.length).let {
+                    if (it.size == remaining.length) it else it + List(remaining.length - it.size) { false }
+                }
                 sentenceSelected = remainingSentenceSyllables(sentenceSelected, consumed)
                 sentenceChoicesCode = remaining
                 sentenceConfirmed = segments
+                sentenceConfirmedGlideFlags = sentenceConfirmedGlideFlags + listOf(takenFlags)
+                sentenceCodeGlideFlags = remFlags
                 sentenceJustSelected = true
                 sentenceCode = remaining
                 sentenceWord = if (previousWord.startsWith(candidate.text)) previousWord.drop(candidate.text.length) else originalSuffix
@@ -1080,8 +1201,11 @@ fun KeyboardView(
                 if (owner == null || sentenceApplying || clean.isEmpty()) false
                 else {
                     val base = if (sentenceReplaceOnType) "" else sentenceCode
+                    val baseFlags = if (sentenceReplaceOnType) emptyList() else sentenceCodeGlideFlags
                     val sep = if (base.isNotEmpty() && !base.endsWith('\'') && !clean.startsWith('\'')) "'" else ""
+                    val sepFlags = if (sep.isNotEmpty()) listOf(false) else emptyList()
                     sentenceCode = base + sep + clean
+                    sentenceCodeGlideFlags = baseFlags + sepFlags + List(clean.length) { i -> clean[i] != '\'' }
                     sentenceJustSelected = false
                     sentenceReplaceOnType = false
                     sentenceWordCode = ""
@@ -1122,6 +1246,8 @@ fun KeyboardView(
                             sentenceWord = ""
                             sentenceWordCode = ""
                             sentenceConfirmed = emptyList()
+                            sentenceCodeGlideFlags = emptyList()
+                            sentenceConfirmedGlideFlags = emptyList()
                             sentenceReplaceOnType = false
                             sentenceJustSelected = false
                             if (atSentenceEnd) {
@@ -1142,13 +1268,17 @@ fun KeyboardView(
                             sentenceSelected = previous.selected + sentenceSelected.map {
                                 it.copy(start = it.start + prefixLength, end = it.end + prefixLength)
                             }
+                            val prevFlags = sentenceConfirmedGlideFlags.lastOrNull() ?: List(previous.code.length) { false }
                             sentenceCode = previous.code + sentenceCode
                             sentenceChoicesCode = sentenceCode
                             sentenceConfirmed = sentenceConfirmed.dropLast(1)
+                            sentenceConfirmedGlideFlags = sentenceConfirmedGlideFlags.dropLast(1)
+                            sentenceCodeGlideFlags = prevFlags + sentenceCodeGlideFlags
                             sentenceWord = previous.text + sentenceWord
                         } else {
                             val next = if (sentenceReplaceOnType) "" else sentenceCode.dropLast(1)
                             sentenceCode = if (next.endsWith('\'')) next.dropLast(1) else next
+                            sentenceCodeGlideFlags = if (sentenceReplaceOnType) emptyList() else sentenceCodeGlideFlags.take(sentenceCode.length)
                             if (sentenceCode.isEmpty()) sentenceWord = ""
                         }
                         sentenceJustSelected = false
@@ -1166,7 +1296,9 @@ fun KeyboardView(
                         true
                     }
                     typed != null -> {
+                        val baseFlags = if (sentenceReplaceOnType) emptyList() else sentenceCodeGlideFlags
                         sentenceCode = (if (sentenceReplaceOnType) "" else sentenceCode) + typed
+                        sentenceCodeGlideFlags = baseFlags + List(typed.length) { false }
                         sentenceJustSelected = false
                         sentenceReplaceOnType = false
                         sentenceWordCode = ""
@@ -1257,16 +1389,18 @@ fun KeyboardView(
                     ToolbarButton.CLIPBOARD -> ({ viewModel.toggleOverlay(OverlayRoute.Clipboard(0)) })
                     ToolbarButton.SCHEMA -> ({ viewModel.toggleOverlay(OverlayRoute.SchemaList) })
                     ToolbarButton.SYMBOL -> ({ viewModel.toggleOverlay(OverlayRoute.Symbol) })
-                    ToolbarButton.FLOAT -> ({ viewModel.closeOverlay(); callbacks.onKeyboardResize?.invoke() })
+                    ToolbarButton.FLOAT -> ({ callbacks.onKeyboardResize?.invoke() })
                     ToolbarButton.HANDWRITING_LOOKUP -> ({
                         if (!state.isHandwritingMode && !viewModel.hasTemporaryHandwriting) {
                             if (keyboardState is KeyboardLayoutState.T9Pinyin) callbacks.onT9SwitchAway?.invoke()
-                            else callbacks.onCommitCandidateBeforeModeChange?.invoke()
+                            else if (candidateState.value.let { it.isComposing || it.candidates.isNotEmpty() || it.pendingEnglishText.isNotEmpty() }) {
+                                callbacks.onCommitCandidateBeforeModeChange?.invoke()
+                            }
                         }
                         callbacks.onHandwritingToggle?.invoke()
                     })
                     ToolbarButton.EDIT -> ({ viewModel.toggleOverlay(OverlayRoute.Edit) })
-                    ToolbarButton.SETTINGS -> ({ callbacks.onSettings?.invoke(); viewModel.closeOverlay() })
+                    ToolbarButton.SETTINGS -> ({ callbacks.onSettings?.invoke() })
                     // 字幕是独立全屏页面，键盘随之收起，麦克风交给字幕页。没装「字幕」插件就不出现（排列页也不列）。
                     ToolbarButton.CAPTION -> if (com.kingzcheung.xime.ui.caption.CaptionPlugin.isActive(quickContext))
                         ({ viewModel.closeOverlay(); com.kingzcheung.xime.ui.caption.CaptionActivity.open(quickContext) }) else return null
@@ -1304,8 +1438,7 @@ fun KeyboardView(
                     ToolbarButton.TRADITIONAL -> if (traditionalSwitchApplies) ({
                         inputPreferences.copy(traditionalOutput = !inputPreferences.traditionalOutput).save(quickContext)
                     }) else return null
-                    // 「语音转文本」关着时麦克风入口不出现（工具栏和菜单都是），不再显示一个点了只弹提示的图标。
-                    ToolbarButton.VOICE -> if (!state.isSttEnabled) return null else ({
+                    ToolbarButton.VOICE -> ({
                         if (PermissionHelper.hasRecordAudioPermission(quickContext)) {
                             if (!state.isVoiceMode) {
                                 if (keyboardState is KeyboardLayoutState.T9Pinyin) callbacks.onT9SwitchAway?.invoke()
@@ -1332,7 +1465,6 @@ fun KeyboardView(
                 toolbarFeedback()
                 com.kingzcheung.xime.ui.settings.SettingsSearchFocus.open(entry)
                 callbacks.onSettingsPage?.invoke(entry.target)
-                viewModel.closeOverlay()
             } }
             // 插件按钮（翻译）：工具栏上长按弹出插件给的列表，滑到一项松手就选
             val pressMenu = (item as? ToolbarButtonItem.Plugin)?.takeIf { it.action == "open_panel" }?.let { plugin ->
@@ -1341,7 +1473,26 @@ fun KeyboardView(
                 com.kingzcheung.xime.keyboard.ToolbarPressMenu(load = { load(plugin.pluginId) },
                     onChoose = { key, option -> toolbarFeedback(); choose(plugin.pluginId, key, option) })
             }
-            val toolbarLongClick = if ((item as? ToolbarButtonItem.Builtin)?.button == ToolbarButton.CLIPBOARD) bottomLiftOpenFavorites else null
+            val toolbarLongClick: (() -> Unit)? = when ((item as? ToolbarButtonItem.Builtin)?.button) {
+                ToolbarButton.CLIPBOARD -> bottomLiftOpenFavorites
+                ToolbarButton.VOICE -> ({
+                    toolbarFeedback()
+                    val next = !voiceContinuous
+                    SettingsPreferences.setSttPillResume(quickContext, next)
+                    voiceContinuous = next
+                    if (!state.isVoiceMode) {
+                        if (PermissionHelper.hasRecordAudioPermission(quickContext)) {
+                            if (keyboardState is KeyboardLayoutState.T9Pinyin) callbacks.onT9SwitchAway?.invoke()
+                            else callbacks.onCommitCandidateBeforeModeChange?.invoke()
+                            callbacks.onVoiceStickyToggle?.invoke()
+                        } else {
+                            android.widget.Toast.makeText(quickContext, "需要麦克风权限才能使用语音输入", android.widget.Toast.LENGTH_SHORT).show()
+                            PermissionHelper.requestRecordAudioPermission(quickContext)
+                        }
+                    }
+                })
+                else -> null
+            }
             return ToolbarAction(item, onLongClick = openSettings, pressMenu = pressMenu, onToolbarLongClick = toolbarLongClick, active = if (item is ToolbarButtonItem.Plugin)
                 item.action == "open_panel" && toolPanelOpenFor(state.toolPanelVisible, state.toolPanelPluginId, item.pluginId)
                 else item is ToolbarButtonItem.Builtin && when (item.button) {
@@ -1373,6 +1524,13 @@ fun KeyboardView(
         val unusedQuickActions = if (inlineEditor.active) inlineEditor.unused.mapNotNull(::quickAction) else emptyList()
         val startInlineEditing: (() -> Unit)? = callbacks.onUpdateQuickActions?.let { {
             toolbarFeedback()
+            if (menuOverlayOpen && !saveHintShownInMenu && saveHintShownTotal < 5) {
+                saveHintShownInMenu = true
+                val nextCount = saveHintShownTotal + 1
+                saveHintShownTotal = nextCount
+                hintPrefs.edit().putInt("inline_quick_action_save_hint_count", nextCount).apply()
+                showInlineSaveHint = true
+            }
             inlineEditor.start(QuickActionLayout(state.toolbarButtons, state.menuButtons),
                 toolbarQuickActions.map { it.item.id }, menuQuickActions.map { it.item.id },
                 (ToolbarButton.CUSTOMIZABLE.map { it.id } + state.toolbarPluginButtons.map { it.id })
@@ -1808,10 +1966,12 @@ fun KeyboardView(
                 LocalCorrectedCandidates provides correctionMarks,
                 LocalPreeditLineCorrections provides allCorrectionMarks,
                 LocalSentenceSelection provides sentenceDragOwnerState,
-                LocalSentenceCandidateHighlight provides sentenceEdit?.let { owner ->
+                LocalSentenceCandidateHighlight provides (sentenceEdit?.let { owner ->
                     val replacement = sentenceReplacement(owner)
                     SentenceCandidateHighlight(owner.sentence(replacement), owner.start, owner.start + replacement.length)
-                },
+                } ?: sentenceDragOwner?.let { drag ->
+                    SentenceCandidateHighlight(drag.snapshot.sentence, drag.start, drag.end)
+                }),
                 LocalCorrectionFullScheme provides correctionScheme.takeIf { !doublePinyinKeysShown }) {
             ScaledCandidateBar(candidateBarScaleState.floatValue) {
             CandidateBar(
@@ -1835,6 +1995,8 @@ fun KeyboardView(
                     CandidateBarState.Idle else if (holdingBar) previousBar!! else candidateBarState,
                 glidePreviewText = glideCandidatePreview.value,
                 isGlidePreview = liveGlide != null || englishGlide != null,
+                glideUnderlineRanges = if (sentenceEdit != null) sentenceFlagsToRanges(sentenceCodeGlideFlags, sentenceCode) else cs.glideUnderlineRanges,
+                glideBaselinePreedit = if (liveGlide != null) cs.shownPreedit(state.inputProfile) else "",
                 directEnglishInput = state.isAsciiMode || state.inputProfile.typesLettersDirectly,
                 page = barPage,
                 candidatePageExpanded = candidatePageExpanded,
@@ -1983,18 +2145,42 @@ fun KeyboardView(
                         val cachedOwner = sentenceDragOwner?.takeIf { it.start == start && it.end == end && it.snapshot.revision == cs.engineRevision }
                         val openSelection: (com.kingzcheung.xime.service.SentenceEditSession?) -> Unit = { owner ->
                             if (owner != null && callbacks.isCandidateSnapshotCurrent(cs)) {
-                                closePreeditEditor()
-                                sentenceEdit = owner
-                                sentenceCode = owner.originalCode
-                                sentenceWord = owner.originalWord
-                                sentenceWordCode = owner.originalCode
-                                sentenceReplaceOnType = true
-                                sentenceJustSelected = false
-                                callbacks.onSentencePreview?.invoke(owner, sentenceCode)
-                                refreshSentenceWords(owner)
-                                viewModel.setCandidatePageExpanded(true)
-                            } else if (callbacks.isCandidateSnapshotCurrent(cs)) {
-                                android.widget.Toast.makeText(quickContext, "这句话暂时无法按字对应编码", android.widget.Toast.LENGTH_SHORT).show()
+                                // 先预取局部候选再一次性切入 sentenceEdit 与展开页，避免松手瞬间候选栏先闪空再填字。
+                                val request = ++sentenceRequest
+                                val applyOpened: (com.kingzcheung.xime.rime.RimeEngine.SentenceEditCandidates) -> Unit = { result ->
+                                    if (request == sentenceRequest && callbacks.isCandidateSnapshotCurrent(cs)) {
+                                        closePreeditEditor()
+                                        sentenceEdit = owner
+                                        sentenceCode = owner.originalCode
+                                        sentenceWord = owner.originalWord
+                                        sentenceWordCode = owner.originalCode
+                                        sentenceConfirmed = emptyList()
+                                        sentenceConfirmedGlideFlags = emptyList()
+                                        val initGlideFlags = originalSentenceGlideFlags(owner, cs.shownPreedit(state.inputProfile), cs.glideUnderlineRanges)
+                                        sentenceCodeGlideFlags = initGlideFlags
+                                        sentenceSelected = emptyList()
+                                        sentenceChoicesCode = owner.originalCode
+                                        sentenceWords = result.words
+                                        sentenceWordsCode = owner.originalCode
+                                        sentenceWordsSelection = emptyList()
+                                        sentenceOptions = result.options
+                                        sentenceReplaceOnType = true
+                                        sentenceJustSelected = false
+                                        callbacks.onSentencePreview?.invoke(owner, owner.originalCode, sentenceFlagsToRanges(initGlideFlags, owner.originalCode))
+                                        endSentenceDrag()
+                                        viewModel.setCandidatePageExpanded(true)
+                                    } else {
+                                        endSentenceDrag()
+                                    }
+                                }
+                                val lookup = callbacks.onSentenceCandidates
+                                if (lookup != null) lookup.invoke(owner, owner.originalCode, emptyList(), "", applyOpened)
+                                else applyOpened(com.kingzcheung.xime.rime.RimeEngine.SentenceEditCandidates(emptyList(), emptyList()))
+                            } else {
+                                endSentenceDrag()
+                                if (callbacks.isCandidateSnapshotCurrent(cs)) {
+                                    android.widget.Toast.makeText(quickContext, "这句话暂时无法按字对应编码", android.widget.Toast.LENGTH_SHORT).show()
+                                }
                             }
                         }
                         if (cachedOwner != null) openSelection(cachedOwner)
@@ -2016,7 +2202,7 @@ fun KeyboardView(
                         toolbarFeedback()
                         if (inlineEditor.active) inlineEditor.cancel()
                         if (page is KeyboardPage.Overlay) {
-                            viewModel.backFromOverlay()
+                            viewModel.closeOverlay()
                         } else if (isHandwritingPage) {
                             callbacks.onHandwritingToggle?.invoke()
                         } else if (showHandwritingCandidates) {
@@ -2078,7 +2264,7 @@ fun KeyboardView(
             // 量候选栏的顶边：不占地方的标记，位置就是上面各栏加起来的高度。
             Spacer(Modifier.onPlaced { aboveCandidateBarPx.intValue = it.positionInParent().y.roundToInt() })
             // Opening a tool must not insert a row and shrink the underlying handwriting canvas.
-            if (!state.handwritingExpanded || candidatePageExpanded) renderCandidateBar(page)
+            if (!state.handwritingExpanded || candidatePageExpanded) renderCandidateBar(renderPage)
 
             val renderExpandedCandidates: @Composable () -> Unit = {
                 val cs = candidateState.value
@@ -2400,20 +2586,18 @@ fun KeyboardView(
             // 中英切换不算换布局：直接换字，不淡入（深色主题下淡入看起来像黑了一下）。
             // 符号页收起（直接换页，没有揭幕）回到键盘时，键盘也同样淡入。
             val symbolPageShown = (page as? KeyboardPage.Overlay)?.route is OverlayRoute.Symbol
-            val underlaySwapKey = when (underlyingPage) {
-                is KeyboardPage.Main -> listOf(underlyingPage.type, state.inputProfile.layout, symbolPageShown)
-                is KeyboardPage.Panel -> listOf(underlyingPage.type, symbolPageShown)
-                else -> null
-            }
+            val underlayCovered = (candidatePageExpanded || effectiveOverlayVisible) && !state.handwritingExpanded
+            // 用独立父 Layout 在覆盖面板打开时跳过子节点 place，使底层按键 LayoutNode.isPlaced=false 彻底摘离渲染树，
+            // 同时保持组合与测量状态不断开，关闭面板零重建开销；主键盘/手写/数字页之间直接切换不做淡入，避免首帧残影。
+            PlaceOnlyWhen(placed = !underlayCovered, modifier = Modifier.fillMaxSize()) {
             Column(Modifier.clipboardUnderlaySize(clipboardPanel, state.keyboardHeightDp).fillMaxSize()
-                .then(if (state.themeId == com.kingzcheung.xime.ui.theme.TransparentGlassTheme.ID) Modifier
-                    else Modifier.cySwapFadeIn(underlaySwapKey, instantKey = listOf(state.isAsciiMode, state.inputProfile.language)))
-                // 展开候选页和按键是同一格、同样大（剪贴板拉高、全屏手写除外）：按它的进度在本层坐标里挖，铺满时整层不画，不靠量出来的窗口位置。
-                .excludeRevealedKeyboardPanels(panelsSeeKeyboardBackground, candidateReveal, overlayReveal,
-                    covering = candidateReveal.takeIf { clipboardPanel == null && !state.handwritingExpanded }).then(
-                if (candidatePageExpanded || overlayVisible) Modifier.clearAndSetSemantics {} else Modifier
+                // 展开候选页和覆盖面板与按键同格（全屏手写除外）：所有主题（含纯色不透明主题）铺满时首帧即整层不画底层按键，避免首次冷打开 Lazy/Pager 面板时透出一帧残影。
+                .excludeRevealedKeyboardPanels(candidatePageExpanded || effectiveOverlayVisible, candidateReveal, overlayReveal,
+                    covering = (if (candidatePageExpanded) candidateReveal else if (effectiveOverlayVisible) overlayReveal else null)
+                        .takeIf { !state.handwritingExpanded }).then(
+                if (candidatePageExpanded || effectiveOverlayVisible) Modifier.clearAndSetSemantics {} else Modifier
             // 全屏手写开着工具面板时书写区仍露在面板上方，照旧不动它。
-            ).blockCoveredKeyboardTouches((candidatePageExpanded || overlayVisible) && !state.handwritingExpanded)) {
+            ).blockCoveredKeyboardTouches(underlayCovered)) {
             val isMainKeyboard = underlyingPage is KeyboardPage.Main
             if (isMainKeyboard) {
                 val mainType = (underlyingPage as KeyboardPage.Main).type
@@ -2760,11 +2944,14 @@ fun KeyboardView(
                 }
             }
             } // Full candidate panel reveals over the complete keyboard body.
+            } // PlaceOnlyWhen
+            PlaceOnlyWhen(placed = !(effectiveOverlayVisible && !state.handwritingExpanded), modifier = Modifier.matchParentSize()) {
             KeyboardPanelReveal(
                 candidatePageExpanded,
-                Modifier.matchParentSize()
-                    .excludeRevealedKeyboardPanels(panelsSeeKeyboardBackground, overlayReveal)
-                    .then(if (overlayVisible) Modifier.clearAndSetSemantics {} else Modifier),
+                Modifier.fillMaxSize()
+                    .excludeRevealedKeyboardPanels(effectiveOverlayVisible, overlayReveal,
+                        covering = overlayReveal.takeIf { effectiveOverlayVisible && !state.handwritingExpanded })
+                    .then(if (effectiveOverlayVisible) Modifier.clearAndSetSemantics {} else Modifier),
                 revealState = candidateReveal,
             ) {
                 CompositionLocalProvider(LocalKeyCornerRadius provides kbKey.cornerRadius.dp,
@@ -2775,10 +2962,11 @@ fun KeyboardView(
                     }
                 }
             }
+            }
             // Expanded handwriting has its own bottom candidate bar. Tool navigation floats
             // above its canvas, so opening and closing a tool leave its geometry unchanged.
-            if (state.handwritingExpanded && !candidatePageExpanded && overlayVisible) {
-                retainedOverlay?.let { toolbarPage ->
+            if (state.handwritingExpanded && !candidatePageExpanded && effectiveOverlayVisible) {
+                effectiveActiveOverlay?.let { toolbarPage ->
                     // 面板的工具栏放在平时键盘的顶边（面板回到平时大小，上面留着全屏手写区）。
                     val toolbarSlot = handwritingOverlaySlot
                     Box((if (toolbarSlot == null) Modifier.align(Alignment.TopCenter).fillMaxWidth()
@@ -2922,9 +3110,9 @@ fun KeyboardView(
         }
 
         // A route change replaces only the panel content, never restarts the reveal host.
-        if (!(state.clipboardSearchVisible && page !is KeyboardPage.Overlay && retainedOverlay?.route is OverlayRoute.Clipboard)) {
+        if (!(state.clipboardSearchVisible && !effectiveOverlayVisible)) {
             KeyboardPanelReveal(
-                visible = page is KeyboardPage.Overlay,
+                visible = effectiveOverlayVisible,
                 modifier = (handwritingOverlaySlot?.let { slot ->
                     Modifier.align(Alignment.BottomCenter).absoluteOffset(x = slot.offsetXDp.dp).width(slot.widthDp.dp)
                         .height((slot.heightDp - candidateBarHeightDp(candidateBarScaleState.floatValue)).coerceAtLeast(0f).dp)
@@ -2934,12 +3122,9 @@ fun KeyboardView(
                 visibility = overlayVisibility,
                 revealState = overlayReveal,
             ) {
-            // 面板里换页（菜单进剪贴板、表情和符号互换等）新页快速淡入；符号页和布局方案页直接显示不做动画。
-            Box(Modifier.fillMaxSize().then(if (retainedOverlay?.route is OverlayRoute.SchemaList ||
-                state.themeId == com.kingzcheung.xime.ui.theme.TransparentGlassTheme.ID &&
-                retainedOverlay?.route is OverlayRoute.Symbol) Modifier else Modifier.cySwapFadeIn(retainedOverlay?.route?.let { it::class },
-                fadeOnFirst = symbolPageSwap))) {
-            when (val p = retainedOverlay) {
+            // 所有覆盖面板（菜单、剪贴板、表情、符号、方案等）均直接切换，不做淡入动画，消除透出底层按键的短暂残留。
+            Box(Modifier.fillMaxSize()) {
+            when (val p = effectiveActiveOverlay) {
                 is KeyboardPage.Overlay -> when (p.route) {
                     is OverlayRoute.Menu -> MenuBar(
                         state = MenuBarState(
@@ -2992,7 +3177,7 @@ fun KeyboardView(
                         },
                         onSplitWords = { text, _ -> viewModel.pushOverlay(OverlayRoute.SplitWords(text)) },
                         onBack = { viewModel.leaveClipboard() },
-                        onClipboardTabChange = { viewModel.pushOverlay(OverlayRoute.Clipboard(it)) },
+                        onClipboardTabChange = { viewModel.replaceOverlayRoute(OverlayRoute.Clipboard(it)) },
                         bottomPaddingDp = 0,
                         modifier = panelMaterial.fillMaxWidth().fillMaxHeight(),
                         onQuickSendAddClick = {
@@ -3044,16 +3229,17 @@ fun KeyboardView(
                             enterKeyText = state.enterKeyText,
                         )
                     }
-                    is OverlayRoute.Emoji -> EmojiKeyboardLayout(
+                    is OverlayRoute.Emoji -> CompositionLocalProvider(LocalKeyReleaseFeedback provides callbacks.onKeyRelease) { EmojiKeyboardLayout(
                         onDeleteFace = callbacks.onDeleteKaomoji,
                         pickedKaomoji = pickedKaomoji,
                         onEmojiSelect = { emoji ->
-                            onHapticFeedback?.invoke()
-                            if (emoji == "delete") {
-                                callbacks.onKeyPress("delete", false)
+                            if (emoji == "delete" || emoji == "clear_composition" || emoji == "clear_all" ||
+                                emoji == "undo_clear" || emoji == "enter") {
+                                callbacks.onKeyPress(emoji, false)
                             } else {
-                            // 顔文字和表情插件的成品文本须保留原字符，不受标点全半角影响。
-                            (callbacks.onCommitExactText ?: callbacks.onCommitText)?.invoke(emoji)
+                                onHapticFeedback?.invoke()
+                                // 颜文字和表情插件的成品文本须保留原字符，不受标点全半角影响。
+                                (callbacks.onCommitExactText ?: callbacks.onCommitText)?.invoke(emoji)
                             }
                         },
                         onImageEmojiSelect = callbacks.onCommitImage,
@@ -3061,10 +3247,21 @@ fun KeyboardView(
                         backgroundColor = keyboardBgColor,
                         textColor = keyTextColor,
                         accentColor = accentColor,
+                        keyBgColor = keyBgColor,
+                        specialKeyBackgroundColor = specialKeyBgColor,
+                        specialKeyTextColor = specialKeyTextColor,
+                        bubbleBackgroundColor = themeSpecialKeyColor,
+                        enterKeyText = state.enterKeyText,
+                        shadowEnabled = kbShadow.enabled,
+                        shadowElevation = kbShadow.elevation.dp,
+                        shadowShapeRadius = kbShadow.shapeRadius.dp,
+                        keyCornerRadius = kbKey.cornerRadius.dp,
+                        isFloatingMode = state.isFloatingMode,
+                        onKeyPressDown = callbacks.onKeyPressDown,
                         bottomPaddingDp = 0,
                         modifier = panelMaterial.fillMaxWidth().fillMaxHeight(),
                         onHapticFeedback = onHapticFeedback,
-                    )
+                    ) }
                     // 底栏「中文」「123」是 KeyButton，松手震动靠 LocalKeyReleaseFeedback（11-23 平板实测只震一下）；
                     // 符号格是点按（松手才出字、才震），不走这里，不会震两次。
                     is OverlayRoute.Symbol -> CompositionLocalProvider(LocalKeyReleaseFeedback provides callbacks.onKeyRelease) { SymbolKeyboardLayout(
@@ -3074,9 +3271,9 @@ fun KeyboardView(
                             (callbacks.onCommitExactText ?: callbacks.onCommitText)?.invoke(symbol)
                         },
                         onSelect = { symbol ->
-                            // 删除键的清空、撤回同其他键盘（11-05「部分页面的删除键功能缺失」）。
-                            if (symbol == "delete" || symbol == "clear_all" || symbol == "undo_clear") {
-                                onHapticFeedback?.invoke()
+                            // 删除键的清空、撤回及空格/回车同数字与普通键盘。
+                            if (symbol == "delete" || symbol == "clear_composition" || symbol == "clear_all" ||
+                                symbol == "undo_clear" || symbol == "space" || symbol == "enter") {
                                 callbacks.onKeyPress(symbol, false)
                             } else {
                                 callbacks.onCommitText?.invoke(symbol)
@@ -3090,8 +3287,11 @@ fun KeyboardView(
                         shadowEnabled = kbShadow.enabled,
                         shadowElevation = kbShadow.elevation.dp,
                         shadowShapeRadius = kbShadow.shapeRadius.dp,
+                        keyCornerRadius = kbKey.cornerRadius.dp,
                         specialKeyBackgroundColor = specialKeyBgColor,
                         specialKeyTextColor = specialKeyTextColor,
+                        bubbleBackgroundColor = themeSpecialKeyColor,
+                        enterKeyText = state.enterKeyText,
                         backgroundColor = keyboardBgColor,
                         textColor = keyTextColor,
                         accentColor = accentColor,
@@ -3105,7 +3305,7 @@ fun KeyboardView(
                         backgroundColor = keyboardBgColor,
                         viewModel = viewModel,
                         onBack = { viewModel.popOverlay() },
-                        onNavigateToQuickSend = { viewModel.pushOverlay(OverlayRoute.Clipboard(1)) },
+                        onNavigateToQuickSend = { viewModel.showOverlay(OverlayRoute.Clipboard(1)) },
                         onConfirmText = { text -> callbacks.onCommitText?.invoke(text) },
                         onConfirmClose = {
                             if (com.kingzcheung.xime.ui.menubar.clipboardClosesAfterPaste(keyboardContext)) viewModel.leaveClipboard()
@@ -3177,7 +3377,7 @@ fun KeyboardView(
         }
     }
     } // FloatingKeyboardContainer: resize overlay must stay outside the floating card.
-    resizeOverlay?.let { controls ->
+    if (resizeViewportReady) resizeOverlay?.let { controls ->
         val splitActive = inputPreferences.splitKeyboardEnabled &&
             supportsSplitKeyboard(state.currentSchemaId, state.isAsciiMode)
         val splitLandscape = LocalConfiguration.current.let { it.screenWidthDp > it.screenHeightDp }
@@ -3221,6 +3421,22 @@ fun KeyboardView(
     }
 }
 }
+}
+
+@Composable
+private fun PlaceOnlyWhen(
+    placed: Boolean,
+    modifier: Modifier = Modifier,
+    content: @Composable () -> Unit,
+) {
+    androidx.compose.ui.layout.Layout(content = content, modifier = modifier) { measurables, constraints ->
+        val placeables = measurables.map { it.measure(constraints) }
+        val width = placeables.maxOfOrNull { it.width } ?: constraints.minWidth
+        val height = placeables.maxOfOrNull { it.height } ?: constraints.minHeight
+        layout(width, height) {
+            if (placed) placeables.forEach { it.place(0, 0) }
+        }
+    }
 }
 
 @Composable
@@ -3455,54 +3671,69 @@ internal fun KeyboardConfirmCard(title: String, message: String, confirmLabel: S
                     color = cardColors.text.copy(alpha = .7f)
                 )
                 }
-                if (checkboxLabel != null && onCheckedChange != null) {
-                    Spacer(Modifier.height(10.dp))
-                    Row(
-                        modifier = Modifier
-                            .clickable(
-                                interactionSource = remember { MutableInteractionSource() },
-                                indication = null,
-                                onClick = { onCheckedChange(!checked) }
-                            )
-                            .testTag("$tag-checkbox"),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        androidx.compose.material3.Checkbox(
-                            checked = checked,
-                            onCheckedChange = null,
-                            modifier = Modifier.size(20.dp),
-                            colors = androidx.compose.material3.CheckboxDefaults.colors(
-                                uncheckedColor = cardColors.text.copy(alpha = 0.6f),
-                            ),
-                        )
-                        Spacer(Modifier.width(8.dp))
-                        Text(
-                            text = checkboxLabel,
-                            style = MaterialTheme.typography.bodySmall,
-                            color = cardColors.text.copy(alpha = 0.85f),
-                        )
-                    }
-                }
                 Spacer(Modifier.height(12.dp))
-                ConfirmCardButtons {
-                    TextButton(onClick = onCancel) {
-                        Text("取消", color = cardColors.text.copy(alpha = .7f))
-                    }
-                    if (extraLabel != null) {
-                        Spacer(Modifier.width(4.dp))
-                        TextButton(onClick = onExtra, modifier = Modifier.testTag("$tag-extra")) {
-                            Text(extraLabel, color = cardColors.text)
+                if (checkboxLabel != null && onCheckedChange != null && extraLabel == null && extra2Label == null) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween,
+                    ) {
+                        Row(
+                            modifier = Modifier
+                                .clickable(
+                                    interactionSource = remember { MutableInteractionSource() },
+                                    indication = null,
+                                    onClick = { onCheckedChange(!checked) }
+                                )
+                                .testTag("$tag-checkbox"),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            androidx.compose.material3.Checkbox(
+                                checked = checked,
+                                onCheckedChange = null,
+                                modifier = Modifier.size(18.dp),
+                                colors = androidx.compose.material3.CheckboxDefaults.colors(
+                                    uncheckedColor = cardColors.text.copy(alpha = 0.6f),
+                                ),
+                            )
+                            Spacer(Modifier.width(6.dp))
+                            Text(
+                                text = checkboxLabel,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = cardColors.text.copy(alpha = 0.85f),
+                                maxLines = 1,
+                            )
+                        }
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            TextButton(onClick = onCancel, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
+                                Text("取消", color = cardColors.text.copy(alpha = .7f))
+                            }
+                            TextButton(onClick = onConfirm, contentPadding = PaddingValues(horizontal = 8.dp, vertical = 4.dp)) {
+                                Text(confirmLabel, color = if (destructive) MaterialTheme.colorScheme.error else cardColors.text)
+                            }
                         }
                     }
-                    if (extra2Label != null) {
-                        Spacer(Modifier.width(4.dp))
-                        TextButton(onClick = onExtra2, modifier = Modifier.testTag("$tag-extra2")) {
-                            Text(extra2Label, color = cardColors.text)
+                } else {
+                    ConfirmCardButtons {
+                        TextButton(onClick = onCancel) {
+                            Text("取消", color = cardColors.text.copy(alpha = .7f))
                         }
-                    }
-                    Spacer(Modifier.width(4.dp))
-                    TextButton(onClick = onConfirm) {
-                        Text(confirmLabel, color = if (destructive) MaterialTheme.colorScheme.error else cardColors.text)
+                        if (extraLabel != null) {
+                            Spacer(Modifier.width(4.dp))
+                            TextButton(onClick = onExtra, modifier = Modifier.testTag("$tag-extra")) {
+                                Text(extraLabel, color = cardColors.text)
+                            }
+                        }
+                        if (extra2Label != null) {
+                            Spacer(Modifier.width(4.dp))
+                            TextButton(onClick = onExtra2, modifier = Modifier.testTag("$tag-extra2")) {
+                                Text(extra2Label, color = cardColors.text)
+                            }
+                        }
+                        Spacer(Modifier.width(4.dp))
+                        TextButton(onClick = onConfirm) {
+                            Text(confirmLabel, color = if (destructive) MaterialTheme.colorScheme.error else cardColors.text)
+                        }
                     }
                 }
             }

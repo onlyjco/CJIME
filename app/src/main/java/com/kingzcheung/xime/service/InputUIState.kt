@@ -41,6 +41,10 @@ data class InputUIState(
     val associationEnabled: Boolean = false,
     val isVoiceMode: Boolean = false,
     val voiceSticky: Boolean = false,
+    /** 长按空格右锁触发的当次连续语音（不改持久化设置，主动结束语音后自动复位）。 */
+    val voiceContinuousSession: Boolean = false,
+    /** 长按空格语音或锁定时覆盖菜单/工具栏语音图标显示（null=跟随设置，false=普通语音，true=连续语音）。 */
+    val spaceVoiceContinuousOverride: Boolean? = null,
     val voiceButtonState: VoiceButtonState = VoiceButtonState(),
     val voicePluginName: String = "",
     /** 语音出错或改用本地时在键盘上显示的一行提示（有的手机会拦下 Toast）；几秒后自动清掉。 */

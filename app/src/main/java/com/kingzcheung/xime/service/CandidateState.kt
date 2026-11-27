@@ -8,6 +8,8 @@ data class CandidateState(
     val inputText: String = "",
     val preeditText: String = "",
     val isComposing: Boolean = false,
+    /** 当前组合编码中来自滑行输入的字符区间（仅滑行片段在编码下显示横线，点按片段不显示）。 */
+    val glideUnderlineRanges: List<IntRange> = emptyList(),
     val hasNextPage: Boolean = false,
     val hasPrevPage: Boolean = false,
     val associationCandidates: List<String> = emptyList(),

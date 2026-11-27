@@ -43,6 +43,8 @@ internal fun isUnicodeCodeWithDigit(input: String) = isUnicodeCodeInput(input) &
 internal class ImeKeyRouter(private val service: XimeInputMethodService) {
     // Tag only the queued keys from one glide; ordinary typing still publishes every result.
     private var submittingGlide = false
+    /** 无论 previewToken 是否存在，只要正在提交一笔滑行编码就为 true，用于精准区分滑行与点按字母。 */
+    private var inGlideSubmission = false
     private val glideBatch = ThreadLocal<Boolean>()
     private val chineseGlideDeletes = ChineseGlideDeleteHistory()
 
@@ -483,6 +485,11 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         val state = service.candidateState.value
         return state.isComposing || state.inputText.isNotEmpty() || state.preeditText.isNotEmpty() ||
             service.t9PartialSegments.isNotEmpty()
+    }
+
+    /** 注音（大千）中文输入：实体键盘上 , . / ; - 和数字行是注音键，标点在 Shift 上。 */
+    internal fun zhuyinHardwareActive(): Boolean = service.uiState.value.let {
+        !it.isAsciiMode && it.inputProfile.scheme == com.kingzcheung.xime.settings.InputScheme.ZHUYIN
     }
 
     internal fun handleHardwareCandidateKey(keyCode: Int, event: KeyEvent): Boolean {
@@ -1126,6 +1133,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
             typedSyllables = typedTail?.let { chineseCodeSyllables(it.code, service.rimeEngine.readQueuedResult(), allowIncomplete = true) }
         }
         val input = service.candidateState.value.inputText
+        inGlideSubmission = true
         submittingGlide = previewToken != null
         try {
             if (input.isNotEmpty() && input.last() != '\'') {
@@ -1144,6 +1152,7 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
             code.forEach { handleKeyPress(it.toString(), false) }
         } finally {
             submittingGlide = false
+            inGlideSubmission = false
         }
         // The FIFO barrier reads the final engine state after all of the glide's normal key events.
         val glideSession = service.uiState.value.inputSessionId
@@ -1560,6 +1569,9 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
             else -> "key"
         }
         if (latencyKind == "letter" && hardwareEvent == null) KeyLatencyProbe.fired(service.uiState.value.inputProfile.layout.id)
+        if (latencyKind == "letter") {
+            service.sessionController.recordTypedLetters(1, fromGlide = inGlideSubmission)
+        }
         val inputContext = InputCommandOwner.requireOwner().context()
         val commandContext = if (submittingGlide) inputContext + glideBatch.asContextElement(true) else inputContext
         service.inputCommands.submit(commandContext, kind = latencyKind) command@{
@@ -1953,6 +1965,12 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                 }
                 "enter" -> {
                     service.calculatorEngine.clear()
+                    // 注音（大千）屏幕键盘打字中按回车：上屏高亮的候选，和实体键盘回车一样。
+                    if (ZhuyinKeys.enterSelectsCandidate(zhuyin = hardwareEvent == null && zhuyinHardwareActive(),
+                            composing = candState.isComposing, candidateCount = candState.candidates.size)) {
+                        selectCandidateAsync(candState.spaceCandidateIndex(state.inputProfile), snapshot = candState)
+                        return@command
+                    }
                     val engineInput = service.rimeEngine.getInput()
                     // UI publication may lag the FIFO. Enter consumes unfinished input;
                     // only a subsequent, idle Enter may invoke the editor action.
@@ -1968,11 +1986,12 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
                             val accepted = withEditor { service.submitText(input).accepted }
                             if (!accepted) return@command
                             // English typed by hand (Obsidian) is offered again next time, dictionary or not.
-                            if (!isT9 && typesEnglishCapitals(state.currentSchemaId) &&
-                                !com.kingzcheung.xime.settings.IncognitoState.active) {
-                                com.kingzcheung.xime.settings.EnglishWordMemory.remember(
-                                    com.kingzcheung.xime.settings.SchemaManager.getRimeDir(service),
-                                    input)
+                            if (!isT9 && typesEnglishCapitals(state.currentSchemaId)) {
+                                val rimeDir = com.kingzcheung.xime.settings.SchemaManager.getRimeDir(service)
+                                // 无痕时不记新词，但删过的词回车打出来照样回到原位：只是从「排到后面」里拿掉，不记下打了什么。
+                                if (com.kingzcheung.xime.settings.IncognitoState.active)
+                                    com.kingzcheung.xime.settings.EnglishWordMemory.undemote(rimeDir, input)
+                                else com.kingzcheung.xime.settings.EnglishWordMemory.remember(rimeDir, input)
                             }
                         }
                         // 同步清空，避免异步 postRimeJob 延迟导致后续 backspace 拿到旧状态。
@@ -3788,6 +3807,9 @@ internal class ImeKeyRouter(private val service: XimeInputMethodService) {
         if (!com.kingzcheung.xime.settings.EnglishWordMemory.forget(rimeDir, text)) return false
         // Translate the same input again so the forgotten word leaves the menu.
         service.rimeEngine.setInput(service.rimeEngine.getInput())
+        // 词库里也有这个词（回车打过的 appointment）：忘掉记录后它还在第一个，看起来删了没反应，要再删一次。
+        // 这时直接按词库英文词处理，排到后面（再选它或回车打它就回来）。
+        if (service.rimeEngine.getCandidates().any { it == text } && demoteEnglishWord(text)) return true
         withEditor { service.updateUI() }
         showForgetResult(text, 3)
         return true

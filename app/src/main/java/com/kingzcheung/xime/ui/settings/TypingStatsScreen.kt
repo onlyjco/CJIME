@@ -86,6 +86,11 @@ fun TypingStatsScreen(onBack: () -> Unit) {
         Column(Modifier.fillMaxSize().padding(padding).verticalScroll(rememberScrollState()).padding(16.dp),
             verticalArrangement = Arrangement.spacedBy(16.dp)) {
             val stats = data ?: TypingStatsData()
+            SettingsSection(title = "开关", content = {
+                SettingsToggleItem(Icons.TwoTone.QueryStats, "记录打字统计", "关闭后停止计数，已有数据保留",
+                    checked = enabled, onCheckedChange = { enabled = it; TypingStats.setEnabled(context, it) },
+                    costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.TYPING_STATS)
+            })
             TodayCard(stats, today)
             DailyCard(stats, today)
             HoursCard(stats)
@@ -93,11 +98,6 @@ fun TypingStatsScreen(onBack: () -> Unit) {
             ComboSpeedCard(stats)
             CorrectionCard(stats)
             FunCard(stats)
-            SettingsSection(title = "设置", content = {
-                SettingsToggleItem(Icons.TwoTone.QueryStats, "记录打字统计", "关闭后停止计数，已有数据保留",
-                    checked = enabled, onCheckedChange = { enabled = it; TypingStats.setEnabled(context, it) },
-                    costItem = com.kingzcheung.xime.settings.PerformanceCosts.Item.TYPING_STATS)
-            })
             SettingsNote("只在本机计数，不记录输入内容，不联网。密码框和无痕模式不计数。")
         }
     }

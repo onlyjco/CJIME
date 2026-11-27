@@ -48,6 +48,8 @@ struct T9ScriptOptions {
   size_t t9_display_sentences_ = 0;
   double t9_spelling_penalty_ = 5.0;
   double t9_word_penalty_ = 8.0;
+  // t9/tail_completion_weight (ln units, 0 = off): words ending in a syllable the last typed digits only begin.
+  double t9_tail_completion_weight_ = 0;
   size_t t9_whole_input_phrases_ = 0;
   bool t9_prefer_user_entries_ = false;
   double t9_correction_penalty_ = -4.605170185988091;  // log(0.01): Rime's corrected-syllable credibility
@@ -61,6 +63,10 @@ struct T9ScriptOptions {
   double t9_ngram_user_input_weight_ = 0;
   double t9_ngram_dictionary_prior_ = 0;
   bool t9_ngram_sentence_start_ = false;
+  // t9/whole_word_weight_margin (ln units, 0 = off): when the first sentence is one dictionary word spelling the whole
+  // input, a word of the same input whose dictionary weight is higher by more than this comes first (744468: 时候
+  // over 事后). 2026-11-25 他：「你直接改词权」.
+  double t9_whole_word_weight_margin_ = 0;
   double t9_ngram_eos_weight_ = 0;
   // Sentence-final particles (t9/final_particles: 吗, 呢, 吧…) and t9/particle_eos_weight: when one of
   // the first whole-input sentences ends with such a particle, every finished sentence is ordered with
@@ -124,6 +130,11 @@ struct T9ScriptOptions {
   // sentence is compared with the typed choice, this share of Rime's own sentence weight is added on both sides. The
   // choice among the typed sentences does not use it.
   double t9_model_sentences_rime_weight_ = 0.0;
+  // t9/model_sentences_fuzzy_penalty (ln units, 2026-11-24): built sentences with syllables read only through a fuzzy
+  // spelling (模糊音, the user's fuzz/ rules) join too, on places of their own, and pay this for each such syllable.
+  // Negative (unset): they do not join, as before. 14 keys with fuzzy pinyin on: a sentence with an accent typo (lao
+  // typed nao) was never rebuilt by the word model after a pause.
+  double t9_model_sentences_fuzzy_penalty_ = -1.0;
   // t9/final_g_word_margin (ln units): a dictionary word that reads the whole input with the final g added
   // (translator/cyime_final_g_correction; yianzhuan: 已安装) leads the sentence of the typed letters (一按转) when the
   // word model finds its text more likely by more than this; 0 keeps the typed sentence first. Uses

@@ -20,6 +20,13 @@ internal class StreamingVoiceText {
         ownedCursor = null
     }
 
+    /** 听写期间用户通过键盘主动提交文字后冻结当前已识别前缀，后续识别仅追加在其后，不再回删刚提交的词。 */
+    fun freezeCurrent() {
+        frozenPrefix = previousResult
+        visibleTail = ""
+        ownedCursor = null
+    }
+
     fun update(ic: InputConnection, text: String) {
         val extracted = ic.getExtractedText(ExtractedTextRequest(), 0)
         val cursor = extracted?.takeIf { it.startOffset >= 0 && it.selectionEnd >= 0 }

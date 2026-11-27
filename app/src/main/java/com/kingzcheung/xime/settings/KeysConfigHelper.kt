@@ -2072,6 +2072,9 @@ object KeysConfigHelper {
         return map["up.$key"] to map["down.$key"]
     }
 
+    internal fun bottomPunctuationTap(key: String, english: Boolean): String? =
+        (if (english) bottomPunctuationEn else bottomPunctuationZh)["tap.$key"]
+
     internal fun qwertySymbolEditorValues(context: Context, english: Boolean,
         variant: CornerVariant = cornerVariant): Map<String, String> {
         val overrides = QwertySwipeSymbols.load(context, english, variant)

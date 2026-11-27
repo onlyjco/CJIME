@@ -31,6 +31,56 @@ import kotlinx.coroutines.launch
 import kotlin.math.ceil
 
 @Composable
+internal fun KaomojiGrid(
+    faces: List<String>,
+    textColor: Color,
+    onPick: (String) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (faces.isEmpty()) {
+        PanelEmptyHint("暂无颜文字记录", textColor, modifier.fillMaxSize())
+        return
+    }
+    BoxWithConstraints(modifier.fillMaxSize()) {
+        // Long faces span several cells instead of wrapping onto a second line.
+        val density = LocalDensity.current
+        val measurer = rememberTextMeasurer()
+        val style = LocalTextStyle.current.merge(TextStyle(fontSize = 16.sp))
+        val widths = remember(faces, density, style) {
+            faces.associateWith { measurer.measure(it, style, softWrap = false).size.width }
+        }
+        val gridWidth = with(density) { (maxWidth - 8.dp).toPx() }
+        val gap = with(density) { 4.dp.toPx() }
+        val padding = with(density) { 14.dp.toPx() }
+        LazyVerticalGrid(
+            GridCells.Adaptive(112.dp),
+            Modifier.fillMaxSize().testTag("kaomoji-grid"),
+            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp),
+            verticalArrangement = Arrangement.spacedBy(4.dp),
+            horizontalArrangement = Arrangement.spacedBy(4.dp),
+        ) {
+            items(faces, key = { it }, span = { face ->
+                val cell = (gridWidth - gap * (maxLineSpan - 1)) / maxLineSpan
+                val needed = (widths[face] ?: 0) + padding
+                GridItemSpan(ceil((needed + gap) / (cell + gap)).toInt().coerceIn(1, maxLineSpan))
+            }) { face ->
+                Box(
+                    Modifier.fillMaxWidth().heightIn(min = 40.dp)
+                        .clip(RoundedCornerShape(KeyShapes.current.radius(8.dp)))
+                        .background(textColor.copy(alpha = .08f))
+                        .testTag("kaomoji:$face")
+                        .clickable { onPick(face) }
+                        .padding(horizontal = 6.dp, vertical = 4.dp),
+                    contentAlignment = Alignment.Center,
+                ) {
+                    Text(face, color = textColor, fontSize = 16.sp, lineHeight = 22.sp, textAlign = TextAlign.Center)
+                }
+            }
+        }
+    }
+}
+
+@Composable
 internal fun KaomojiKeyboard(onSelect: (String) -> Unit, modifier: Modifier = Modifier,
     textColor: Color = MaterialTheme.colorScheme.onSurface,
     accentColor: Color = MaterialTheme.colorScheme.primary,
@@ -78,40 +128,14 @@ internal fun KaomojiKeyboard(onSelect: (String) -> Unit, modifier: Modifier = Mo
             }
         }
         HorizontalPager(pager, Modifier.weight(1f).fillMaxWidth().testTag("kaomoji-pages")) { page ->
-        val faces = if (page == 0) recent else categories[page - 1].faces
-        if (faces.isEmpty()) PanelEmptyHint("暂无颜文字记录", textColor, Modifier.fillMaxSize())
-        else BoxWithConstraints(Modifier.fillMaxSize()) {
-            // Long faces span several cells instead of wrapping onto a second line.
-            val density = LocalDensity.current
-            val measurer = rememberTextMeasurer()
-            val style = LocalTextStyle.current.merge(TextStyle(fontSize = 16.sp))
-            val widths = remember(faces, density, style) {
-                faces.associateWith { measurer.measure(it, style, softWrap = false).size.width }
-            }
-            val gridWidth = with(density) { (maxWidth - 8.dp).toPx() }
-            val gap = with(density) { 4.dp.toPx() }
-            val padding = with(density) { 14.dp.toPx() }
-            LazyVerticalGrid(GridCells.Adaptive(112.dp), Modifier.fillMaxSize().testTag("kaomoji-grid"),
-            contentPadding = PaddingValues(horizontal = 4.dp, vertical = 2.dp), verticalArrangement = Arrangement.spacedBy(4.dp),
-            horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            items(faces, key = { it }, span = { face ->
-                val cell = (gridWidth - gap * (maxLineSpan - 1)) / maxLineSpan
-                val needed = (widths[face] ?: 0) + padding
-                GridItemSpan(ceil((needed + gap) / (cell + gap)).toInt().coerceIn(1, maxLineSpan))
-            }) { face ->
-                Box(Modifier.fillMaxWidth().heightIn(min = 40.dp).clip(RoundedCornerShape(KeyShapes.current.radius(8.dp)))
-                    .background(textColor.copy(alpha = .08f)).testTag("kaomoji:$face").clickable {
-                        val updated = RecentUsageStore.record(context, RecentUsageStore.KEY_RECENT_KAOMOJI, face)
-                        if (pager.settledPage != 0) recent = updated
-                        if (picked.size >= 32) picked.removeFirst()
-                        picked.addLast(face)
-                        onSelect(face)
-                    }.padding(horizontal = 6.dp, vertical = 4.dp), contentAlignment = Alignment.Center) {
-                    Text(face, color = textColor, fontSize = 16.sp, lineHeight = 22.sp, textAlign = TextAlign.Center)
-                }
-            }
-            }
-        }
+            val faces = if (page == 0) recent else categories[page - 1].faces
+            KaomojiGrid(faces, textColor, onPick = { face ->
+                val updated = RecentUsageStore.record(context, RecentUsageStore.KEY_RECENT_KAOMOJI, face)
+                if (pager.settledPage != 0) recent = updated
+                if (picked.size >= 32) picked.removeFirst()
+                picked.addLast(face)
+                onSelect(face)
+            })
         }
     }
 }

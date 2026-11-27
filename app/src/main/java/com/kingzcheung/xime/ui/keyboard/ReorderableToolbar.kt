@@ -54,7 +54,7 @@ internal fun ReorderableToolbar(
     val inlineEditor = LocalInlineQuickActionEditor.current
     // The inline editor already owns the draft order; render it in the same frame so
     // placement animations see the old and new slots as one change.
-    val displayedOrder = if (inlineEditor?.active == true || dragged == null) ids else order
+    val displayedOrder = if (inlineEditor?.active == true) ids else order
     LaunchedEffect(ids) { if (dragged == null) order = ids }
     fun moveToPointer() {
         val source = dragged ?: return

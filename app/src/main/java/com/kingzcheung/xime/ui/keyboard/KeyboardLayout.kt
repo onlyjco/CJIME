@@ -1151,14 +1151,19 @@ fun KeyboardLayout(
                     }
                     // 逗号键分词：有逗号键放逗号键左下角，只开句号键放句号键。
                     val (leftSplit, rightSplit) = syllableSplitOnPunctuation(syllableSplit || apostropheKey, leftPunctuation, rightPunctuation)
+                    // 注音键盘长按逗号出配置里的标点气泡；气泡里写什么就原样上屏什么。
+                    val commaLongPress = zhuyinCommaLongPressItems(zhuyin, isAsciiMode, KeysConfigHelper.getKeyGesture("'", isAsciiMode))
                     @Composable
                     fun RowScope.PunctuationKey(
                         key: SpacePunctuationKey,
                         punctId: String,
                         tag: String,
                         split: Boolean = false,
+                        longPress: List<String>? = null,
                     ) {
                         val (customUp, customDown) = KeysConfigHelper.bottomPunctuationCustom(punctId, isAsciiMode)
+                        val primaryText = KeysConfigHelper.bottomPunctuationTap(punctId, isAsciiMode)
+                            ?.takeIf { it.isNotEmpty() } ?: key.primary
                         val upText = (customUp ?: key.alternate).ifEmpty { null }
                         val downText = (customDown ?: if (split) SYLLABLE_SEPARATOR else null)?.ifEmpty { null }
                         // 主副字符已按全角/半角写定并原样上屏；键面不能再转一次，否则角标与副字符的宽度相反。
@@ -1168,8 +1173,8 @@ fun KeyboardLayout(
                             // 带分词的标点键不跟角标方向翻：' 画在左下角就下滑分词、副标点上滑。
                             followSymbolSwipeDirection = !split,
                             keepSymbolSwipeOnLongPress = false,
-                            text = key.primary,
-                            onClick = { commitPunctuation(key.primary) },
+                            text = primaryText,
+                            onClick = { commitPunctuation(primaryText) },
                             backgroundColor = keyBackgroundColor,
                             textColor = keyTextColor,
                             modifier = Modifier.weight(bottom.punctuation).testTag(tag),
@@ -1186,8 +1191,13 @@ fun KeyboardLayout(
                                 }
                             },
                             onSwipeStateChange = { state, bounds -> processSwipeState(state, bounds) },
-                            onPress = { onKeyPressDown?.invoke(key.primary) },
-                            onRelease = { onKeyRelease?.invoke(key.primary) },
+                            onPress = { onKeyPressDown?.invoke(primaryText) },
+                            onRelease = { onKeyRelease?.invoke(primaryText) },
+                            onLongPressSelect = if (longPress == null) null else { label ->
+                                (callbacks.onCommitExactText ?: onCommitText ?: onKeyPress)(label)
+                            },
+                            longPressItems = longPress,
+                            longPressMenuFirst = longPress != null,
                             shadowEnabled = shadowEnabled,
                             shadowElevation = shadowElevation,
                             shadowShapeRadius = shadowShapeRadius,
@@ -1228,7 +1238,7 @@ fun KeyboardLayout(
                                 )
                             }
 
-                            if (leftPunctuation != null) PunctuationKey(leftPunctuation, com.kingzcheung.xime.settings.QwertySwipeSymbols.COMMA_KEY, "qwerty-punctuation-key", leftSplit)
+                            if (leftPunctuation != null) PunctuationKey(leftPunctuation, com.kingzcheung.xime.settings.QwertySwipeSymbols.COMMA_KEY, "qwerty-punctuation-key", leftSplit, commaLongPress)
                             else if (commaOnLeft) {
                             // 逗号 — 从配置读取 "'"
                             val k2KeyGesture = KeysConfigHelper.getKeyGesture("'", isAsciiMode)
@@ -1524,8 +1534,19 @@ fun KeyboardLayout(
                             androidx.compose.runtime.SideEffect {
                                 if (enterBounds != Rect.Zero) shiftSlideTargets.putEnter(enterTargetId, enterBounds, shiftEnter)
                             }
+                            // 仅在持续按住 Shift（>= 180ms）时才将回车图标切为换行提示，避免普通点按 Shift 时发送图标闪一下回车。
+                            val isShiftHeld = shiftMode == ShiftMode.HELD
+                            var shiftEnterHint by remember { mutableStateOf(false) }
+                            LaunchedEffect(isShiftHeld) {
+                                if (isShiftHeld) {
+                                    kotlinx.coroutines.delay(180L)
+                                    shiftEnterHint = true
+                                } else {
+                                    shiftEnterHint = false
+                                }
+                            }
                             ActionKeyButton(
-                                text = heldEnterText(enterKeyText, shiftSlideTargets.ctrlFaces, shiftMode == ShiftMode.HELD),
+                                text = heldEnterText(enterKeyText, shiftSlideTargets.ctrlFaces, shiftEnterHint),
                                 onClick = {
                                     if (!shiftSlideTargets.ctrlEnter()) {
                                         if (viewModel.shiftMode.value == ShiftMode.HELD) {

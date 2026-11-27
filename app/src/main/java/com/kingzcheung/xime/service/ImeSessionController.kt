@@ -238,6 +238,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             service.dismissInlineSuggestions()
         }
 
+        val glideRanges = syncGlideUnderlineRanges(if (isT9Schema) inputText else inputText, displayText, isComposing)
         engineInput = inputText
         service.candidateState.value = service.candidateState.value.copy(
             traceEventId = composition.traceEventId,
@@ -250,6 +251,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             learnedCandidates = candidatesWithComments.filter { it.learned }.mapTo(HashSet()) { it.text },
             correctedCandidates = candidatesWithComments.filter { it.correction.isNotEmpty() }.associate { it.text to it.correction },
             isComposing = isComposing,
+            glideUnderlineRanges = glideRanges,
             // 刚打 @ 给的邮箱后缀（默认关）不是英文补全，跟着这次刷新留着。
             associationCandidates = if ((isAsciiMode || !service.isChineseMode) && pendingEnglish.isEmpty() &&
                 !EmailSuffixes.isSuggestionList(service.candidateState.value.associationCandidates)) emptyList()
@@ -293,6 +295,94 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
         if (state.isComposing && text.isNotEmpty()) showInputBoxComposition(service.currentInputConnection, text)
     }
 
+    /** 按字母记录输入来源（true = 滑行，false = 点按），用于给混合输入里的滑行片段精准加下划线。 */
+    private val pendingGlideFlags = java.util.concurrent.ConcurrentLinkedQueue<Boolean>()
+    private var trackedRawInput: String = ""
+    private val trackedRawFlags = ArrayList<Boolean>()
+    private var currentGlideRanges: List<IntRange> = emptyList()
+
+    internal fun recordTypedLetters(count: Int, fromGlide: Boolean) {
+        repeat(count.coerceAtLeast(0)) { pendingGlideFlags.offer(fromGlide) }
+    }
+
+    internal fun resetGlideTracking() {
+        pendingGlideFlags.clear()
+        trackedRawInput = ""
+        trackedRawFlags.clear()
+        currentGlideRanges = emptyList()
+    }
+
+    private fun syncGlideUnderlineRanges(rawInput: String, displayText: String, isComposing: Boolean): List<IntRange> {
+        if (!isComposing || rawInput.isEmpty() || displayText.isEmpty()) {
+            resetGlideTracking()
+            return emptyList()
+        }
+        var common = 0
+        val minLen = minOf(trackedRawInput.length, rawInput.length)
+        while (common < minLen && trackedRawInput[common] == rawInput[common]) common++
+        while (trackedRawFlags.size > common) trackedRawFlags.removeAt(trackedRawFlags.size - 1)
+        for (i in common until rawInput.length) {
+            val ch = rawInput[i]
+            val flag = if (ch.isLetterOrDigit()) pendingGlideFlags.poll() ?: false else false
+            trackedRawFlags.add(flag)
+        }
+        trackedRawInput = rawInput
+
+        val alphaFlags = ArrayList<Boolean>(trackedRawFlags.size)
+        for (i in rawInput.indices) {
+            if (rawInput[i].isLetterOrDigit() && i < trackedRawFlags.size) alphaFlags.add(trackedRawFlags[i])
+        }
+        if (alphaFlags.isEmpty() || alphaFlags.none { it }) {
+            currentGlideRanges = emptyList()
+            return emptyList()
+        }
+        if (alphaFlags.all { it }) {
+            val all = listOf(0 until displayText.length)
+            currentGlideRanges = all
+            return all
+        }
+        // 将编码字母的滑行标记映射到展示文本（支持全拼分隔符、九键数字→字母、双拼展开）。
+        val displayAlphaIndices = ArrayList<Int>(displayText.length)
+        for (i in displayText.indices) {
+            if (displayText[i].isLetterOrDigit()) displayAlphaIndices.add(i)
+        }
+        if (displayAlphaIndices.isEmpty()) {
+            currentGlideRanges = emptyList()
+            return emptyList()
+        }
+        val charUnderlined = BooleanArray(displayText.length)
+        val totalDisplay = displayAlphaIndices.size
+        val totalRaw = alphaFlags.size
+        for (k in 0 until totalDisplay) {
+            val rawIdx = if (totalDisplay == totalRaw) k else (k * totalRaw / totalDisplay).coerceIn(0, totalRaw - 1)
+            charUnderlined[displayAlphaIndices[k]] = alphaFlags[rawIdx]
+        }
+        // 位于两个滑行字母之间的隔音符或空格并入同一段下划线，避免单个词内断线。
+        for (i in 1 until displayText.length - 1) {
+            if (!displayText[i].isLetterOrDigit() && charUnderlined[i - 1] && charUnderlined[i + 1]) {
+                charUnderlined[i] = true
+            }
+        }
+        val ranges = ArrayList<IntRange>()
+        var start = -1
+        for (i in charUnderlined.indices) {
+            if (charUnderlined[i] && start < 0) start = i
+            else if (!charUnderlined[i] && start >= 0) {
+                ranges.add(start until i)
+                start = -1
+            }
+        }
+        if (start >= 0) ranges.add(start until charUnderlined.size)
+        currentGlideRanges = ranges
+        return ranges
+    }
+
+    /** 仅滑行片段在输入框组合编码下显示横线；并复用与局部修改一致的逐字底色边界，避免开始/拖动局部修改时字距跳动。 */
+    private fun styledInputBoxComposing(text: String, ranges: List<IntRange>): CharSequence {
+        if (text.isEmpty()) return text
+        return sentenceCodeHighlight(text, 0, 0, ranges)
+    }
+
     /** 在输入框模式向编辑器写入编码文本。 */
     private fun showInputBoxComposition(ic: android.view.inputmethod.InputConnection?, displayText: String) {
         // Android may detach the editor while a queued candidate snapshot is being delivered.
@@ -306,9 +396,10 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
         // 避免传 displayText.length 时被 AOSP 钳制到整段文本末尾（光标跑到最右边）。
         // 标记输入框存在 composing 区域：endComposingInputBox 仅在此标记下执行 setComposingText("") 清空，
         // 否则该调用会在光标处插入空串，光标处有选中文字时等于删除选区。
+        val styled = styledInputBoxComposing(displayText, currentGlideRanges)
         ic.beginBatchEdit()
         try {
-            if (ic.setComposingText(displayText, 1)) service.markInputBoxComposing(displayText)
+            if (ic.setComposingText(styled, 1)) service.markInputBoxComposing(displayText)
         } finally {
             ic.endBatchEdit()
         }
@@ -316,9 +407,10 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
 
     /** 写读音后把输入框光标挪到读音里第 [caret] 个字后面（setComposingText 只能把光标放在两头）；放进同一批编辑避免光标在末尾闪一下。 */
     private fun showInputBoxCompositionWithCaret(ic: android.view.inputmethod.InputConnection, text: String, caret: Int) {
+        val styled = styledInputBoxComposing(text, currentGlideRanges)
         ic.beginBatchEdit()
         try {
-            if (!ic.setComposingText(text, 1)) return
+            if (!ic.setComposingText(styled, 1)) return
             service.markInputBoxComposing(text)
             val value = runCatching { ic.getExtractedText(android.view.inputmethod.ExtractedTextRequest(), 0) }.getOrNull() ?: return
             if (value.startOffset < 0 || value.selectionStart != value.selectionEnd) return
@@ -394,6 +486,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             service.dismissInlineSuggestions()
         }
 
+        val glideRanges = syncGlideUnderlineRanges(result.inputText, displayText, isComposing)
         engineInput = result.inputText
         service.candidateState.value = service.candidateState.value.copy(
             engineRevision = result.engineRevision,
@@ -404,6 +497,7 @@ internal class ImeSessionController(private val service: XimeInputMethodService)
             learnedCandidates = candidatesWithComments.filter { it.learned }.mapTo(HashSet()) { it.text },
             correctedCandidates = candidatesWithComments.filter { it.correction.isNotEmpty() }.associate { it.text to it.correction },
             isComposing = isComposing,
+            glideUnderlineRanges = glideRanges,
             // 刚打 @ 给的邮箱后缀（默认关）不是英文补全，跟着这次刷新留着。
             associationCandidates = if ((isAsciiMode || !service.isChineseMode) && pendingEnglish.isEmpty() &&
                 !EmailSuffixes.isSuggestionList(service.candidateState.value.associationCandidates)) emptyList()

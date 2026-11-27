@@ -24,9 +24,11 @@ import com.kingzcheung.xime.settings.KeysConfigHelper
 import com.kingzcheung.xime.settings.SchemaInfo
 import com.kingzcheung.xime.speech.RecognitionState
 import com.kingzcheung.xime.rime.T9InputController
+import com.kingzcheung.xime.ui.keyboard.AsciiKeyboardContext
 import com.kingzcheung.xime.ui.keyboard.KeyboardCallbacks
 import com.kingzcheung.xime.ui.keyboard.KeyboardDispatchAction
 import com.kingzcheung.xime.ui.keyboard.KeyboardLayoutState
+import com.kingzcheung.xime.ui.keyboard.asciiContext
 import com.kingzcheung.xime.ui.keyboard.transition
 import com.kingzcheung.xime.ui.keyboard.KeyboardLayoutAction
 import com.kingzcheung.xime.ui.keyboard.KeyboardViewState
@@ -74,6 +76,8 @@ data class KeyboardUiState(
     val recentClipboardItems: List<ClipboardItem> = emptyList(),
     val isVoiceMode: Boolean = false,
     val voiceSticky: Boolean = false,
+    val voiceContinuousSession: Boolean = false,
+    val spaceVoiceContinuousOverride: Boolean? = null,
     val voiceBottomActive: Boolean = false,
     val voiceLeftActive: Boolean = false,
     val voiceRightActive: Boolean = false,
@@ -158,6 +162,9 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
 
     private val _page = MutableStateFlow<KeyboardPage>(KeyboardPage.Main(MainType.FULL))
     val page: StateFlow<KeyboardPage> = _page.asStateFlow()
+    private val _pageState = androidx.compose.runtime.mutableStateOf<KeyboardPage>(KeyboardPage.Main(MainType.FULL))
+    /** 与 [_page] 同步更新的 Compose 状态，保证 Service 与 KeyboardView 在同一帧切换页面与工具栏图标。 */
+    val pageState: androidx.compose.runtime.State<KeyboardPage> get() = _pageState
 
     /** 候选展开页：候选栏的在位展开态（非 Overlay——顶部保持真实候选栏，实时跟随编码/删除）。 */
     private val _candidatePageExpanded = MutableStateFlow(false)
@@ -434,14 +441,49 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
             }
             is KeyboardDispatchAction.AsciiModeChanged -> {
                 if (hasTemporaryHandwriting || current is KeyboardViewState.Overlay) {
-                    FileLogger.i("XimeKeyboard", "AsciiModeChanged skipped: current=$current (overlay)")
+                    // 覆盖层（如符号页/方案列表/表情）打开期间切方案或按底部语言键时，只要背后不是独立英文记忆的
+                    // CommonSymbolPanel，就同步更新主键盘记忆、返回目标以及底层主键盘状态，避免左下角返回文字和返回布局滞后。
+                    if (!hasTemporaryHandwriting && current is KeyboardViewState.Overlay &&
+                        current.behind.asciiContext() != AsciiKeyboardContext.SYMBOL_PANEL) {
+                        val nextMain = initialKeyboardLayoutState(action.isAsciiMode, action.schemaId)
+                        asciiStateMachine.saveMemory(AsciiKeyboardContext.MAIN, action.isAsciiMode)
+                        _lastMainLayout.value = nextMain
+                        if (_savedKbStateBeforePanel != null) _savedKbStateBeforePanel = nextMain
+                        if (current.behind.asciiContext() == AsciiKeyboardContext.MAIN &&
+                            current.behind != KeyboardViewState.Handwriting &&
+                            current.behind != KeyboardViewState.Voice) {
+                            val nextBehind = when (nextMain) {
+                                is KeyboardLayoutState.Chinese -> KeyboardViewState.ChineseFull
+                                is KeyboardLayoutState.English -> KeyboardViewState.EnglishFull
+                                is KeyboardLayoutState.T9Pinyin -> KeyboardViewState.T9PinyinFull
+                                is KeyboardLayoutState.Stroke -> KeyboardViewState.StrokeFull
+                                else -> current.behind
+                            }
+                            Triple(current.copy(behind = nextBehind), _page.value, nextMain)
+                        } else {
+                            Triple(current, _page.value, _keyboardState.value)
+                        }
+                    } else {
+                        FileLogger.i("XimeKeyboard", "AsciiModeChanged skipped: current=$current (overlay)")
+                        Triple(current, _page.value, _keyboardState.value)
+                    }
+                } else if (current is KeyboardViewState.NumberPanel) {
+                    // 数字面板无面板内中英键：在数字面板期间触发的中英切换（如底部抬高栏语言键/实体键盘）
+                    // 代表用户直接切换主键盘语言，需同步主键盘记忆与返回布局，让左下角返回标签即时更新。
+                    val nextMain = initialKeyboardLayoutState(action.isAsciiMode, action.schemaId)
+                    asciiStateMachine.saveMemory(AsciiKeyboardContext.MAIN, action.isAsciiMode)
+                    _lastMainLayout.value = nextMain
+                    _savedKbStateBeforePanel = nextMain
+                    FileLogger.i("XimeKeyboard", "AsciiModeChanged in NumberPanel: updated return target -> $nextMain")
                     Triple(current, _page.value, _keyboardState.value)
-                } else if (current is KeyboardViewState.NumberPanel || current is KeyboardViewState.CommonSymbolPanel) {
-                    FileLogger.i("XimeKeyboard", "AsciiModeChanged skipped: current=$current (panel)")
+                } else if (current is KeyboardViewState.CommonSymbolPanel) {
+                    FileLogger.i("XimeKeyboard", "AsciiModeChanged skipped: current=$current (common symbol panel)")
                     Triple(current, _page.value, _keyboardState.value)
                 } else if (!action.isAsciiMode && isHandwritingSchema(action.schemaId)) {
+                    asciiStateMachine.saveMemory(AsciiKeyboardContext.MAIN, false)
                     Triple(KeyboardViewState.Handwriting, KeyboardPage.Main(MainType.HANDWRITING), KeyboardLayoutState.Chinese)
                 } else {
+                    asciiStateMachine.saveMemory(AsciiKeyboardContext.MAIN, action.isAsciiMode)
                     val kb = initialKeyboardLayoutState(action.isAsciiMode, action.schemaId)
                     val vs = when (kb) {
                         is KeyboardLayoutState.Chinese -> KeyboardViewState.ChineseFull
@@ -551,6 +593,7 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
     private fun _syncViewState() {
         val kb = _keyboardState.value
         val p = _page.value
+        if (_pageState.value != p) _pageState.value = p
         // 主键盘布局真正显示时刷新「最近主布局」来源记录（数字面板返回/符号键位置自适应依赖）。
         // 必须放在 _syncViewState：切九键/笔画等走 dispatch 直接赋值，不经过 setKeyboardState
         if (p is KeyboardPage.Main && p.type == com.kingzcheung.xime.keyboard.MainType.FULL) {
@@ -648,74 +691,75 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
 
     fun exitPanel() = returnToTextKeyboard()
 
-    /** Level 3: 打开覆盖页面，可从任意页面进入 */
+    /** Level 3: 打开覆盖页面；仅上一个窗口直接是手写时按返回回手写，连续切到第二个功能窗口后返回一律回键盘。 */
     fun showOverlay(route: OverlayRoute, initialBackStack: List<OverlayRoute> = emptyList()) {
-        leaveHandwritingForClipboard(route)
         // Keep the current input surface in place while the tool reveals over it.
         // Symbols still return to text, but only when leaving the symbol panel.
         val current = _page.value
-        val behind = if (current is KeyboardPage.Overlay) current.behind else current
+        val behind = if (current is KeyboardPage.Overlay) {
+            if (current.behind == KeyboardPage.Main(MainType.HANDWRITING)) {
+                val saved = handwritingReturn
+                handwritingReturn = null
+                if (saved != null) {
+                    _keyboardState.value = saved.layout
+                    _savedKbStateBeforePanel = saved.panelLayout
+                } else {
+                    _savedKbStateBeforePanel = null
+                    _keyboardState.value = _lastMainLayout.value
+                }
+                KeyboardPage.Main(MainType.FULL)
+            } else {
+                current.behind
+            }
+        } else {
+            current
+        }
         _page.value = KeyboardPage.Overlay(route, initialBackStack, behind,
             returnToTextOnClose = route == OverlayRoute.Symbol ||
                 (current as? KeyboardPage.Overlay)?.returnToTextOnClose == true)
         _syncViewState()
     }
 
-    /** 同一工具栏图标再次点击，回到打开工具前的页面。 */
+    /** 同一覆盖面板内部切换子标签（如剪贴板切常用语/图片）：原地替换当前路由，不把旧标签压入返回栈。 */
+    fun replaceOverlayRoute(route: OverlayRoute) {
+        val current = _page.value
+        if (current is KeyboardPage.Overlay) {
+            _page.value = current.copy(route = route)
+            _syncViewState()
+        } else {
+            showOverlay(route)
+        }
+    }
+
+    /** 同一工具栏图标再次点击，回到原底层页面（手写或键盘）；切到另一功能窗口不保留旧窗口到返回栈。 */
     fun toggleOverlay(route: OverlayRoute, initialBackStack: List<OverlayRoute> = emptyList()) {
         val currentRoute = (_page.value as? KeyboardPage.Overlay)?.route
         // Text, images and legacy pinned links are one clipboard tool, not separate toggles.
-        if (currentRoute == route || currentRoute is OverlayRoute.Clipboard && route is OverlayRoute.Clipboard) leaveClipboard()
-        // 从方向盘（编辑）面板打开剪贴板：记住编辑面板，粘贴或收起剪贴板后回到它，而不是回主键盘。
-        else if (currentRoute == OverlayRoute.Edit && route is OverlayRoute.Clipboard && initialBackStack.isEmpty()) pushOverlay(route)
+        if (currentRoute == route || currentRoute is OverlayRoute.Clipboard && route is OverlayRoute.Clipboard) closeOverlay()
         else showOverlay(route, initialBackStack)
     }
 
-    /**
-     * 离开剪贴板（粘贴、返回或再次点剪贴板图标）：若剪贴板是从编辑面板打开的，回到编辑面板；
-     * 否则照常关闭覆盖页。
-     */
+    /** 离开剪贴板（粘贴、返回或再次点剪贴板图标）：回到原底层页面（手写回手写，其余一律回键盘）。 */
     fun leaveClipboard() {
-        val current = _page.value
-        val editIndex = (current as? KeyboardPage.Overlay)?.backStack?.lastIndexOf(OverlayRoute.Edit) ?: -1
-        if (current is KeyboardPage.Overlay &&
-            (current.route is OverlayRoute.Clipboard || current.route is OverlayRoute.SplitWords) &&
-            editIndex >= 0
-        ) {
-            _page.value = current.copy(route = OverlayRoute.Edit, backStack = current.backStack.take(editIndex))
-            _syncViewState()
-        } else closeOverlay()
+        closeOverlay()
     }
 
-    /** Level 3: 在覆盖页面内推入子页 */
+    /** Level 3: 在覆盖页面内推入子页（从剪贴板切到非拆词窗口时不把剪贴板压入返回栈） */
     fun pushOverlay(route: OverlayRoute) {
-        if (leaveHandwritingForClipboard(route)) {
-            showOverlay(route)
-            return
-        }
         val current = _page.value
         if (current is KeyboardPage.Overlay) {
+            val nextBackStack = if (current.route is OverlayRoute.Clipboard && route !is OverlayRoute.SplitWords) {
+                current.backStack.filterNot { it is OverlayRoute.Clipboard || it is OverlayRoute.SplitWords }
+            } else {
+                current.backStack + current.route
+            }
             _page.value = current.copy(
                 route = route,
-                backStack = current.backStack + current.route,
+                backStack = nextBackStack,
                 returnToTextOnClose = current.returnToTextOnClose || route == OverlayRoute.Symbol,
             )
             _syncViewState()
         }
-    }
-
-    /** Clipboard owns the normal keyboard area; voice and other tools keep their current rules. */
-    private fun leaveHandwritingForClipboard(route: OverlayRoute): Boolean {
-        if (route !is OverlayRoute.Clipboard || _page.value.textMainType() != MainType.HANDWRITING) return false
-        if (!exitTemporaryHandwriting() || _page.value.textMainType() == MainType.HANDWRITING) {
-            handwritingReturn = null
-            _savedKbStateBeforePanel = null
-            _keyboardState.value = _lastMainLayout.value
-            _page.value = KeyboardPage.Main(MainType.FULL)
-            _syncViewState()
-        }
-        handwritingShouldReturn = false
-        return true
     }
 
     /** Level 3: 在覆盖页面内回退 */
@@ -736,16 +780,16 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
-    /** Level 3: 关闭覆盖页面，回到背后页面 */
+    /** Level 3: 关闭覆盖页面——底层是手写则回到手写，其余情况一律回到主键盘 */
     fun closeOverlay() {
         val current = _page.value
         if (current is KeyboardPage.Overlay) {
-            if (current.returnToTextOnClose) {
-                returnToTextKeyboard()
+            if (current.behind == KeyboardPage.Main(MainType.HANDWRITING)) {
+                _page.value = current.behind
+                _syncViewState()
                 return
             }
-            _page.value = current.behind
-            _syncViewState()
+            returnToTextKeyboard()
         }
     }
 
@@ -761,10 +805,6 @@ class KeyboardViewModel(application: Application) : AndroidViewModel(application
         if (handwriting) switchMain(MainType.HANDWRITING)
         else resetKeyboard(isAsciiMode, schemaId, forceNumberPanel)
         _page.value = visiblePage.afterEditorPreparation(_page.value)
-        // A delayed engine preparation must not reintroduce handwriting beneath an open clipboard.
-        if (visiblePage is KeyboardPage.Overlay && leaveHandwritingForClipboard(visiblePage.route)) {
-            showOverlay(visiblePage.route, visiblePage.backStack)
-        }
         _syncViewState()
     }
 

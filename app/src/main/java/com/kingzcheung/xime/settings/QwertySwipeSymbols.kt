@@ -127,7 +127,7 @@ internal object QwertySwipeSymbols {
     fun loadBottomPunctuation(context: Context, english: Boolean): Map<String, String> {
         val prefs = SettingsPreferences.getPrefsPublic(context)
         return buildMap {
-            for (key in bottomPunctuationKeys) for (direction in listOf("up", "down")) {
+            for (key in bottomPunctuationKeys) for (direction in listOf("tap", "up", "down")) {
                 val id = "$direction.$key"
                 val prefKey = bottomPunctuationPrefKey(english, id)
                 if (prefs.contains(prefKey)) put(id, prefs.getString(prefKey, "").orEmpty())
@@ -137,7 +137,7 @@ internal object QwertySwipeSymbols {
 
     fun saveBottomPunctuation(context: Context, english: Boolean, values: Map<String, String>) {
         val edit = SettingsPreferences.getPrefsPublic(context).edit()
-        for (key in bottomPunctuationKeys) for (direction in listOf("up", "down")) {
+        for (key in bottomPunctuationKeys) for (direction in listOf("tap", "up", "down")) {
             val id = "$direction.$key"
             val prefKey = bottomPunctuationPrefKey(english, id)
             val value = values[id]

@@ -7,6 +7,7 @@ import androidx.compose.foundation.layout.padding
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.twotone.Backup
+import androidx.compose.material.icons.twotone.BatterySaver
 import androidx.compose.material.icons.twotone.Speed
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
@@ -18,7 +19,9 @@ import com.kingzcheung.xime.ui.i18n.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.kingzcheung.xime.R
@@ -30,6 +33,13 @@ import com.kingzcheung.xime.R
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun OtherSettingsContent(onBack: () -> Unit, onNavigateToRoute: (String) -> Unit) {
+    val context = LocalContext.current
+    val backgroundSteps = remember {
+        com.kingzcheung.xime.platform.OemBackgroundGuide.steps(
+            com.kingzcheung.xime.platform.AndroidPlatform.vendor,
+            com.kingzcheung.xime.platform.AndroidPlatform.rom,
+        )
+    }
     Scaffold(
         containerColor = MaterialTheme.colorScheme.surface,
         topBar = {
@@ -71,6 +81,17 @@ fun OtherSettingsContent(onBack: () -> Unit, onNavigateToRoute: (String) -> Unit
                 )
                 AppLanguageItem()
             })
+            backgroundSteps?.let { steps ->
+                SettingsSection(title = "后台", content = {
+                    SettingsItem(
+                        icon = Icons.TwoTone.BatterySaver,
+                        title = "防止被系统清理",
+                        subtitle = steps,
+                        onClick = { com.kingzcheung.xime.platform.OemBackgroundGuide.open(context) },
+                        showArrow = true,
+                    )
+                })
+            }
         }
     }
 }

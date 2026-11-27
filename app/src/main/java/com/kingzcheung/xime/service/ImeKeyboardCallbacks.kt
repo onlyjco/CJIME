@@ -81,6 +81,8 @@ internal fun rememberImeKeyboardCallbacks(
             onGlideCandidates = service.keyRouter::dispatchChineseGlide,
             onT9GlideAlternatives = { digits, words ->
                 val state = service.uiState.value
+                val added = (digits.length - service.candidateState.value.inputText.count { it.isLetterOrDigit() }).coerceAtLeast(0)
+                if (added > 0) service.sessionController.recordTypedLetters(added, fromGlide = true)
                 service.candidateTransform.t9GlideAlternatives.offer(digits, words, state.currentSchemaId, state.inputSessionId)
             },
             glidePreviewer = service.keyRouter::glidePreviewer,
@@ -140,11 +142,14 @@ internal fun rememberImeKeyboardCallbacks(
                     // 注音键盘的轻声 ˙ 是修饰符号，不能按标点上屏（见 zhuyinKeyIsCode）。
                     val zhuyinKey = !numberPanel && zhuyinKeyIsCode(key, service.uiState.value.isAsciiMode,
                         service.uiState.value.inputProfile)
+                    // 笔画键盘的通配符 * 是编码键（代替任意一笔），送进 Rime 引擎而不是当标点直接上屏。
+                    val strokeWildcard = !numberPanel && key == "*" && !service.uiState.value.isAsciiMode &&
+                        service.uiState.value.inputProfile.scheme == com.kingzcheung.xime.settings.InputScheme.STROKE
                     if (schemeCode != null) {
                         service.keyRouter.handleKeyPress(schemeCode, false)
                     } else if (zhuyinKey) {
                         service.keyRouter.handleKeyPress(key, false)
-                    } else if (!numberPanel && !separator && !semicolonCode && isLiteralPunctuation(key)) {
+                    } else if (!numberPanel && !separator && !semicolonCode && !strokeWildcard && isLiteralPunctuation(key)) {
                         service.textCommit.commitLiteralText(key)
                     } else {
                         val mergedKey = com.kingzcheung.xime.rime.MergedLetterInput.isGroup(key,
@@ -320,10 +325,10 @@ internal fun rememberImeKeyboardCallbacks(
             onDeleteKaomoji = service::deleteKaomojiBeforeCursor,
             onDeleteText = { count -> service.textCommit.deleteClipboardChars(count) },
             onKeyboardResize = resize@{
-                service.keyboardViewModel.closeOverlay()
                 val config = service.resources.configuration
                 val s = service.uiState.value
                 if (s.isFloatingMode && SettingsPreferences.floatingGeometryLocked(service)) {
+                    service.keyboardViewModel.closeOverlay()
                     android.widget.Toast.makeText(service, "长按底部小锁 0.5 秒解锁，即可调整尺寸", android.widget.Toast.LENGTH_SHORT).show()
                     return@resize
                 }
@@ -338,15 +343,21 @@ internal fun rememberImeKeyboardCallbacks(
                 // 分体时显示的是贴边占满的宽度，不是存着的非分体宽度：进调节时不拿它当起点，
                 // 否则确认（或在调节里关掉分体）会把窄键盘存成整屏宽（11-05 平板）。
                 val splitShown = service.splitKeyboardActive(s)
-                service.uiState.value = service.uiState.value.copy(
+                // 悬浮模式容器本身就是全屏，立刻关闭菜单；固定模式保留菜单直到全屏高度就绪的那一帧，
+                // 由 KeyboardView 与 KeyboardResizeOverlay 同帧原子切换（菜单消失 = 遮罩/边框/确认框出现）。
+                if (s.isFloatingMode) {
+                    service.keyboardViewModel.closeOverlay()
+                }
+                service.keyboardContainer.updateMatchParentHeight()
+                service.uiState.value = s.copy(
                     showKeyboardResize = true,
                     resizePreviewHeightDp = currentHeight,
                     resizePreviewWidthDp = if (splitShown && s.isFloatingMode) s.floatingWidthDp else currentWidth,
                     fixedWidthDp = if (s.isFloatingMode || splitShown) s.fixedWidthDp else currentWidth,
-                    resizeInitialFloating = service.uiState.value.isFloatingMode,
+                    resizeInitialFloating = s.isFloatingMode,
                     resizeInitialSplit = SettingsPreferences.isSplitKeyboardEnabled(service),
-                    resizeInitialX = service.uiState.value.floatingOffsetX,
-                    resizeInitialY = service.uiState.value.floatingOffsetY,
+                    resizeInitialX = s.floatingOffsetX,
+                    resizeInitialY = s.floatingOffsetY,
                 )
             },
             onReloadConfig = { service.schemaController.reloadConfig() },
@@ -388,6 +399,8 @@ internal fun rememberImeKeyboardCallbacks(
                     // 「语音转文本」总开关关着：屏幕键盘也不开麦，与物理键盘 Alt+H 同一句提示。
                     android.widget.Toast.makeText(service, "请先在设置中启用语音输入", android.widget.Toast.LENGTH_SHORT).show()
                 } else if (!service.uiState.value.isVoiceMode && !service.editorInputPolicy.field.blocksVoice) {
+                    TerminalEditor.voiceActive = true
+                    service.endComposingInputBox()
                     service.uiState.value = service.uiState.value.copy(
                         isVoiceMode = true,
                         voiceSticky = false,
@@ -415,7 +428,30 @@ internal fun rememberImeKeyboardCallbacks(
                     android.widget.Toast.makeText(service, "请先在设置中启用语音输入", android.widget.Toast.LENGTH_SHORT).show()
                 } else if (!state.isVoiceMode && !service.editorInputPolicy.field.blocksVoice) {
                     // 工具栏独立语音组件，不占用空格或改变键盘页面。
+                    service.resetVoiceContinuousSessionOverride()
                     service.feedbackManager.playKeySound("voice_start")
+                    TerminalEditor.voiceActive = true
+                    service.endComposingInputBox()
+                    service.uiState.value = service.uiState.value.copy(
+                        isVoiceMode = true,
+                        voiceSticky = true,
+                        voiceButtonState = VoiceButtonState(bottomActive = true),
+                        voiceRecognizedText = ""
+                    )
+                    service.voiceRecordingStarted = true
+                    service.voiceRecognitionHandler.startDelayedPreStart(0)
+                    service.voiceRecognitionHandler.startRecognition()
+                }
+            },
+            onVoiceHoldStart = {
+                val state = service.uiState.value
+                if (!state.isVoiceMode && !state.isSttEnabled) {
+                    android.widget.Toast.makeText(service, "请先在设置中启用语音输入", android.widget.Toast.LENGTH_SHORT).show()
+                } else if (!state.isVoiceMode && !service.editorInputPolicy.field.blocksVoice) {
+                    service.beginSpaceVoiceHold()
+                    service.feedbackManager.playKeySound("voice_start")
+                    TerminalEditor.voiceActive = true
+                    service.endComposingInputBox()
                     service.uiState.value = service.uiState.value.copy(
                         isVoiceMode = true,
                         voiceSticky = true,
@@ -436,6 +472,12 @@ internal fun rememberImeKeyboardCallbacks(
                 // 按住空格说话上滑后松手：停麦，这次说的字撤掉，不上屏。
                 val state = service.uiState.value
                 if (state.isVoiceMode && state.voiceSticky) service.cancelVoiceSession()
+            },
+            onVoiceNormalLock = {
+                service.disableVoiceContinuousForSession()
+            },
+            onVoiceContinuousLock = {
+                service.enableTemporaryVoiceContinuous()
             },
             onPageDown = { service.keyRouter.pageDown() },
             onPageUp = { service.keyRouter.pageUp() },

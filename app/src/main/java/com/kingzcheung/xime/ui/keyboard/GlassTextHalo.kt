@@ -79,7 +79,7 @@ internal fun glassTextHalo(
  * 放在修饰链里背景、按钮底之后。Android 12 以下没有 RenderEffect，保留原来的 1dp 文字阴影。
  */
 @Composable
-internal fun Modifier.glassTextHalo(halo: GlassTextHalo?): Modifier {
+internal fun Modifier.glassTextHalo(halo: GlassTextHalo?, invalidationKey: Any? = null): Modifier {
     if (!glassHaloSupported()) return this
     if (halo == null || halo.alpha <= 0f) return this
     val corePx = with(LocalDensity.current) { GLASS_HALO_CORE_RADIUS.toPx() }
@@ -88,7 +88,10 @@ internal fun Modifier.glassTextHalo(halo: GlassTextHalo?): Modifier {
     val effect = remember(halo.color, corePx, softPx) {
         glassHaloEffect(halo.color, corePx, softPx).asComposeRenderEffect()
     }
+    val keyState = androidx.compose.runtime.rememberUpdatedState(invalidationKey)
     return drawWithContent {
+        // 读取状态键确保页面或工具栏图标切换时当帧同步失效并重录离屏光晕层，避免残留上一帧图标轮廓。
+        keyState.value
         layer.record { this@drawWithContent.drawContent() }
         layer.renderEffect = effect
         layer.alpha = halo.alpha

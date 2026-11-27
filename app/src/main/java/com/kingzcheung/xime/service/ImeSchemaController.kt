@@ -317,7 +317,8 @@ internal class ImeSchemaController(private val service: XimeInputMethodService) 
         // 菜单「设置」不带页面时进设置首页：在设置自己的测试框里点也照样跳（以前直接 return，菜单一关什么也没有），
         // 设置已经开着时也不停在上次那一页（11-03 平板）。
         try {
-            service.startActivity(settingsActivityIntent(service, route ?: com.kingzcheung.xime.ui.settings.SettingsRoutes.Main))
+            val options = android.app.ActivityOptions.makeCustomAnimation(service, 0, 0).toBundle()
+            service.startActivity(settingsActivityIntent(service, route ?: com.kingzcheung.xime.ui.settings.SettingsRoutes.Main), options)
         } catch (e: Exception) {
             FileLogger.e(XimeInputMethodService.TAG, "Failed to open settings", e)
         }
@@ -539,6 +540,14 @@ internal class ImeSchemaController(private val service: XimeInputMethodService) 
     internal fun toggleHandwriting() {
         if (service.editorInputPolicy.locksNativeInput) return
         val model = service.keyboardViewModel
+        val currentPage = model.page.value
+        if (currentPage is com.kingzcheung.xime.keyboard.KeyboardPage.Overlay &&
+            currentPage.behind == com.kingzcheung.xime.keyboard.KeyboardPage.Main(com.kingzcheung.xime.keyboard.MainType.HANDWRITING)
+        ) {
+            // 手写上方盖着菜单/剪贴板等覆盖页时点手写图标：直接收起覆盖页回到手写。
+            model.closeOverlay()
+            return
+        }
         if (model.exitTemporaryHandwriting()) {
             com.kingzcheung.xime.handwriting.HandwritingEngine.release()
             return
@@ -564,6 +573,7 @@ internal class ImeSchemaController(private val service: XimeInputMethodService) 
         }
         service.editorInputPolicy.choose(false)
         model.enterTemporaryHandwriting()
+        if (service.isInputViewShown) service.restoreHandwritingFullscreen()
     }
 
     /**

@@ -143,7 +143,8 @@ fun SettingsScreen(
             val leaveSchema = {
                 if (initialRoute == "schema") {
                     navController.navigate(SettingsRoutes.Main) {
-                        popUpTo(SettingsRoutes.Main) { inclusive = true }
+                        popUpTo(navController.graph.id) { inclusive = true }
+                        launchSingleTop = true
                     }
                 } else navController.popBackStack()
                 onWizardBack()

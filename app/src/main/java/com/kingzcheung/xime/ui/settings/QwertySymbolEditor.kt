@@ -345,6 +345,7 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
                 }
                 @Composable
                 fun RowScope.PunctEditorCard(id: String, primary: String, defUp: String, defDown: String) {
+                    val tapShown = bottomPunctOverrides["tap.$id"]?.ifEmpty { null } ?: primary
                     val upShown = bottomPunctOverrides["up.$id"] ?: defUp
                     val downShown = bottomPunctOverrides["down.$id"] ?: defDown
                     Surface(
@@ -359,7 +360,7 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
                             verticalArrangement = Arrangement.SpaceEvenly) {
                             Text(upShown, style = MaterialTheme.typography.labelSmall, maxLines = 1,
                                 modifier = Modifier.alpha(if (variant.showsUp) 1f else 0.38f))
-                            Text(primary, style = MaterialTheme.typography.titleMedium)
+                            Text(tapShown, style = MaterialTheme.typography.titleMedium, maxLines = 1)
                             Text(downShown, style = MaterialTheme.typography.labelSmall, maxLines = 1,
                                 modifier = Modifier.alpha(if (variant.showsDown) 1f else 0.38f))
                         }
@@ -405,6 +406,7 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
         val defPrimary = if (isComma) (defComma?.primary ?: if (english) "," else "，") else (defPeriod?.primary ?: if (english) "." else "。")
         val defUp = if (isComma) defComma?.alternate.orEmpty() else defPeriod?.alternate.orEmpty()
         val defDown = if ((isComma && leftSplit) || (!isComma && rightSplit)) SYLLABLE_SEPARATOR else ""
+        val curTap = bottomPunctOverrides["tap.$punctKey"]?.ifEmpty { null } ?: defPrimary
         val curUp = bottomPunctOverrides["up.$punctKey"] ?: defUp
         val curDown = bottomPunctOverrides["down.$punctKey"] ?: defDown
         KeySymbolDialog(
@@ -418,10 +420,14 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
             lowerSlot = "down",
             upShown = variant.showsUp,
             downShown = variant.showsDown,
+            tap = curTap,
+            defaultTap = defPrimary,
             onDismiss = { editingPunct = null },
-            onDone = { up, down, _, _, _ ->
+            onDone = { up, down, _, _, _, tap ->
                 editingPunct = null
                 val next = bottomPunctOverrides.toMutableMap()
+                val cleanTap = tap.orEmpty()
+                if (cleanTap.isEmpty() || cleanTap == defPrimary) next.remove("tap.$punctKey") else next["tap.$punctKey"] = cleanTap
                 if (up == defUp) next.remove("up.$punctKey") else next["up.$punctKey"] = up
                 if (down == defDown) next.remove("down.$punctKey") else next["down.$punctKey"] = down
                 if (next != bottomPunctOverrides) persistBottomPunct(next)
@@ -439,7 +445,7 @@ internal fun QwertySymbolEditor(onBack: () -> Unit, initialTarget: String? = nul
             followUp = ("up.$key" in follows).takeIf { merged == null && !english },
             followDown = ("down.$key" in follows).takeIf { merged == null && !english },
             onDismiss = { editing = null },
-            onDone = { up, down, nextSwipes, followUp, followDown ->
+            onDone = { up, down, nextSwipes, followUp, followDown, _ ->
                 editing = null
                 val next = values + ("up.$key" to up) + ("down.$key" to down)
                 var nextFollows = followOverrides
@@ -539,7 +545,9 @@ private val FOURTEEN = InputLayout.MERGED14.id
 private fun KeySymbolDialog(key: String, up: String, down: String, topGesture: String, bottomGesture: String,
     swipes: Map<String, String>?, upperSlot: String?, lowerSlot: String,
     upShown: Boolean = true, downShown: Boolean = true, followUp: Boolean? = null, followDown: Boolean? = null,
-    onDismiss: () -> Unit, onDone: (String, String, Map<String, String>?, Boolean?, Boolean?) -> Unit) {
+    tap: String? = null, defaultTap: String? = null,
+    onDismiss: () -> Unit, onDone: (String, String, Map<String, String>?, Boolean?, Boolean?, String?) -> Unit) {
+    var tapText by rememberSaveable(key) { mutableStateOf(tap.orEmpty()) }
     var upText by rememberSaveable(key) { mutableStateOf(up) }
     var downText by rememberSaveable(key) { mutableStateOf(down) }
     // 跟随全角半角：null 表示这一页不分全角半角（英文、14 键、自建布局），不显示开关。
@@ -551,8 +559,12 @@ private fun KeySymbolDialog(key: String, up: String, down: String, topGesture: S
         ?.let { "现在是「${LetterSwipeBindings.label(it)}」，清掉下面的滑动动作才输入符号" }
     val upNote = shadowedBy(upperSlot)
     val downNote = shadowedBy(lowerSlot)
-    fun finish() = onDone(upText, downText, swipeDraft, upFollows.takeIf { followUp != null }, downFollows.takeIf { followDown != null })
-    val changed = upText != up || downText != down || swipeDraft != swipes ||
+    fun finish() = onDone(
+        upText, downText, swipeDraft,
+        upFollows.takeIf { followUp != null }, downFollows.takeIf { followDown != null },
+        tapText.takeIf { tap != null },
+    )
+    val changed = (tap != null && tapText != tap) || upText != up || downText != down || swipeDraft != swipes ||
         (followUp != null && upFollows != (followUp == true)) || (followDown != null && downFollows != (followDown == true))
     var leaving by remember(key) { mutableStateOf(false) }
     AlertDialog(onDismissRequest = { if (changed) leaving = true else onDismiss() }, modifier = Modifier.testTag("symbol-editor-dialog"),
@@ -564,6 +576,14 @@ private fun KeySymbolDialog(key: String, up: String, down: String, topGesture: S
                     supportingText = upNote?.let { { Text(it) } },
                     modifier = Modifier.fillMaxWidth().testTag("symbol-editor-up"))
                 if (followUp != null) FollowWidthRow(upText, upFollows, "symbol-editor-up-follow") { upFollows = it }
+                if (tap != null) {
+                    OutlinedTextField(
+                        value = tapText, onValueChange = { tapText = it }, singleLine = true,
+                        label = { Text("点按（主符号）") },
+                        placeholder = { Text(if (defaultTap != null) "留空恢复默认「$defaultTap」" else "留空恢复默认") },
+                        modifier = Modifier.fillMaxWidth().testTag("symbol-editor-tap"),
+                    )
+                }
                 OutlinedTextField(value = downText, onValueChange = { downText = it }, singleLine = true,
                     label = { Text("下方（$bottomGesture）" + if (downShown) "" else "，键盘上不显示") }, placeholder = { Text("留空不放符号") },
                     supportingText = downNote?.let { { Text(it) } },

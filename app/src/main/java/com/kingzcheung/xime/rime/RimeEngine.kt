@@ -1449,7 +1449,7 @@ class RimeEngine {
 
     /** Learn exactly the selected native syllable codes; never infer them from display comments. */
     fun t9MemorizeSelection(text: String): Boolean = tryMutating(false) {
-        nativeT9Memorize(text, "")
+        nativeT9Memorize(text, "").also { if (it) noteCommit(text) }
     }
 
     /** 用户词典调频回滚（undo 联动）：撤销 right commit 段时调用，commits=-1。 */

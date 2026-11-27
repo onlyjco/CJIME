@@ -19,11 +19,15 @@ internal object TerminalEditor {
     @Volatile var active: Boolean = false
         internal set
 
-    /** 「编码显示在输入框」在终端里改到候选栏显示；只影响这个输入框，用户的设置不变。 */
+    /** 语音听写开启期间临时把编码切到键盘编码区（不改动用户设置），避免与实时语音正文互相覆盖或残留在输入框内。 */
+    @Volatile var voiceActive: Boolean = false
+        internal set
+
+    /** 「编码显示在输入框」在终端或语音听写期间改到候选栏/键盘编码区显示；只影响本次会话，用户的设置不变。 */
     fun inputTextLocation(context: Context): String = inputTextLocation { SettingsPreferences.getInputTextLocation(context) }
 
     inline fun inputTextLocation(preferred: () -> String): String =
-        if (active) SettingsPreferences.INPUT_TEXT_CANDIDATE_BAR else preferred()
+        if (active || voiceActive) SettingsPreferences.INPUT_TEXT_CANDIDATE_BAR else preferred()
 
     /** 发 [times] 次按下/抬起；每次都发出去才算一步。 */
     fun sendKeys(ic: InputConnection, keyCode: Int, times: Int = 1, onStep: () -> Unit = {}) {

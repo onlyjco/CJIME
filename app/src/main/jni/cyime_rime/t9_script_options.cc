@@ -105,6 +105,7 @@ void T9ScriptOptions::LoadT9Options(Config* config, Context* context) {
     config->GetInt("t9/model_sentences", &t9_model_sentences_);
     config->GetBool("t9/model_sentences_on_pause", &t9_model_sentences_on_pause_);
     config->GetDouble("t9/model_sentences_rime_weight", &t9_model_sentences_rime_weight_);
+    config->GetDouble("t9/model_sentences_fuzzy_penalty", &t9_model_sentences_fuzzy_penalty_);
     config->GetDouble("t9/final_g_word_margin", &t9_final_g_word_margin_);
     int keys_per_syllable = 0;
     config->GetInt("t9/rescore_keys_per_syllable", &keys_per_syllable);
@@ -144,6 +145,7 @@ void T9ScriptOptions::LoadT9Options(Config* config, Context* context) {
     if (model_sentences) t9_display_sentences_ = static_cast<size_t>(t9_model_sentences_);
     config->GetDouble("t9/spelling_penalty", &t9_spelling_penalty_);
     config->GetDouble("t9/word_penalty", &t9_word_penalty_);
+    config->GetDouble("t9/tail_completion_weight", &t9_tail_completion_weight_);
     config->GetString("t9/sentence_model", &t9_sentence_model_);
     config->GetDouble("t9/sentence_weight", &t9_sentence_weight_);
     string ngram_model;
@@ -154,6 +156,7 @@ void T9ScriptOptions::LoadT9Options(Config* config, Context* context) {
     config->GetDouble("t9/ngram_user_weight", &t9_ngram_user_weight_);
     config->GetDouble("t9/ngram_user_input_weight", &t9_ngram_user_input_weight_);
     config->GetDouble("t9/ngram_dictionary_prior", &t9_ngram_dictionary_prior_);
+    config->GetDouble("t9/whole_word_weight_margin", &t9_whole_word_weight_margin_);
     config->GetBool("t9/ngram_sentence_start", &t9_ngram_sentence_start_);
     config->GetDouble("t9/ngram_eos_weight", &t9_ngram_eos_weight_);
     config->GetDouble("t9/particle_eos_weight", &t9_particle_eos_weight_);

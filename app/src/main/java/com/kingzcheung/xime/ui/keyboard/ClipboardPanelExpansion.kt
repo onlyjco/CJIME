@@ -21,7 +21,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.launch
 
-internal val LocalClipboardPanelExpansion = staticCompositionLocalOf<ClipboardPanelExpansion?> { null }
+internal val LocalClipboardPanelExpansion = compositionLocalOf<ClipboardPanelExpansion?> { null }
 
 internal class ClipboardPanelExpansion(
     private val bounds: ClipboardPanelBounds,
@@ -122,44 +122,44 @@ internal fun rememberClipboardPanelExpansion(
 
 /** Header dragging uses screen coordinates even while the IME window changes height. */
 internal fun Modifier.clipboardPanelExpandGesture(): Modifier = composed {
-    val panel = LocalClipboardPanelExpansion.current
-    if (panel == null) this else {
-        val coordinates = remember { arrayOfNulls<LayoutCoordinates>(1) }
-        onGloballyPositioned { coordinates[0] = it }.pointerInput(panel) {
-            fun screenY(localY: Float): Float? = coordinates[0]
-                ?.takeIf { it.isAttached }?.positionOnScreen()?.y?.let { (it + localY) / density }
-            awaitEachGesture {
-                val down = awaitFirstDown(requireUnconsumed = false)
-                val startY = screenY(down.position.y) ?: return@awaitEachGesture
-                // Keep the samples before touch slop too: a short flick may have only
-                // one move left after activation, which is insufficient for velocity fitting.
-                val velocity = VelocityTracker().apply { addPosition(down.uptimeMillis, Offset(0f, startY)) }
-                var dragging = false
-                var finished = false
-                try {
-                    while (true) {
-                        val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
-                        if (change.isConsumed) break
-                        val y = screenY(change.position.y) ?: break
-                        velocity.addPosition(change.uptimeMillis, Offset(0f, y))
-                        if (!dragging && change.pressed && abs(y - startY) > viewConfiguration.touchSlop / density) {
-                            panel.beginDrag(startY)
-                            dragging = true
-                        }
-                        if (dragging) {
-                            panel.dragTo(y)
-                            change.consume()
-                        }
-                        if (!change.pressed) { finished = true; break }
-                        if (!dragging) {
-                            val finalChange = awaitPointerEvent(PointerEventPass.Final)
-                                .changes.firstOrNull { it.id == down.id }
-                            if (finalChange == null || finalChange.isConsumed) break
-                        }
+    val currentPanel by rememberUpdatedState(LocalClipboardPanelExpansion.current)
+    val coordinates = remember { arrayOfNulls<LayoutCoordinates>(1) }
+    // 保持 Modifier 节点链在切进/切出剪贴板时结构不变，避免 CandidateBar 及左侧三点/返回按钮在多窗口切换时重建闪动。
+    onGloballyPositioned { coordinates[0] = it }.pointerInput(Unit) {
+        fun screenY(localY: Float): Float? = coordinates[0]
+            ?.takeIf { it.isAttached }?.positionOnScreen()?.y?.let { (it + localY) / density }
+        awaitEachGesture {
+            val down = awaitFirstDown(requireUnconsumed = false)
+            val panel = currentPanel ?: return@awaitEachGesture
+            val startY = screenY(down.position.y) ?: return@awaitEachGesture
+            // Keep the samples before touch slop too: a short flick may have only
+            // one move left after activation, which is insufficient for velocity fitting.
+            val velocity = VelocityTracker().apply { addPosition(down.uptimeMillis, Offset(0f, startY)) }
+            var dragging = false
+            var finished = false
+            try {
+                while (true) {
+                    val change = awaitPointerEvent().changes.firstOrNull { it.id == down.id } ?: break
+                    if (change.isConsumed) break
+                    val y = screenY(change.position.y) ?: break
+                    velocity.addPosition(change.uptimeMillis, Offset(0f, y))
+                    if (!dragging && change.pressed && abs(y - startY) > viewConfiguration.touchSlop / density) {
+                        panel.beginDrag(startY)
+                        dragging = true
                     }
-                } finally {
-                    if (dragging) panel.finishDrag(cancelled = !finished, velocityY = velocity.calculateVelocity().y)
+                    if (dragging) {
+                        panel.dragTo(y)
+                        change.consume()
+                    }
+                    if (!change.pressed) { finished = true; break }
+                    if (!dragging) {
+                        val finalChange = awaitPointerEvent(PointerEventPass.Final)
+                            .changes.firstOrNull { it.id == down.id }
+                        if (finalChange == null || finalChange.isConsumed) break
+                    }
                 }
+            } finally {
+                if (dragging) panel.finishDrag(cancelled = !finished, velocityY = velocity.calculateVelocity().y)
             }
         }
     }

@@ -4,13 +4,16 @@ import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.Path
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.PointerInputChange
@@ -176,26 +179,114 @@ internal suspend fun androidx.compose.ui.input.pointer.AwaitPointerEventScope.aw
 @Composable
 internal fun GlideTrailOverlay(trail: GlideTrail, color: Color, modifier: Modifier = Modifier) {
     val stroke = glideTrailColor(color)
+    val path = remember { Path() }
     Canvas(modifier) {
-        val points = trail.points
-        if (points.size < 2) return@Canvas
+        val raw = trail.points
+        if (raw.size < 2) return@Canvas
         val tail = GLIDE_TRAIL_LENGTH.toPx()
         val head = GLIDE_TRAIL_HEAD_WIDTH.toPx()
         val thin = GLIDE_TRAIL_TAIL_WIDTH.toPx()
-        // 从手指往回走，走过的长度决定这一小段的粗细和透明度。
+
+        // 从手指往回截取最近 tail 长度的轨迹点，并过滤过近重复点，避免折角法线抖动。
+        val rev = ArrayList<Offset>(raw.size)
+        rev.add(raw.last())
         var walked = 0f
-        var index = points.size - 1
-        while (index > 0 && walked < tail) {
-            val a = points[index]; val b = points[index - 1]
-            val length = (a - b).getDistance()
-            if (length > 0f) {
-                val fade = 1f - (walked + length / 2f) / tail
-                if (fade <= 0f) break
-                drawLine(stroke.copy(alpha = stroke.alpha * (0.15f + 0.85f * fade)), a, b,
-                    strokeWidth = thin + (head - thin) * fade, cap = StrokeCap.Round)
+        for (i in raw.size - 2 downTo 0) {
+            val prev = rev.last()
+            val cur = raw[i]
+            val seg = (prev - cur).getDistance()
+            if (seg < 0.75f) continue
+            if (walked + seg >= tail) {
+                val frac = ((tail - walked) / seg).coerceIn(0f, 1f)
+                rev.add(Offset(prev.x + (cur.x - prev.x) * frac, prev.y + (cur.y - prev.y) * frac))
+                break
             }
-            walked += length
-            index--
+            rev.add(cur)
+            walked += seg
+        }
+        if (rev.size < 2) return@Canvas
+        // 转为从尾(0)到头(n-1)
+        rev.reverse()
+        val n = rev.size
+
+        // 计算每个点到尾部的累计弧长，用于平滑渐变宽度（尾细头粗）。
+        val dist = FloatArray(n)
+        var total = 0f
+        for (i in 1 until n) {
+            total += (rev[i] - rev[i - 1]).getDistance()
+            dist[i] = total
+        }
+        if (total < 0.5f) return@Canvas
+
+        // 计算平滑左右轮廓点，用单一闭合 Path 一次性填充，彻底消除分段圆帽叠色产生的点状残留。
+        val left = Array(n) { Offset.Zero }
+        val right = Array(n) { Offset.Zero }
+        for (i in 0 until n) {
+            val prev = rev[(i - 1).coerceAtLeast(0)]
+            val next = rev[(i + 1).coerceAtMost(n - 1)]
+            var tx = next.x - prev.x
+            var ty = next.y - prev.y
+            val tLen = kotlin.math.hypot(tx, ty)
+            if (tLen > 1e-3f) {
+                tx /= tLen; ty /= tLen
+            } else {
+                tx = 1f; ty = 0f
+            }
+            val nx = -ty
+            val ny = tx
+            val progress = (dist[i] / total).coerceIn(0f, 1f)
+            val halfW = (thin + (head - thin) * progress) * 0.5f
+            val p = rev[i]
+            left[i] = Offset(p.x + nx * halfW, p.y + ny * halfW)
+            right[i] = Offset(p.x - nx * halfW, p.y - ny * halfW)
+        }
+
+        path.reset()
+        path.moveTo(left[0].x, left[0].y)
+        for (i in 1 until n - 1) {
+            val midX = (left[i].x + left[i + 1].x) * 0.5f
+            val midY = (left[i].y + left[i + 1].y) * 0.5f
+            path.quadraticTo(left[i].x, left[i].y, midX, midY)
+        }
+        path.lineTo(left[n - 1].x, left[n - 1].y)
+
+        // 头部圆弧收口
+        val tip = rev[n - 1]
+        val prevTip = rev[n - 2]
+        var htx = tip.x - prevTip.x
+        var hty = tip.y - prevTip.y
+        val hLen = kotlin.math.hypot(htx, hty)
+        if (hLen > 1e-3f) {
+            htx /= hLen; hty /= hLen
+        } else {
+            htx = 1f; hty = 0f
+        }
+        val tipRadius = head * 0.5f
+        val tipApex = Offset(tip.x + htx * tipRadius, tip.y + hty * tipRadius)
+        path.quadraticTo(left[n - 1].x + htx * tipRadius, left[n - 1].y + hty * tipRadius, tipApex.x, tipApex.y)
+        path.quadraticTo(right[n - 1].x + htx * tipRadius, right[n - 1].y + hty * tipRadius, right[n - 1].x, right[n - 1].y)
+
+        for (i in n - 2 downTo 1) {
+            val midX = (right[i].x + right[i - 1].x) * 0.5f
+            val midY = (right[i].y + right[i - 1].y) * 0.5f
+            path.quadraticTo(right[i].x, right[i].y, midX, midY)
+        }
+        path.lineTo(right[0].x, right[0].y)
+        path.close()
+
+        val startPt = rev.first()
+        val endPt = rev.last()
+        if ((endPt - startPt).getDistance() >= 1f) {
+            drawPath(
+                path = path,
+                brush = Brush.linearGradient(
+                    colors = listOf(stroke.copy(alpha = stroke.alpha * 0.15f), stroke),
+                    start = startPt,
+                    end = endPt,
+                ),
+            )
+        } else {
+            drawPath(path = path, color = stroke)
         }
     }
 }

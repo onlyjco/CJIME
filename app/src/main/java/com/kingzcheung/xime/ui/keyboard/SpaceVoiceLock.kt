@@ -1,16 +1,12 @@
 package com.kingzcheung.xime.ui.keyboard
 
-import androidx.compose.animation.core.Animatable
-import androidx.compose.animation.core.FastOutSlowInEasing
 import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.spring
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.layout.Box
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.Close
 import androidx.compose.material.icons.filled.Lock
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.Stable
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableIntStateOf
@@ -23,10 +19,10 @@ import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.geometry.Offset
 import androidx.compose.ui.geometry.Rect
 import androidx.compose.ui.geometry.Size
-import androidx.compose.ui.geometry.isSpecified
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.ColorFilter
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.scale
 import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.graphics.lerp
 import androidx.compose.ui.graphics.vector.rememberVectorPainter
@@ -34,16 +30,16 @@ import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.platform.testTag
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.ui.text.drawText
+import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.rememberTextMeasurer
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 
 /**
- * 按住空格说话，滑到左右任意一把浮起来的锁上松手 = 锁定：手指离开也一直听，点一下空格结束并上屏
- * （用户 11-20：只用长按空格的人也要能连续语音）。开了「上滑取消」时，两把锁正中间还有一个同样的取消按钮。
- *
- * 布局（用户 11-22：右上一把锁不对称）：以空格为中心，左右各一把锁、对称；键区上半部分用弧线分成三块，
- * 两侧弧线以内（以及往外冲过头）是锁定，中间一大块是取消（取消照旧要高过空格顶边一个键高，或在取消按钮上）。
- * 锁是键区里单独浮起来的圆按钮（11-21，#531），只在按住说话时出现，不挡触摸、不占布局；
- * 键盘很宽（平板、横屏）时离空格两端最多 [SpaceVoiceLockMetrics.reach]，不用横着滑半个平板。
+ * 按住空格说话时浮出的三圆按钮：左锁（普通锁定）、中叉（取消）、右锁（连续语音锁定）。
+ * 左右锁定触发区严格沿按钮圆弧外切延伸至键区顶/侧边，其余上方区域全部归取消按钮。
  */
 @Stable
 internal class SpaceVoiceLockState {
@@ -53,27 +49,20 @@ internal class SpaceVoiceLockState {
     var space: Rect = Rect.Zero
     /** 按钮尺寸（像素）；键盘外没量过时为 null，不能锁定。 */
     var metrics: SpaceVoiceLockMetrics? = null
-    /** 这次长按开了麦、手指还按着：两把锁浮出来。 */
+    /** 这次长按开了麦、手指还按着：三圆按钮显示。 */
     var holding by mutableStateOf(false)
     /** 手指在某一把锁上：松手就锁定。 */
     var armed by mutableStateOf(false)
-    /** 手指在哪一把锁上：-1 左、1 右、0 都不在（画哪一把「到位」）。 */
+    /** 手指在哪一把锁上：-1 左（普通锁定）、1 右（连续语音锁定）、0 都不在。 */
     var side by mutableIntStateOf(0)
-    /** 刚锁上的是哪一把：外框闪在左上角那一把上。 */
-    var lockedSide by mutableIntStateOf(-1)
     /** 这次按住说话开了「上滑取消」：中间出取消按钮。 */
     var cancelShown by mutableStateOf(false)
     /** 手指在取消区：取消按钮涨满。 */
     var cancelArmed by mutableStateOf(false)
     /** 已锁定：手指离开也在听，空格写「点按结束」。 */
     var locked by mutableStateOf(false)
-    /** 手指在根坐标里的位置：到位时按钮往手指那边吸一点。只在画的时候读，不触发重组。 */
-    var finger by mutableStateOf(Offset.Unspecified)
 
-    /**
-     * 松手就锁定：锁按钮浮着（麦克风真开着）且手指到位。锁按钮画「到位」的样子、空格写「松手锁定」、
-     * 松手时真的锁定，三处都看这一个条件，动画到了就一定锁得上（用户 11-22：动画到头了松手没锁上）。
-     */
+    /** 松手就锁定：锁按钮显示且手指到位。 */
     val lockReady: Boolean get() = holding && armed
 
     private fun layout(): SpaceVoiceLockLayout? = metrics?.let { spaceVoiceLockLayout(host, space, it) }
@@ -96,32 +85,44 @@ internal val LocalSpaceVoiceLock = staticCompositionLocalOf<SpaceVoiceLockState?
 
 /**
  * 锁按钮的尺寸（像素）。[radius] 按钮半径；[margin] 离键区顶边、两边；[reach] 键盘很宽时按钮离空格两端最远多少；
- * [slop] 判定比按钮至少大出多少（手指不用正好落在按钮里）；[zone] 锁定弧线的最大半径；[gap] 锁定区和取消按钮之间至少留多少。
+ * [slop] 取消按钮外扩容差；[zone] 锁定圆弧最大半径；[gap] 锁定区和取消按钮之间至少留多少。
  */
-internal data class SpaceVoiceLockMetrics(val radius: Float, val margin: Float, val reach: Float, val slop: Float,
-    val zone: Float, val gap: Float)
+internal data class SpaceVoiceLockMetrics(
+    val radius: Float,
+    val margin: Float,
+    val reach: Float,
+    val slop: Float,
+    val zone: Float,
+    val gap: Float,
+)
 
-/** 两把锁的圆心（根坐标）和锁定弧线半径；取消按钮在两把锁正中间、同一高度。 */
-internal class SpaceVoiceLockLayout(val left: Offset, val right: Offset, val zone: Float) {
+/** 两把锁的圆心（根坐标）和按钮半径；取消按钮在两把锁正中间、同一高度。 */
+internal class SpaceVoiceLockLayout(val left: Offset, val right: Offset, val zone: Float, val buttonRadius: Float = zone) {
     val cancel: Offset get() = Offset((left.x + right.x) / 2f, left.y)
 
     fun center(side: Int): Offset = if (side < 0) left else right
 
     /**
-     * 锁定区：仅保留左上角锁按钮外一圈弧线以内，以及往左上外侧冲过头（包括冲出键盘顶边、左边）。
-     * 中间及右侧（弧线以右）不算锁定。
+     * 左右锁定触发区：分别以左/右锁按钮自身圆弧为边界，向顶边和外侧边垂直/水平外切延伸。
+     * 左锁：x <= left.x + r 且 y <= left.y + r，右下角沿圆弧裁切；
+     * 右锁：x >= right.x - r 且 y <= right.y + r，左下角沿圆弧裁切；
+     * 其余区域全部让给取消按钮。
      */
     fun sideAt(point: Offset): Int {
-        val c = left
-        val outward = c.x - point.x
-        return if ((point - c).getDistance() <= zone || (outward >= 0f && point.y <= c.y + zone)) -1 else 0
+        val rSq = buttonRadius * buttonRadius
+        val dxL = (point.x - left.x).coerceAtLeast(0f)
+        val dyL = (point.y - left.y).coerceAtLeast(0f)
+        if (dxL * dxL + dyL * dyL <= rSq) return -1
+        val dxR = (right.x - point.x).coerceAtLeast(0f)
+        val dyR = (point.y - right.y).coerceAtLeast(0f)
+        if (dxR * dxR + dyR * dyR <= rSq) return 1
+        return 0
     }
 }
 
 /**
  * 两把锁的位置：以空格中心左右对称，各自尽量靠键区两边（往里 margin），但离空格两端不超过 reach；
  * 两边能放的距离不一样时取近的那边，保证对称。键区太窄、空格太靠边放不下两把锁时为 null（不出锁）。
- * 锁定弧线半径最大 [SpaceVoiceLockMetrics.zone]，键区窄时收小，给中间的取消按钮留出位置。
  */
 internal fun spaceVoiceLockLayout(host: Rect, space: Rect, m: SpaceVoiceLockMetrics): SpaceVoiceLockLayout? {
     val edge = m.margin + m.radius
@@ -134,17 +135,16 @@ internal fun spaceVoiceLockLayout(host: Rect, space: Rect, m: SpaceVoiceLockMetr
     if (d < 2f * m.radius + m.gap) return null
     val y = host.top + minOf(edge, host.height / 2f)
     val zone = minOf(m.zone, maxOf(m.radius + m.slop, d - m.radius - m.gap))
-    return SpaceVoiceLockLayout(Offset(mid - d, y), Offset(mid + d, y), zone)
+    return SpaceVoiceLockLayout(Offset(mid - d, y), Offset(mid + d, y), zone, m.radius)
 }
 
 /**
- * 这一下手指算不算在锁上：在锁定区里就算；松手那一下手指离屏时坐标常会跳一点，之前已经到位的照旧算到位，
- * 不因为抬手那一下偏出去就锁不上。
+ * 这一下手指算不算在锁上：在锁定区里就算；松手那一下手指离屏时坐标常会跳一点，之前已经到位的照旧算到位。
  */
 internal fun spaceVoiceLockArmed(inZone: Boolean, released: Boolean, wasArmed: Boolean): Boolean =
     inZone || (released && wasArmed)
 
-/** 锁图标往上挪多少（占图标边长）：锁身在下、锁梁细，按外框居中时看着偏下，按视觉重心往上提一点。 */
+/** 锁图标往上挪多少（占图标边长）：锁身在下、锁梁细，按视觉重心往上提一点。 */
 internal const val SPACE_VOICE_LOCK_ICON_LIFT = 0.06f
 
 /**
@@ -153,109 +153,103 @@ internal const val SPACE_VOICE_LOCK_ICON_LIFT = 0.06f
 internal fun spaceVoiceCancelArmed(lockArmed: Boolean, yInKey: Float, keyHeight: Float, onCancelButton: Boolean = false): Boolean =
     !lockArmed && (yInKey < -keyHeight || onCancelButton)
 
-/** 到位时按钮往手指那边吸多少（像素，最多 [max]）。 */
-internal fun spaceVoiceLockPull(center: Offset, finger: Offset, max: Float): Offset {
-    if (!finger.isSpecified) return Offset.Zero
-    val d = finger - center
-    val len = d.getDistance()
-    return if (len <= max || len == 0f) d else d * (max / len)
-}
-
-/** 取消按钮和取消区的颜色：浅、深主题上都认得出的红。 */
+/** 取消按钮的颜色：浅、深主题上都认得出的红。 */
 private val SPACE_VOICE_CANCEL_RED = Color(0xFFE5534B)
 
 /**
- * 锁按钮这一层：铺满键区、不接触摸，只在按住说话时画出左右两把锁（开了上滑取消时中间加一个取消按钮），
- * 以及分开锁定区和取消区的两条弧线。
- * 浮出：从小到大弹出、往上浮一点；手指到位：那一把涨满强调色、锁变白、放大一圈并往手指吸，外面一圈光晕，
- * 它那一块区域亮一点；手指在取消区：取消按钮涨满红色，中间那一块淡淡透红。
+ * 锁按钮这一层：铺满键区、不接触摸，按住说话时直接显示左锁、中取消、右连续锁（无弹出动画与外圈光晕）。
+ * 三个按钮统一沿用取消按钮的 `tween(140)` 放大变色动画。
  */
 @Composable
 internal fun SpaceVoiceLockLayer(state: SpaceVoiceLockState?, accent: Color, surface: Color, modifier: Modifier = Modifier) {
     if (state == null) return
     val density = LocalDensity.current
     val metrics = remember(density) {
-        with(density) { SpaceVoiceLockMetrics(radius = 26.dp.toPx(), margin = 12.dp.toPx(), reach = 168.dp.toPx(),
-            slop = 24.dp.toPx(), zone = 64.dp.toPx(), gap = 8.dp.toPx()) }
+        with(density) {
+            SpaceVoiceLockMetrics(
+                radius = 26.dp.toPx(), margin = 12.dp.toPx(), reach = 168.dp.toPx(),
+                slop = 24.dp.toPx(), zone = 64.dp.toPx(), gap = 8.dp.toPx(),
+            )
+        }
     }
     state.metrics = metrics
-    val lock = rememberVectorPainter(Icons.Default.Lock)
+    val lockLeft = rememberVectorPainter(Icons.Default.Lock)
+    val lockRight = rememberVectorPainter(Icons.Default.Lock)
     val close = rememberVectorPainter(Icons.Default.Close)
-    val shown by animateFloatAsState(if (state.holding) 1f else 0f,
-        if (state.holding) spring(dampingRatio = 0.62f, stiffness = 520f) else tween(140, easing = FastOutSlowInEasing),
-        label = "voiceLockShown")
-    // 左上角锁定「到位」动画。
-    val leftAnim by animateFloatAsState(if (state.lockReady && state.side < 0) 1f else 0f,
-        spring(dampingRatio = 0.55f, stiffness = 700f), label = "voiceLockLeft")
-    val cancelAnim by animateFloatAsState(if (state.holding && state.cancelShown && state.cancelArmed) 1f else 0f,
-        tween(140), label = "voiceCancelArmed")
-    // 锁上的那一下：左上角锁留住半秒，外框亮一圈白边闪一下再淡出。
-    val flash = remember { Animatable(0f) }
-    var flashing by remember { mutableStateOf(false) }
-    LaunchedEffect(state.locked) {
-        if (!state.locked) { flash.snapTo(0f); flashing = false; return@LaunchedEffect }
-        flashing = true
-        try {
-            flash.snapTo(0f)
-            flash.animateTo(1f, tween(SPACE_VOICE_LOCK_FLASH_IN_MS, easing = FastOutSlowInEasing))
-            flash.animateTo(0f, tween(SPACE_VOICE_LOCK_FLASH_OUT_MS, easing = FastOutSlowInEasing))
-        } finally { flashing = false }
+    val textMeasurer = rememberTextMeasurer()
+    val continuousLabelLayout = remember(textMeasurer, density) {
+        textMeasurer.measure(
+            text = "连续",
+            style = TextStyle(fontSize = 9.5.sp, fontWeight = FontWeight.Medium, lineHeight = 10.sp),
+            maxLines = 1,
+        )
     }
+    // 三圆统一沿用取消按钮的 tween(140) 选中动画，无弹出动画、无外圈光晕。
+    val leftAnim by animateFloatAsState(if (state.lockReady && state.side < 0) 1f else 0f, tween(140), label = "voiceLockLeft")
+    val rightAnim by animateFloatAsState(if (state.lockReady && state.side > 0) 1f else 0f, tween(140), label = "voiceLockRight")
+    val cancelAnim by animateFloatAsState(if (state.holding && state.cancelShown && state.cancelArmed) 1f else 0f, tween(140), label = "voiceCancelArmed")
     val idleFill = lerp(surface.copy(alpha = 1f), accent, 0.12f)
     val cancelIdle = lerp(surface.copy(alpha = 1f), SPACE_VOICE_CANCEL_RED, 0.12f)
     Box(modifier.onGloballyPositioned { state.host = it.boundsInRoot() }.drawBehind {
-        if (!flashing && shown <= 0.01f) return@drawBehind
+        if (!state.holding) return@drawBehind
         val layout = spaceVoiceLockLayout(state.host, state.space, metrics) ?: return@drawBehind
         val origin = state.host.topLeft
-        val visible = if (flashing) 1f else shown
-        val alpha = visible.coerceIn(0f, 1f)
-        val armed = if (flashing) 1f else leftAnim
-        if (state.cancelShown && !flashing) {
-            val r = metrics.radius * (0.6f + 0.4f * visible) * (1f + 0.12f * cancelAnim)
-            val center = layout.cancel - origin + Offset(0f, (1f - alpha) * 8.dp.toPx())
-            if (cancelAnim > 0f) drawCircle(SPACE_VOICE_CANCEL_RED.copy(alpha = 0.22f * cancelAnim * alpha), r * 1.25f, center)
-            drawCircle(lerp(cancelIdle, SPACE_VOICE_CANCEL_RED, cancelAnim).copy(alpha = alpha), r, center)
-            drawCircle(SPACE_VOICE_CANCEL_RED.copy(alpha = 0.6f * (1f - cancelAnim) * alpha), r, center, style = Stroke(1.5f.dp.toPx()))
-            val icon = r * 0.9f
-            translate(center.x - icon / 2f, center.y - icon / 2f) {
-                with(close) { draw(Size(icon, icon), alpha = alpha,
-                    colorFilter = ColorFilter.tint(lerp(SPACE_VOICE_CANCEL_RED, Color.White, cancelAnim))) }
+        if (state.cancelShown) {
+            val scaleFactor = 1f + 0.12f * cancelAnim
+            val r = metrics.radius * scaleFactor
+            val center = layout.cancel - origin
+            drawCircle(lerp(cancelIdle, SPACE_VOICE_CANCEL_RED, cancelAnim), r, center)
+            drawCircle(SPACE_VOICE_CANCEL_RED.copy(alpha = 0.6f * (1f - cancelAnim)), r, center, style = Stroke(1.5f.dp.toPx()))
+            val baseIcon = metrics.radius * 0.9f
+            scale(scaleFactor, pivot = center) {
+                translate(center.x - baseIcon / 2f, center.y - baseIcon / 2f) {
+                    with(close) { draw(Size(baseIcon, baseIcon), colorFilter = ColorFilter.tint(lerp(SPACE_VOICE_CANCEL_RED, Color.White, cancelAnim))) }
+                }
             }
         }
+        // 左锁：普通锁定（独立 VectorPainter + 固定 draw Size 配合 scale，避免缩放/共用缓存导致右下角残影）
         run {
-            val c0 = layout.left
-            val pull = spaceVoiceLockPull(c0, state.finger, 8.dp.toPx()) * armed
-            val r = metrics.radius * (0.6f + 0.4f * visible) * (1f + 0.12f * armed)
-            // 光晕连同吸过去的那几 dp 都不出键区（键区外是别的应用，画出去会被截掉一块）。
-            val glow = r * 1.25f
-            val raw = c0 - origin + pull + Offset(0f, (1f - alpha) * 8.dp.toPx())
-            val center = Offset(raw.x.coerceIn(glow, maxOf(glow, size.width - glow)), raw.y.coerceIn(glow, maxOf(glow, size.height - glow)))
-            if (armed > 0f) drawCircle(accent.copy(alpha = 0.22f * armed * alpha), glow, center)
-            drawCircle(lerp(idleFill, accent, armed).copy(alpha = alpha), r, center)
-            drawCircle(accent.copy(alpha = 0.55f * (1f - armed) * alpha), r, center, style = Stroke(1.5f.dp.toPx()))
-            val f = flash.value
-            if (f > 0f) {
-                // 锁上了：外框闪一下。外面一圈强调色粗边往外扩（扩到键区边为止，不被截掉），按钮边上一圈白边亮起；
-                // 浅色、深色主题都看得见（白边压在强调色上，强调色边压在键盘底色上）。
-                val room = minOf(center.x, size.width - center.x, center.y, size.height - center.y)
-                val stroke = 3.dp.toPx()
-                val ring = minOf(r + 2.dp.toPx() + 6.dp.toPx() * f, room - stroke / 2f)
-                drawCircle(accent.copy(alpha = 0.9f * f), ring, center, style = Stroke(stroke))
-                drawCircle(Color.White.copy(alpha = 0.95f * f), r - 1.5f.dp.toPx(), center, style = Stroke(2.dp.toPx()))
-                drawCircle(Color.White.copy(alpha = 0.16f * f), r, center)
+            val scaleFactor = 1f + 0.12f * leftAnim
+            val r = metrics.radius * scaleFactor
+            val center = layout.left - origin
+            drawCircle(lerp(idleFill, accent, leftAnim), r, center)
+            drawCircle(accent.copy(alpha = 0.55f * (1f - leftAnim)), r, center, style = Stroke(1.5f.dp.toPx()))
+            val baseIcon = metrics.radius * 0.95f
+            scale(scaleFactor, pivot = center) {
+                translate(center.x - baseIcon / 2f, center.y - baseIcon / 2f - baseIcon * SPACE_VOICE_LOCK_ICON_LIFT) {
+                    with(lockLeft) { draw(Size(baseIcon, baseIcon), colorFilter = ColorFilter.tint(lerp(accent, Color.White, leftAnim))) }
+                }
             }
-            val icon = r * 0.95f
-            translate(center.x - icon / 2f, center.y - icon / 2f - icon * SPACE_VOICE_LOCK_ICON_LIFT) {
-                with(lock) { draw(Size(icon, icon), alpha = alpha, colorFilter = ColorFilter.tint(lerp(accent, Color.White, armed))) }
+        }
+        // 右锁：连续语音锁定（圆内锁图标下方带「连续」小字）
+        run {
+            val scaleFactor = 1f + 0.12f * rightAnim
+            val r = metrics.radius * scaleFactor
+            val center = layout.right - origin
+            drawCircle(lerp(idleFill, accent, rightAnim), r, center)
+            drawCircle(accent.copy(alpha = 0.55f * (1f - rightAnim)), r, center, style = Stroke(1.5f.dp.toPx()))
+            val contentTint = lerp(accent, Color.White, rightAnim)
+            val baseIcon = metrics.radius * 0.78f
+            val labelW = continuousLabelLayout.size.width.toFloat()
+            val labelH = continuousLabelLayout.size.height.toFloat()
+            val gap = 1.dp.toPx()
+            val totalH = baseIcon + gap + labelH
+            val topY = center.y - totalH / 2f - 1.dp.toPx()
+            scale(scaleFactor, pivot = center) {
+                translate(center.x - baseIcon / 2f, topY) {
+                    with(lockRight) { draw(Size(baseIcon, baseIcon), colorFilter = ColorFilter.tint(contentTint)) }
+                }
+                drawText(
+                    textLayoutResult = continuousLabelLayout,
+                    color = contentTint,
+                    topLeft = Offset(center.x - labelW / 2f, topY + baseIcon + gap),
+                )
             }
         }
     }) {
         // 测试用：按住说话时有这些节点。
         if (state.holding) Box(Modifier.testTag("space-voice-lock-button"))
+        if (state.holding) Box(Modifier.testTag("space-voice-continuous-lock-button"))
         if (state.holding && state.cancelShown) Box(Modifier.testTag("space-voice-cancel-button"))
-        if (flashing) Box(Modifier.testTag("space-voice-lock-flash"))
     }
 }
-
-private const val SPACE_VOICE_LOCK_FLASH_IN_MS = 110
-private const val SPACE_VOICE_LOCK_FLASH_OUT_MS = 380

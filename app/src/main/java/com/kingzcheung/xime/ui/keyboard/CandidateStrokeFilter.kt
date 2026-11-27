@@ -147,7 +147,10 @@ internal fun Modifier.keyboardAreaStrokeGesture(
             points.add(point)
             coordinates?.takeIf { it.isAttached }?.localToRoot(point)?.let { currentOnInk(it) }
         }
-        val activationPx = maxOf(viewConfiguration.touchSlop * 2f, 18.dp.toPx())
+        val activationPx = maxOf(viewConfiguration.touchSlop * 3.5f, 34.dp.toPx())
+        val minStrokePathPx = 40.dp.toPx()
+        val minActivationMs = 75L
+        val minCommitMs = 90L
         awaitEachGesture {
             val down = awaitFirstDown(requireUnconsumed = false, pass = PointerEventPass.Initial)
             if (down.isConsumed || !currentCanTrigger()) return@awaitEachGesture
@@ -173,7 +176,10 @@ internal fun Modifier.keyboardAreaStrokeGesture(
                     if (!drawing) {
                         if (!change.pressed) break
                         if (change.isConsumed || !currentCanTrigger()) break
-                        if ((change.position - down.position).getDistance() >= activationPx) {
+                        val elapsedMs = change.uptimeMillis - down.uptimeMillis
+                        val distance = (change.position - down.position).getDistance()
+                        // 快速打字时的短暂指腹滑动（< 75ms 或 < 34dp）不抢占键位输入。
+                        if (elapsedMs >= minActivationMs && distance >= activationPx) {
                             drawing = true
                             currentOnDrawing(true)
                             currentOnInk(null)
@@ -187,7 +193,12 @@ internal fun Modifier.keyboardAreaStrokeGesture(
                         append(change.position)
                         event.changes.forEach { it.consume() }
                         if (!change.pressed) {
-                            classifyCandidateStroke(points, density)?.let { currentOnStroke(it) }
+                            val elapsedMs = change.uptimeMillis - down.uptimeMillis
+                            var pathLen = 0f
+                            for (i in 1 until points.size) pathLen += (points[i] - points[i - 1]).getDistance()
+                            if (elapsedMs >= minCommitMs && pathLen >= minStrokePathPx) {
+                                classifyCandidateStroke(points, density)?.let { currentOnStroke(it) }
+                            }
                             break
                         }
                     }

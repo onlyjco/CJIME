@@ -46,7 +46,7 @@ fun LanguageSettingsContent(onOpenSchemaResources: () -> Unit = {}, onOpenDouble
     var languages by remember { mutableStateOf(LanguagePreferences.enabled(context)) }
     var orderedLanguages by remember { mutableStateOf(InputModes.languageOrder(context)) }
     var saving by remember { mutableStateOf(false) }
-    var expandedLanguage by remember { mutableStateOf<InputLanguage?>(orderedLanguages.firstOrNull()) }
+    var expandedLanguage by remember { mutableStateOf<InputLanguage?>(null) }
     // 没开的西、德、法、意、俄、韩语默认收在「更多语言」里（用户 11-08：一般人用不着这么多）。
     var moreLanguagesOpen by rememberSaveable { mutableStateOf(false) }
     var message by remember { mutableStateOf("") }

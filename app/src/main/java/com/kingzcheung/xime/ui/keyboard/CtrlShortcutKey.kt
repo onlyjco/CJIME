@@ -71,26 +71,33 @@ internal fun Modifier.ctrlSymbolKeyGesture(
             targets.beginCtrl { shortcut(it) }
             val hasLongPress = longPress != null
             val longPressMs = if (hasLongPress) minOf(hold, 400L) else hold
-            var longPressArmed = false
-            val longPressTimer = if (hasLongPress) scope.launch {
-                delay(longPressMs)
-                if (!targets.ctrlUsed) {
-                    longPressArmed = true
-                    haptic.performKeyboardHaptic(hapticContext, androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
-                }
-            } else null
+            var dragged = false
+            var longPressFired = false
+            var tap = false
             val faces = scope.launch {
                 delay(hold)
-                targets.showCtrlFaces()
+                if (!longPressFired) targets.showCtrlFaces()
             }
-            var dragged = false
-            var tap = false
-            var triggerLongPress = false
+            val longPressTimer = if (hasLongPress) scope.launch {
+                delay(longPressMs)
+                if (!dragged && !targets.ctrlUsed) {
+                    longPressFired = true
+                    faces.cancel()
+                    targets.finish()
+                    pressed(false)
+                    haptic.performKeyboardHaptic(hapticContext, androidx.compose.ui.hapticfeedback.HapticFeedbackType.LongPress)
+                    longPress?.invoke()
+                }
+            } else null
             try {
                 while (true) {
                     val event = awaitPointerEvent(PointerEventPass.Initial)
                     val change = event.changes.firstOrNull { it.id == first.id } ?: break
                     change.consume()
+                    if (longPressFired) {
+                        if (!change.pressed) break
+                        continue
+                    }
                     val pointer = bounds.topLeft + change.position
                     dragged = dragged || !bounds.contains(pointer) ||
                         (change.position - first.position).getDistance() > viewConfiguration.touchSlop
@@ -100,8 +107,7 @@ internal fun Modifier.ctrlSymbolKeyGesture(
                         if (dragged) target?.ctrl?.let(shortcut)
                         else if (!targets.ctrlUsed) {
                             val elapsed = change.uptimeMillis - first.uptimeMillis
-                            if (hasLongPress && (longPressArmed || elapsed >= longPressMs)) triggerLongPress = true
-                            else if (elapsed < hold) tap = true
+                            if (elapsed < hold) tap = true
                         }
                         break
                     }
@@ -112,8 +118,7 @@ internal fun Modifier.ctrlSymbolKeyGesture(
                 targets.finish()
                 pressed(false)
             }
-            if (triggerLongPress) longPress?.invoke()
-            else if (tap) open()
+            if (!longPressFired && tap) open()
         }
     }
 }

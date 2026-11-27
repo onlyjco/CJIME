@@ -699,10 +699,16 @@ data class KeyboardInputActions(
     val onCursorModeChange: ((Boolean) -> Unit)? = null,
     val onVoiceModeChange: ((Boolean) -> Unit)? = null,
     val onVoiceToggle: (() -> Unit)? = null,
+    /** 长按空格开始语音：开启语音并将当次图标显示覆盖为普通语音，直到滑向连续锁或语音结束。 */
+    val onVoiceHoldStart: (() -> Unit)? = null,
     /** 按住空格说话松手：还在听写就结束并上屏，没开起来就什么都不做（不能像 [onVoiceToggle] 那样反过来开麦）。 */
     val onVoiceHoldEnd: (() -> Unit)? = null,
     /** 按住空格说话上滑后松手：停麦，这次说的字全部撤掉，什么都不上屏。 */
     val onVoiceHoldCancel: (() -> Unit)? = null,
+    /** 按住空格滑到左侧普通锁松手：当次仅普通锁定，不论连续语音开关如何都不触发连续语音。 */
+    val onVoiceNormalLock: (() -> Unit)? = null,
+    /** 按住空格滑到右侧连续锁松手：开启连续语音并保持当前录音。 */
+    val onVoiceContinuousLock: (() -> Unit)? = null,
     val isSttEnabled: Boolean = false,
     val schemas: List<SchemaInfo> = emptyList(),
     val currentInputModeId: String = "",

@@ -101,6 +101,9 @@ object EnglishWordMemory {
     /** 兼容旧路径：中文 26 键 / 英文单词方案按回车提交生词直接记入常驻库。 */
     @Synchronized
     fun remember(rimeDir: File, text: String) {
+        // 删过（排到后面）的词再回车打出来就回到原位。放在最前：下面「和上一个一样就不重复记」会提前返回，
+        // 以前那时不会撤销「排到后面」（2026-11-26 appointment 删了以后回车打几遍也回不来）。
+        undemote(rimeDir, text)
         // A word, or a word with digits after it (Abc123 + Enter, 11-25).
         if (!STORED.matches(text) || !isLearnable(text.trimEnd { it in '0'..'9' })) return
         ensureLoaded(rimeDir)
@@ -120,7 +123,6 @@ object EnglishWordMemory {
             }
             revisionCounter.incrementAndGet()
         }
-        undemote(rimeDir, text)
     }
 
     /**

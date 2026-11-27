@@ -16,6 +16,7 @@ import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.twotone.GraphicEq
+import androidx.compose.material.icons.twotone.Memory
 import androidx.compose.material.icons.twotone.Tune
 import androidx.compose.material.icons.twotone.RecordVoiceOver
 import androidx.compose.material.icons.twotone.Computer
@@ -102,6 +103,84 @@ private fun VoiceOtherAudioItem() {
     )
 }
 
+private data class VoiceModelIdleOption(
+    val id: String,
+    val label: String,
+    val description: String,
+    val refinerMinutes: Int,
+    val engineMinutes: Int,
+)
+
+private val voiceModelIdleOptions = listOf(
+    VoiceModelIdleOption("1m", "闲置 1 分钟后释放", "最省内存，下次说话需重新加载模型", 1, 1),
+    VoiceModelIdleOption("10m", "闲置 10 分钟后释放", "短时间连续用秒开，久不用自动省内存", 5, 10),
+    VoiceModelIdleOption("30m", "闲置 30 分钟后释放", "半小时内秒开，适合经常语音输入", 5, 30),
+    VoiceModelIdleOption("keep", "常驻内存不释放", "随时秒开不等待，会常驻占用约 200~300 MB 内存", 0, 0),
+)
+
+private fun voiceModelIdleLabel(engineMinutes: Int): String = when {
+    engineMinutes <= 0 -> "常驻不释放"
+    engineMinutes == 1 -> "1 分钟后释放"
+    engineMinutes == 10 -> "10 分钟后释放"
+    engineMinutes == 30 -> "30 分钟后释放"
+    else -> "${engineMinutes} 分钟后释放"
+}
+
+/** 「本地模型释放时机」一行：直白说明多久后自动释放内存，不再用模糊的高中低配。 */
+@Composable
+private fun VoiceModelIdleReleaseItem() {
+    val context = LocalContext.current
+    var engineMinutes by remember { mutableStateOf(SettingsPreferences.getSttEngineIdleMinutes(context)) }
+    var picking by remember { mutableStateOf(false) }
+    SettingsItem(
+        icon = Icons.TwoTone.Memory,
+        title = "本地模型空闲释放",
+        subtitle = "不用语音时自动卸载模型以释放内存，需要时按需加载",
+        status = voiceModelIdleLabel(engineMinutes),
+        onClick = { picking = true },
+    )
+    if (picking) AlertDialog(
+        onDismissRequest = { picking = false },
+        title = { Text("本地模型空闲释放") },
+        text = {
+            Column {
+                voiceModelIdleOptions.forEach { opt ->
+                    val selected = engineMinutes == opt.engineMinutes
+                    val choose = {
+                        picking = false
+                        engineMinutes = opt.engineMinutes
+                        SettingsPreferences.setSttIdleLadder(context, opt.refinerMinutes, opt.engineMinutes)
+                    }
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .heightIn(min = 56.dp)
+                            .clickable(onClick = choose)
+                            .testTag("voice-idle-release:${opt.id}"),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        RadioButton(selected = selected, onClick = choose)
+                        Spacer(Modifier.width(8.dp))
+                        Column(Modifier.weight(1f).padding(vertical = 4.dp)) {
+                            Text(
+                                opt.label,
+                                style = MaterialTheme.typography.bodyLarge,
+                                fontWeight = if (selected) FontWeight.Medium else FontWeight.Normal,
+                            )
+                            Text(
+                                opt.description,
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { picking = false }) { Text("关闭") } },
+    )
+}
+
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
 fun SpeechToTextSettingsContent(
@@ -148,36 +227,28 @@ fun SpeechToTextSettingsContent(
         ) {
             Spacer(modifier = Modifier.height(8.dp))
 
-            // 语音总开关放在页内最上面（以前挂在首页那一行上，进来反而找不到）。
-            var sttEnabled by remember { mutableStateOf(SettingsPreferences.isSttEnabled(context)) }
             SettingsSection(title = "语音输入") {
-                SettingsToggleItem(icon = Icons.TwoTone.GraphicEq, title = "语音转文本",
-                    subtitle = if (sttEnabled) "点工具栏麦克风说话，转成文字"
-                        else "关着时不显示麦克风，也不下载语音模型",
-                    subtitleJumps = listOf("按键与手势 › 长按空格"),
-                    checked = sttEnabled, onCheckedChange = { sttEnabled = it; SettingsPreferences.setSttEnabled(context, it) })
-                // 连续语音：别人提的需求，默认关（VoicePillResume）。只在语音打开时生效，关着语音就不显示。
-                // 原名「开车连续语音」：开车只是用户举的例子（11-12），改叫连续语音、换掉汽车图标；设置键名不变。
-                if (sttEnabled) {
-                    // 屏蔽外放音：用户 11-04 要的，选项照他的截图，默认不屏蔽（VoiceAudioFocus）。
-                    VoiceOtherAudioItem()
-                    var pillResume by remember { mutableStateOf(SettingsPreferences.isSttPillResume(context)) }
-                    SettingsToggleItem(icon = Icons.TwoTone.RecordVoiceOver, title = "连续语音",
-                        subtitle = "说话时收起成悬浮条，发完消息或回到这个应用会自动接着听",
-                        checked = pillResume, onCheckedChange = { pillResume = it; SettingsPreferences.setSttPillResume(context, it) })
-                    // #309：骑车等手不方便时戴蓝牙耳机说话。默认关，用手机麦克风。
-                    var bluetoothMic by remember { mutableStateOf(SettingsPreferences.isSttBluetoothMic(context)) }
-                    SettingsToggleItem(icon = Icons.TwoTone.RecordVoiceOver, title = "用蓝牙耳机的麦克风",
-                        subtitle = "连着蓝牙耳机时用耳机收音；说话时耳机里的音乐会暂时变成通话音质",
-                        checked = bluetoothMic, onCheckedChange = { bluetoothMic = it; SettingsPreferences.setSttBluetoothMic(context, it) })
-                    // 隔空输入（用户 11-02 要的，参照微信）：默认关；走剪贴板同步已配对的电脑。
-                    var remoteTyping by remember { mutableStateOf(SettingsPreferences.isSttRemoteTyping(context)) }
-                    val computers = com.kingzcheung.xime.clipboard.sync.WindowsDevices.saved.value
-                    SettingsToggleItem(icon = Icons.TwoTone.Computer, title = "隔空输入",
-                        subtitle = if (computers.isEmpty()) "说的话发到电脑上，需先在「剪贴板同步」连上电脑"
-                            else "说的话发到电脑上，不在手机上屏",
-                        checked = remoteTyping, onCheckedChange = { remoteTyping = it; SettingsPreferences.setSttRemoteTyping(context, it) })
+                // 屏蔽外放音：用户 11-04 要的，选项照他的截图，默认不屏蔽（VoiceAudioFocus）。
+                VoiceOtherAudioItem()
+                var pillResume by remember { mutableStateOf(SettingsPreferences.isSttPillResume(context)) }
+                SettingsToggleItem(icon = Icons.TwoTone.RecordVoiceOver, title = "连续语音",
+                    subtitle = "保持键盘展开，发完消息或短暂切出再回到同一应用时自动接着听",
+                    checked = pillResume, onCheckedChange = { pillResume = it; SettingsPreferences.setSttPillResume(context, it) })
+                if (OfflineAsrSettings.isSupported()) {
+                    VoiceModelIdleReleaseItem()
                 }
+                // #309：骑车等手不方便时戴蓝牙耳机说话。默认关，用手机麦克风。
+                var bluetoothMic by remember { mutableStateOf(SettingsPreferences.isSttBluetoothMic(context)) }
+                SettingsToggleItem(icon = Icons.TwoTone.RecordVoiceOver, title = "用蓝牙耳机的麦克风",
+                    subtitle = "连着蓝牙耳机时用耳机收音；说话时耳机里的音乐会暂时变成通话音质",
+                    checked = bluetoothMic, onCheckedChange = { bluetoothMic = it; SettingsPreferences.setSttBluetoothMic(context, it) })
+                // 隔空输入（用户 11-02 要的，参照微信）：默认关；走剪贴板同步已配对的电脑。
+                var remoteTyping by remember { mutableStateOf(SettingsPreferences.isSttRemoteTyping(context)) }
+                val computers = com.kingzcheung.xime.clipboard.sync.WindowsDevices.saved.value
+                SettingsToggleItem(icon = Icons.TwoTone.Computer, title = "隔空输入",
+                    subtitle = if (computers.isEmpty()) "说的话发到电脑上，需先在「剪贴板同步」连上电脑"
+                        else "说的话发到电脑上，不在手机上屏",
+                    checked = remoteTyping, onCheckedChange = { remoteTyping = it; SettingsPreferences.setSttRemoteTyping(context, it) })
             }
 
             SettingsSection(title = "语音标点") { SpeechPunctuationSettings() }

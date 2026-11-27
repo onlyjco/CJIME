@@ -57,6 +57,7 @@ import com.kingzcheung.xime.keyboard.ToolbarButton
 import com.kingzcheung.xime.keyboard.ToolbarButtonItem
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.ui.layout.boundsInRoot
 import androidx.compose.ui.layout.onGloballyPositioned
 import androidx.compose.ui.draw.clip
@@ -120,7 +121,8 @@ fun MenuBar(
     val isLandscape = !state.isFloatingMode && configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
     val inlineEditor = LocalInlineQuickActionEditor.current
     val menuItems = (actions.map { it to false } + hiddenActions.map { it to true }).map { (action, hidden) ->
-        val toggle = (action.item as? ToolbarButtonItem.Builtin)?.button in ToolbarButton.TOGGLES
+        val builtin = (action.item as? ToolbarButtonItem.Builtin)?.button
+        val toggle = builtin in ToolbarButton.TOGGLES || builtin == ToolbarButton.VOICE
         MenuItem(label = action.item.stateLabel(action.active), action = action.onClick, id = action.item.id,
             currentState = if (toggle) (if (action.active) "已开启" else "已关闭") else null,
             selected = if (toggle) action.active else null, toolbarItem = action.item, onLongClick = action.onLongClick,
@@ -152,22 +154,32 @@ fun MenuItemButton(
 ) {
     val inlineEditor = LocalInlineQuickActionEditor.current
     val on = item.selected == true
+    val isVoiceCard = item.id == "voice"
+    val voiceContinuous = isVoiceCard && LocalVoiceContinuous.current
+    val voiceLevel = LocalKeyGapLightVoice.current
+    val accentColor = com.kingzcheung.xime.ui.theme.LocalKeyboardPalette.current?.accent ?: textColor
     val iconStateToggle = (item.toolbarItem as? ToolbarButtonItem.Builtin)?.button in ToolbarButton.ICON_STATE_TOGGLES
-    val showSelectedBox = on && !iconStateToggle
+    val showSelectedBox = on && !iconStateToggle && !isVoiceCard
     // 开了玻璃，格子和按键是同一种玻璃键帽（同一个透明度，透出后面）。
-    // 用图标形态本身区分状态的开关（全角、声音、无痕、简繁、滑行、玻璃）不显示选框反色底。
+    // 用图标形态本身区分状态的开关（全角、声音、无痕、简繁、滑行、玻璃）和语音动态光圈卡片不显示反色底。
     val glass = LocalKeyboardInputPreferences.current.frostedGlass
     val fill = when {
         showSelectedBox -> if (glass.enabled) textColor.copy(alpha = MENU_ON_GLASS_ALPHA) else textColor
         else -> frostedKeyColor(bgColor, textColor, glass)
     }
-    val content = if (showSelectedBox) (if (textColor.luminance() > .5f) Color.Black else Color.White) else textColor
+    val content = when {
+        showSelectedBox -> if (textColor.luminance() > .5f) Color.Black else Color.White
+        isVoiceCard && on -> accentColor
+        else -> textColor
+    }
+    val displayLabel = if (voiceContinuous) "连续语音" else item.label
     Box(modifier.onGloballyPositioned { inlineEditor?.registerMenuSize(it.boundsInRoot()) }
         .then(if (item.toolbarItem != null && !item.hidden) Modifier.inlineQuickActionTarget(item.id) else Modifier)
         .combinedClickable(
             interactionSource = remember { androidx.compose.foundation.interaction.MutableInteractionSource() },
             indication = null,
             enabled = inlineEditor?.active != true,
+            hapticFeedbackEnabled = false,
             onLongClick = item.onLongClick,
         ) { item.action() }
         .semantics {
@@ -183,6 +195,13 @@ fun MenuItemButton(
             .graphicsLayer { alpha = if (item.hidden) .58f else 1f }
             .clip(RoundedCornerShape(12.dp))
             .background(fill)
+            .then(if (isVoiceCard && on) Modifier.drawBehind {
+                val value = voiceLevel?.invoke() ?: 0f
+                drawCircle(
+                    color = accentColor.copy(alpha = 0.18f + 0.30f * value),
+                    radius = size.minDimension * (0.42f + 0.16f * value),
+                )
+            } else Modifier)
             .visualMaterial(VisualStyles.current, 12.dp, level = com.kingzcheung.xime.ui.theme.MaterialLevel.RAISED)
             .padding(4.dp),
         horizontalAlignment = Alignment.CenterHorizontally,
@@ -209,7 +228,7 @@ fun MenuItemButton(
         }
         Spacer(modifier = Modifier.height(2.dp))
         Text(
-            text = item.label,
+            text = displayLabel,
             color = content,
             fontSize = 12.sp,
             lineHeight = if (isLandscape) 13.sp else 14.sp,

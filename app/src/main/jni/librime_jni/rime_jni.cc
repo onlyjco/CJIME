@@ -199,6 +199,7 @@ public:
         if (session_id_ != 0) {
             LOGI("Session created: %lu", (unsigned long)session_id_);
             ensureCandidateComments();
+            attachCommitObserver();
             // 会话重建后的初始 Schema 可能读到部署产物里的旧 page_size
             //（方案自带/第三方为 PC 默认 5），重新对齐到 app 覆盖值
             reapplyPageSizeIfNeeded();
@@ -993,6 +994,52 @@ public:
         return system_dict_ && system_dict_->ReverseLookup(text, &code);
     }
     std::string system_dict_schema_;
+    rime::connection commit_observer_conn_;
+    rime::DictEntry last_commit_entry_;
+    bool last_commit_was_learned_ = false;
+    bool has_last_commit_entry_ = false;
+
+    void attachCommitObserver() {
+        commit_observer_conn_.disconnect();
+        has_last_commit_entry_ = false;
+        auto session = rime::Service::instance().GetSession(static_cast<rime::SessionId>(session_id_));
+        if (!session || !session->context()) return;
+        commit_observer_conn_ = session->context()->commit_notifier().connect([this](rime::Context* ctx) {
+            has_last_commit_entry_ = false;
+            last_commit_was_learned_ = false;
+            last_commit_entry_ = rime::DictEntry();
+            if (!ctx || ctx->composition().empty()) return;
+            std::string text;
+            rime::Code code;
+            size_t phrase_count = 0;
+            bool single_was_learned = false;
+            for (const auto& seg : ctx->composition()) {
+                auto genuine = rime::Candidate::GetGenuineCandidate(seg.GetSelectedCandidate());
+                auto phrase = rime::As<rime::Phrase>(genuine);
+                if (!phrase) continue;
+                text += phrase->text();
+                code.insert(code.end(), phrase->code().begin(), phrase->code().end());
+                if (auto sentence = rime::As<rime::Sentence>(phrase)) {
+                    if (sentence->components().size() == 1 && phrase_count == 0) {
+                        single_was_learned = sentence->components().front().commit_count > 0;
+                    } else {
+                        single_was_learned = false;
+                    }
+                    phrase_count += sentence->components().size();
+                } else {
+                    if (phrase_count == 0) single_was_learned = phrase->entry().commit_count > 0;
+                    else single_was_learned = false;
+                    ++phrase_count;
+                }
+            }
+            if (!text.empty() && !code.empty()) {
+                last_commit_entry_.text = text;
+                last_commit_entry_.code = code;
+                last_commit_was_learned_ = (phrase_count == 1 && single_was_learned);
+                has_last_commit_entry_ = true;
+            }
+        });
+    }
     std::unique_ptr<rime::ReverseLookupDictionary> system_dict_;
 
     // A candidate reached through spelling correction: its syllables as "typed=correct" for the
@@ -1146,6 +1193,10 @@ public:
         rime::the<rime::UserDictionary> userDictionary(userDictionaries->Create(ticket));
         if (!dictionary || !userDictionary || !dictionary->Load() || !userDictionary->Load() ||
             userDictionary->readonly()) return -1;
+        // Commit any open LevelDb WriteBatch left by Memory::OnCommit so newly committed entries
+        // are visible to Forget/Unlearn and won't overwrite our unlearn on the next transaction.
+        userDictionary->CommitPendingTransaction();
+        userDictionary->Attach(dictionary->primary_table(), dictionary->prism());
         int taken = 0;
         size_t start = 0;
         while (start < rows.size()) {
@@ -1155,9 +1206,25 @@ public:
             start = end + 1;
             const auto tab = line.find('\t');
             if (tab == std::string::npos) continue;
+            const std::string word = line.substr(0, tab);
             const int n = std::atoi(line.c_str() + tab + 1);
-            const int got = userDictionary->Unlearn(line.substr(0, tab), n);
-            LOGE("unlearn %s: %d of %d", line.substr(0, tab).c_str(), got, n);
+            int got = 0;
+            // When taking back 1 commit of a word that had no prior learning, erase the record
+            // outright via Forget() instead of writing a -1 tombstone (which UpdateEntry revives as +2).
+            if (n == 1 && has_last_commit_entry_ && !last_commit_was_learned_ &&
+                last_commit_entry_.text == word && userDictionary->Forget(last_commit_entry_)) {
+                got = 1;
+                has_last_commit_entry_ = false;
+            } else {
+                got = userDictionary->Unlearn(word, n);
+                if (has_last_commit_entry_ && last_commit_entry_.text == word) {
+                    has_last_commit_entry_ = false;
+                }
+            }
+            if (n > 0 && rime::T9CylmForget(word, 300) > 0 && got == 0) {
+                got = 1;
+            }
+            LOGE("unlearn %s: %d of %d", word.c_str(), got, n);
             taken += got;
         }
         if (auto* context = session->context()) context->RefreshNonConfirmedComposition();
@@ -1375,6 +1442,8 @@ public:
     // Close the session first; reloadSessionAfterMaintenance reopens it on the same schema.
     void releaseSessionForMaintenance() {
         if (!rime || !session_id_) return;
+        commit_observer_conn_.disconnect();
+        has_last_commit_entry_ = false;
         schema_before_maintenance_ = getCurrentSchema();
         rime->destroy_session(session_id_);
         session_id_ = 0;
@@ -1384,10 +1453,17 @@ public:
         if (!rime || rime->is_maintenance_mode()) return false;
         const auto schema = session_id_ ? getCurrentSchema() : schema_before_maintenance_;
         schema_before_maintenance_.clear();
-        if (session_id_) rime->destroy_session(session_id_);
+        if (session_id_) {
+            commit_observer_conn_.disconnect();
+            has_last_commit_entry_ = false;
+            rime->destroy_session(session_id_);
+        }
         session_id_ = 0;
         if (!createSession()) return false;
-        if (!schema.empty() && schema != getCurrentSchema()) rime->select_schema(session_id_, schema.c_str());
+        if (!schema.empty() && schema != getCurrentSchema()) {
+            rime->select_schema(session_id_, schema.c_str());
+            attachCommitObserver();
+        }
         reapplyPageSizeIfNeeded();
         return true;
     }
@@ -1541,6 +1617,7 @@ public:
             // after select_schema, otherwise its bundled menu/page_size (often 5) wins.
             reapplyPageSizeIfNeeded();
             ensureCandidateComments();
+            attachCommitObserver();
             // 验证切换是否成功
             char current_schema[256];
             if (rime->get_current_schema(session_id_, current_schema, sizeof(current_schema))) {

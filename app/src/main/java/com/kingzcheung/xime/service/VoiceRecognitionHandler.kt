@@ -172,6 +172,8 @@ class VoiceRecognitionHandler(
             Thread({ convert("语音") }, "voice-traditional-warm").start()
         }
 
+        smoothedAmplitude = 0f
+        recognitionStartedAt = System.currentTimeMillis()
         speechRecognitionManager.startRecognition(language)
     }
 
@@ -275,6 +277,7 @@ class VoiceRecognitionHandler(
     private var toolbarSentencePrefix: String? = null
     private var lastPartialText = ""
     private var lastAmplitudeUpdate = 0L
+    private var recognitionStartedAt = 0L
     private var smoothedAmplitude = 0f
     private var smoothedSpectrum = FloatArray(16)
     // 抬起时已提交当前识别文本后，置真以忽略随后可能迟到的重复最终结果
@@ -567,6 +570,19 @@ class VoiceRecognitionHandler(
         dictationCaret = toolbarText.writeEnd
     }
 
+    /** 语音听写期间用户用键盘确认了候选词或直接输入文本：冻结当前语音段尾部，避免后续识别结果回删刚上屏的字。 */
+    fun onManualTextCommitted() {
+        if (toolbarSession) {
+            toolbarText.freezeCurrent()
+            toolbarSentencePrefix = ""
+            lastToolbarFinal = ""
+            recentDictation = ""
+            dictationCaret = null
+        } else if (lastPartialText.isNotEmpty()) {
+            lastPartialText = ""
+        }
+    }
+
     /** 工具栏听写最近写进输入框的字和写完后的光标位置：宿主重启输入框后靠它们回到原处接着写。 */
     private var recentDictation = ""
     private var dictationCaret: Int? = null
@@ -701,6 +717,8 @@ class VoiceRecognitionHandler(
 
     private fun handleAmplitudeUpdate(amplitude: Float) {
         val now = System.currentTimeMillis()
+        // 麦克风刚打开的 120ms 内常伴随硬件底噪爆音，跳过首包峰值避免工具栏语音光圈瞬间放大缩小。
+        if (now - recognitionStartedAt < 120L) return
         if (now - lastAmplitudeUpdate < 80) return
         lastAmplitudeUpdate = now
         smoothedAmplitude = smoothedAmplitude * 0.45f + amplitude * 0.55f

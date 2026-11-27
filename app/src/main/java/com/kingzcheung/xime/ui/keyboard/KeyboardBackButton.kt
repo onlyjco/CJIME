@@ -11,20 +11,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.KeyboardArrowLeft
 import androidx.compose.material3.Icon
-import androidx.compose.animation.core.animateFloatAsState
-import androidx.compose.animation.core.tween
 import androidx.compose.foundation.interaction.MutableInteractionSource
-import androidx.compose.foundation.interaction.collectIsPressedAsState
 import androidx.compose.runtime.Composable
-import androidx.compose.runtime.getValue
 import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.draw.clip
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.unit.dp
-import com.kingzcheung.xime.ui.theme.VisualStyles
-import com.kingzcheung.xime.ui.theme.visualMaterial
 
 /** 固定40dp占位和32dp圆形底板，切换图标不会挤动工具栏。 */
 @Composable
@@ -44,21 +37,23 @@ internal fun KeyboardToolbarButton(
     content: @Composable () -> Unit,
 ) {
     // 去掉按下亮底与 300ms 渐隐，仅保留平时底色（如候选栏两端按钮的 restingFill）。
+    // 直接使用带形状的 background 替代 .clip(shape)，避免创建隔离的子 GraphicsLayer/RenderNode 阻断父层 glassTextHalo 重录。
     val source = remember { MutableInteractionSource() }
-    val disc = if (restingFill.alpha > 0f) Modifier.background(restingFill) else Modifier
     if (slotWidth != null) {
         val pill = if (continuousPill) edgePillSize(slotWidth) else toolbarPillSize(slotWidth)
         val shape = cornerRadius?.let { androidx.compose.foundation.shape.RoundedCornerShape(it) } ?: CircleShape
+        val disc = if (restingFill.alpha > 0f) Modifier.background(restingFill, shape) else Modifier
         Box(modifier.width(slotWidth).height(40.dp).clickable(source, indication = null, onClick = onClick),
             contentAlignment = Alignment.Center) {
-            Box(Modifier.size(pill).clip(shape).then(disc),
+            Box(Modifier.size(pill).then(disc),
                 contentAlignment = Alignment.Center) { content() }
         }
         return
     }
-    Box(modifier.size(40.dp).clip(CircleShape).clickable(source, indication = null, onClick = onClick),
+    val disc = if (restingFill.alpha > 0f) Modifier.background(restingFill, CircleShape) else Modifier
+    Box(modifier.size(40.dp).clickable(source, indication = null, onClick = onClick),
         contentAlignment = Alignment.Center) {
-        Box(Modifier.size(32.dp).clip(CircleShape).then(disc), contentAlignment = Alignment.Center) { content() }
+        Box(Modifier.size(32.dp).then(disc), contentAlignment = Alignment.Center) { content() }
     }
 }
 

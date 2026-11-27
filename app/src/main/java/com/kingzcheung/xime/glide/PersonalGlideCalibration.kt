@@ -472,7 +472,8 @@ object PersonalGlideCalibration {
             val shortLen = min(cleanCode.length, pendingClean.length)
             val longLen = max(cleanCode.length, pendingClean.length)
             val compatibleLen = longLen <= shortLen * 2 + 2 && lenDiff <= maxOf(5, (cleanCode.length + 1) / 2)
-            if (now - pending.deletedAtMs <= REJECT_WINDOW_MS && pendingClean.isNotEmpty() && pendingClean != cleanCode && compatibleLen) {
+            if (now - pending.deletedAtMs <= REJECT_WINDOW_MS && pendingClean.isNotEmpty() && pendingClean != cleanCode &&
+                compatibleLen && isPlausibleDeleteRetype(pendingClean, cleanCode, pending.keyboard)) {
                 recordConfusionLocked(dir, schemaKey, pendingClean, cleanCode)
                 // 就算识别偏离很多（比如 12 键错认成 6 键），只要在删除后手动补打出了真实拼音，仍可把原始偏离轨迹对齐回去校准指腹落点。
                 if (pending.hadManualEditAfterDelete) {
@@ -832,6 +833,33 @@ object PersonalGlideCalibration {
             confusions.remove(first)
         }
         saveConfusions(File(dir, CONFUSIONS_FILE))
+    }
+
+    /**
+     * 过滤「删掉旧词后完全改打另一句无关内容」造成的 delete_retype 噪声：
+     * 只要两段编码有一定字符重合（>= 25%），或首尾键均落在键盘邻近范围内（<= 2.2 键宽，覆盖短词整段按偏），就视为有效纠错；
+     * 否则判定为改换话题，不写入混淆表也不拿旧轨迹去校准新词落点。
+     */
+    internal fun isPlausibleDeleteRetype(badCode: String, goodCode: String, keyboard: GlideKeyboard): Boolean {
+        if (badCode.isEmpty() || goodCode.isEmpty() || badCode == goodCode) return false
+        val badCounts = IntArray(26)
+        for (c in badCode) if (c in 'a'..'z') badCounts[c - 'a']++
+        var shared = 0
+        for (c in goodCode) if (c in 'a'..'z' && badCounts[c - 'a'] > 0) {
+            badCounts[c - 'a']--
+            shared++
+        }
+        val maxLen = max(badCode.length, goodCode.length).coerceAtLeast(1)
+        if (shared.toFloat() / maxLen >= 0.25f) return true
+        val unit = keyboard.keyUnit.takeIf { it > 0f } ?: return false
+        val startA = keyboard.centers[badCode.first()]
+        val startB = keyboard.centers[goodCode.first()]
+        val endA = keyboard.centers[badCode.last()]
+        val endB = keyboard.centers[goodCode.last()]
+        if (startA == null || startB == null || endA == null || endB == null) return false
+        val startDist = hypot(startA.first - startB.first, startA.second - startB.second) / unit
+        val endDist = hypot(endA.first - endB.first, endA.second - endB.second) / unit
+        return startDist <= 2.2f && endDist <= 2.2f
     }
 
     /**
